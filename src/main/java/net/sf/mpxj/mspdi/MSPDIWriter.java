@@ -106,6 +106,27 @@ import net.sf.mpxj.writer.AbstractProjectWriter;
 public final class MSPDIWriter extends AbstractProjectWriter
 {
    /**
+    * Sets a flag to determine if the output is readable by MS Project, or
+    * is "spec compliant".
+    * 
+    * @param flag true if output is readable by MS Project
+    */
+   public void setMicrosoftProjectCompatibleOutput(boolean flag)
+   {
+      m_compatibleOutput = flag;
+   }
+
+   /**
+    * Retrieves a flag which determines if the output is readable by MS Project.
+    * 
+    * @return  true if output is readable by MS Project
+    */
+   public boolean getMicrosoftProjectCompatibleOutput()
+   {
+      return m_compatibleOutput;
+   }
+
+   /**
     * Sets a flag to control whether timephased assignment data is split
     * into days. The default is true.
     *
@@ -189,7 +210,7 @@ public final class MSPDIWriter extends AbstractProjectWriter
          Marshaller marshaller = CONTEXT.createMarshaller();
          marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, Boolean.TRUE);
 
-         m_extendedAttributesInUse = new HashSet<FieldType>();
+         m_extendedAttributesInUse = new HashSet<>();
 
          m_factory = new ObjectFactory();
          Project project = m_factory.createProject();
@@ -303,7 +324,7 @@ public final class MSPDIWriter extends AbstractProjectWriter
       project.setExtendedAttributes(attributes);
       List<Project.ExtendedAttributes.ExtendedAttribute> list = attributes.getExtendedAttribute();
 
-      Set<FieldType> customFields = new HashSet<FieldType>();
+      Set<FieldType> customFields = new HashSet<>();
       for (CustomField customField : m_projectFile.getCustomFields())
       {
          FieldType fieldType = customField.getFieldType();
@@ -315,7 +336,7 @@ public final class MSPDIWriter extends AbstractProjectWriter
 
       customFields.addAll(m_extendedAttributesInUse);
 
-      List<FieldType> customFieldsList = new ArrayList<FieldType>();
+      List<FieldType> customFieldsList = new ArrayList<>();
       customFieldsList.addAll(customFields);
 
       // Sort to ensure consistent order in file
@@ -347,13 +368,13 @@ public final class MSPDIWriter extends AbstractProjectWriter
 
    /**
     * Write outline code/custom field lookup tables.
-    * 
+    *
     * @param project Root node of the MSPDI file
     */
    private void writeOutlineCodes(Project project)
    {
       Project.OutlineCodes outlineCodes = null;
-      List<CustomField> allCustomFields = new ArrayList<CustomField>();
+      List<CustomField> allCustomFields = new ArrayList<>();
       for (CustomField field : m_projectFile.getCustomFields())
       {
          allCustomFields.add(field);
@@ -394,7 +415,7 @@ public final class MSPDIWriter extends AbstractProjectWriter
 
    /**
     * Write a single outline code or custom field.
-    * 
+    *
     * @param outlineCode outline codes root node
     * @param field custom field
     */
@@ -450,7 +471,7 @@ public final class MSPDIWriter extends AbstractProjectWriter
 
    /**
     * Write an outline code value.
-    * 
+    *
     * @param value parent node
     * @param item custom field item
     */
@@ -472,7 +493,7 @@ public final class MSPDIWriter extends AbstractProjectWriter
 
    /**
     * Write an outline code mask element.
-    * 
+    *
     * @param outlineCode parent node
     * @param item mask element
     */
@@ -581,7 +602,7 @@ public final class MSPDIWriter extends AbstractProjectWriter
       // A quirk of MS Project is that these exceptions must be
       // in date order in the file, otherwise they are ignored
       //
-      List<ProjectCalendarException> exceptions = new ArrayList<ProjectCalendarException>(bc.getCalendarExceptions());
+      List<ProjectCalendarException> exceptions = new ArrayList<>(bc.getCalendarExceptions());
       if (!exceptions.isEmpty())
       {
          Collections.sort(exceptions);
@@ -1196,7 +1217,7 @@ public final class MSPDIWriter extends AbstractProjectWriter
     * @param mpx Task data
     * @return new task instance
     */
-   @SuppressWarnings("deprecation") private Project.Tasks.Task writeTask(Task mpx)
+   private Project.Tasks.Task writeTask(Task mpx)
    {
       Project.Tasks.Task xml = m_factory.createProjectTasksTask();
 
@@ -1341,8 +1362,6 @@ public final class MSPDIWriter extends AbstractProjectWriter
       xml.setType(mpx.getType());
       xml.setUID(mpx.getUniqueID());
       xml.setWBS(mpx.getWBS());
-      // xml.setWBSLevel: The right-most level of the task work breakdown structure not written by MS Project, can be derived from the WBS
-      xml.setWBSLevel(mpx.getWBSLevel());
       xml.setWork(DatatypeConverter.printDuration(this, mpx.getWork()));
       xml.setWorkVariance(DatatypeConverter.printDurationInDecimalThousandthsOfMinutes(mpx.getWorkVariance()));
 
@@ -1930,7 +1949,7 @@ public final class MSPDIWriter extends AbstractProjectWriter
     */
    private List<TimephasedWork> splitDays(ProjectCalendar calendar, List<TimephasedWork> list, TimephasedWork first, TimephasedWork last)
    {
-      List<TimephasedWork> result = new LinkedList<TimephasedWork>();
+      List<TimephasedWork> result = new LinkedList<>();
 
       for (TimephasedWork assignment : list)
       {
@@ -2084,7 +2103,7 @@ public final class MSPDIWriter extends AbstractProjectWriter
     */
    private List<AssignmentField> getAllAssignmentExtendedAttributes()
    {
-      ArrayList<AssignmentField> result = new ArrayList<AssignmentField>();
+      ArrayList<AssignmentField> result = new ArrayList<>();
       result.addAll(Arrays.asList(AssignmentFieldLists.CUSTOM_COST));
       result.addAll(Arrays.asList(AssignmentFieldLists.CUSTOM_DATE));
       result.addAll(Arrays.asList(AssignmentFieldLists.CUSTOM_DURATION));
@@ -2111,7 +2130,7 @@ public final class MSPDIWriter extends AbstractProjectWriter
     */
    private List<TaskField> getAllTaskExtendedAttributes()
    {
-      ArrayList<TaskField> result = new ArrayList<TaskField>();
+      ArrayList<TaskField> result = new ArrayList<>();
       result.addAll(Arrays.asList(TaskFieldLists.CUSTOM_TEXT));
       result.addAll(Arrays.asList(TaskFieldLists.CUSTOM_START));
       result.addAll(Arrays.asList(TaskFieldLists.CUSTOM_FINISH));
@@ -2137,7 +2156,7 @@ public final class MSPDIWriter extends AbstractProjectWriter
     */
    private List<ResourceField> getAllResourceExtendedAttributes()
    {
-      ArrayList<ResourceField> result = new ArrayList<ResourceField>();
+      ArrayList<ResourceField> result = new ArrayList<>();
       result.addAll(Arrays.asList(ResourceFieldLists.CUSTOM_TEXT));
       result.addAll(Arrays.asList(ResourceFieldLists.CUSTOM_START));
       result.addAll(Arrays.asList(ResourceFieldLists.CUSTOM_FINISH));
@@ -2219,6 +2238,8 @@ public final class MSPDIWriter extends AbstractProjectWriter
    private EventManager m_eventManager;
 
    private Set<FieldType> m_extendedAttributesInUse;
+
+   private boolean m_compatibleOutput = true;
 
    private boolean m_splitTimephasedAsDays = true;
 

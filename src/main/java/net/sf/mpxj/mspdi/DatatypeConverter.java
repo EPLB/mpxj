@@ -153,7 +153,7 @@ public final class DatatypeConverter
 
    /**
     * Write an outline code/custom field timestamp for a lookup table.
-    * 
+    *
     * @param value Date value
     * @return timestamp value
     */
@@ -179,7 +179,7 @@ public final class DatatypeConverter
 
    /**
     * Read an outline code/custom field timestamp for a lookup table.
-    * 
+    *
     * @param value timestamp value
     * @return Date instance
     */
@@ -335,7 +335,7 @@ public final class DatatypeConverter
 
    /**
     * Write an outline code/custom field value for a lookup table.
-    * 
+    *
     * @param value value to write
     * @param type target type
     * @return formatted value
@@ -379,7 +379,7 @@ public final class DatatypeConverter
 
    /**
     * Parse an outline code/custom field value.
-    * 
+    *
     * @param value string representation of value
     * @param type target type
     * @return correctly typed instance representing the input value
@@ -1108,15 +1108,11 @@ public final class DatatypeConverter
       {
          TimeUnit durationType = duration.getUnits();
 
-         if (durationType == TimeUnit.HOURS || durationType == TimeUnit.ELAPSED_HOURS)
-         {
-            result = new XsdDuration(duration).toString();
-         }
-         else
+         if (durationType != TimeUnit.HOURS && durationType != TimeUnit.ELAPSED_HOURS)
          {
             duration = duration.convertUnits(TimeUnit.HOURS, writer.getProjectFile().getProjectProperties());
-            result = new XsdDuration(duration).toString();
          }
+         result = new XsdDuration(duration).print(writer.getMicrosoftProjectCompatibleOutput());
       }
 
       return (result);
@@ -1514,7 +1510,7 @@ public final class DatatypeConverter
 
    /**
     * Parse duration represented as an integer number of tenths of minutes.
-    * 
+    *
     * @param value duration value
     * @return Duration instance
     */
@@ -1993,7 +1989,7 @@ public final class DatatypeConverter
       }
    };
 
-   private static final ThreadLocal<ProjectFile> PARENT_FILE = new ThreadLocal<ProjectFile>();
+   private static final ThreadLocal<ProjectFile> PARENT_FILE = new ThreadLocal<>();
 
    private static final BigDecimal BIGDECIMAL_ONE = BigDecimal.valueOf(1);
 }

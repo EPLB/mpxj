@@ -28,6 +28,9 @@ import static org.junit.Assert.assertNotNull;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -171,7 +174,7 @@ public class CustomerDataTest
 
    /**
     * Create a File instance from a path stored as a property.
-    * 
+    *
     * @param propertyName property name
     * @return File instance
     */
@@ -206,7 +209,7 @@ public class CustomerDataTest
    {
       if (m_privateDirectory != null)
       {
-         List<File> files = new ArrayList<File>();
+         List<File> files = new ArrayList<>();
          listFiles(files, m_privateDirectory);
 
          int interval = files.size() / max;
@@ -310,12 +313,19 @@ public class CustomerDataTest
          }
       }
 
+      if (DIFF_BASELINE_DIR != null)
+      {
+         System.out.println();
+         System.out.println("Baseline: " + DIFF_BASELINE_DIR.getPath());
+         System.out.println("Test: " + DIFF_TEST_DIR.getPath());
+      }
+      
       assertEquals("Failed to read " + failures + " files", 0, failures);
    }
 
    /**
     * Ensure that we can read the file.
-    * 
+    *
     * @param name file name
     * @param file File instance
     * @return ProjectFile instance
@@ -361,9 +371,9 @@ public class CustomerDataTest
 
    /**
     * Ensure that both child and parent tasks agree on the relationship.
-    * 
+    *
     * @param parent schedule file to test
-    * @return true if the hierarchy test is successful 
+    * @return true if the hierarchy test is successful
     */
    private boolean testHierarchy(ChildTaskContainer parent)
    {
@@ -373,10 +383,10 @@ public class CustomerDataTest
          {
             if (task.getParentTask() != parent)
             {
-               return false;  
-            }               
+               return false;
+            }
          }
-         
+
          if (!testHierarchy(task))
          {
             return false;
@@ -388,9 +398,9 @@ public class CustomerDataTest
    /**
     * Generate new files from the file under test and compare them to a baseline
     * we have previously created. This potentially allows us to capture unintended
-    * changes in functionality. If we do not have a baseline for this particular 
+    * changes in functionality. If we do not have a baseline for this particular
     * file, we'll generate one.
-    *  
+    *
     * @param file file under test
     * @param project ProjectFile instance
     * @return true if the baseline test is successful
@@ -411,7 +421,7 @@ public class CustomerDataTest
 
    /**
     * Generate a baseline for a specific file type.
-    * 
+    *
     * @param file file under test
     * @param project ProjectFile instance
     * @param baselineDirectory baseline directory location
@@ -453,10 +463,7 @@ public class CustomerDataTest
          }
          else
          {
-            System.out.println();
-            System.out.println("Baseline: " + baselineFile.getPath());
-            System.out.println("Test: " + out.getPath());
-            System.out.println("copy /y \"" + out.getPath() + "\" \"" + baselineFile.getPath() + "\"");
+            debugFailure(baselineFile, out);
          }
       }
       else
@@ -469,8 +476,35 @@ public class CustomerDataTest
    }
 
    /**
-    * Ensure that we can export the file under test through our writers, without error.
+    * Write a diagnostic message and populate directories to make
+    * it easier to diff multiple files.
     * 
+    * @param baseline baseline file
+    * @param test test file
+    */
+   private void debugFailure(File baseline, File test) throws IOException
+   {
+      System.out.println();
+      System.out.println("Baseline: " + baseline.getPath());
+      System.out.println("Test: " + test.getPath());
+      System.out.println("copy /y \"" + test.getPath() + "\" \"" + baseline.getPath() + "\"");
+
+      if (DIFF_BASELINE_DIR == null)
+      {
+         File diffDir = FileHelper.createTempDir();
+         DIFF_BASELINE_DIR = new File(diffDir, "baseline");
+         DIFF_TEST_DIR = new File(diffDir, "test");
+         FileHelper.mkdirs(DIFF_BASELINE_DIR);
+         FileHelper.mkdirs(DIFF_TEST_DIR);
+      }
+            
+      Files.copy(baseline.toPath(), new File(DIFF_BASELINE_DIR, baseline.getName()).toPath(), StandardCopyOption.REPLACE_EXISTING);
+      Files.copy(test.toPath(), new File(DIFF_TEST_DIR, baseline.getName()).toPath(), StandardCopyOption.REPLACE_EXISTING);
+   }
+   
+   /**
+    * Ensure that we can export the file under test through our writers, without error.
+    *
     * @param project ProjectFile instance
     */
    private void testWriters(ProjectFile project) throws Exception
@@ -511,8 +545,10 @@ public class CustomerDataTest
    private UniversalProjectReader m_universalReader;
    private MPXReader m_mpxReader;
    private PrimaveraXERFileReader m_xerReader;
-
-   private static final List<Class<? extends ProjectWriter>> WRITER_CLASSES = new ArrayList<Class<? extends ProjectWriter>>();
+   private static File DIFF_BASELINE_DIR;
+   private static File DIFF_TEST_DIR;
+   
+   private static final List<Class<? extends ProjectWriter>> WRITER_CLASSES = new ArrayList<>();
 
    private static final Date BASELINE_CURRENT_DATE = new Date(1544100702438L);
 
