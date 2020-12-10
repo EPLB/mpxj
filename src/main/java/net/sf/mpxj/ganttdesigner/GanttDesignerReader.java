@@ -24,22 +24,16 @@
 package net.sf.mpxj.ganttdesigner;
 
 import java.io.InputStream;
+import java.util.Arrays;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
 import javax.xml.bind.JAXBContext;
 import javax.xml.bind.JAXBException;
-import javax.xml.bind.Unmarshaller;
 import javax.xml.parsers.ParserConfigurationException;
-import javax.xml.parsers.SAXParser;
-import javax.xml.parsers.SAXParserFactory;
-import javax.xml.transform.sax.SAXSource;
 
-import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
-import org.xml.sax.XMLReader;
 
 import net.sf.mpxj.ChildTaskContainer;
 import net.sf.mpxj.Day;
@@ -52,30 +46,19 @@ import net.sf.mpxj.ProjectCalendarWeek;
 import net.sf.mpxj.ProjectConfig;
 import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.ProjectProperties;
+import net.sf.mpxj.Relation;
 import net.sf.mpxj.RelationType;
 import net.sf.mpxj.Task;
+import net.sf.mpxj.common.UnmarshalHelper;
 import net.sf.mpxj.ganttdesigner.schema.Gantt;
 import net.sf.mpxj.ganttdesigner.schema.GanttDesignerRemark;
-import net.sf.mpxj.listener.ProjectListener;
-import net.sf.mpxj.reader.AbstractProjectReader;
+import net.sf.mpxj.reader.AbstractProjectStreamReader;
 
 /**
  * This class creates a new ProjectFile instance by reading a GanttDesigner file.
  */
-public final class GanttDesignerReader extends AbstractProjectReader
+public final class GanttDesignerReader extends AbstractProjectStreamReader
 {
-   /**
-    * {@inheritDoc}
-    */
-   @Override public void addProjectListener(ProjectListener listener)
-   {
-      if (m_projectListeners == null)
-      {
-         m_projectListeners = new LinkedList<>();
-      }
-      m_projectListeners.add(listener);
-   }
-
    /**
     * {@inheritDoc}
     */
@@ -83,6 +66,11 @@ public final class GanttDesignerReader extends AbstractProjectReader
    {
       try
       {
+         if (CONTEXT == null)
+         {
+            throw CONTEXT_EXCEPTION;
+         }
+
          m_projectFile = new ProjectFile();
          m_eventManager = m_projectFile.getEventManager();
          m_taskMap = new HashMap<>();
@@ -93,21 +81,9 @@ public final class GanttDesignerReader extends AbstractProjectReader
          m_projectFile.getProjectProperties().setFileApplication("GanttDesigner");
          m_projectFile.getProjectProperties().setFileType("GNT");
 
-         m_eventManager.addProjectListeners(m_projectListeners);
+         addListenersToProject(m_projectFile);
 
-         SAXParserFactory factory = SAXParserFactory.newInstance();
-         SAXParser saxParser = factory.newSAXParser();
-         XMLReader xmlReader = saxParser.getXMLReader();
-         SAXSource doc = new SAXSource(xmlReader, new InputSource(stream));
-
-         if (CONTEXT == null)
-         {
-            throw CONTEXT_EXCEPTION;
-         }
-
-         Unmarshaller unmarshaller = CONTEXT.createUnmarshaller();
-
-         Gantt gantt = (Gantt) unmarshaller.unmarshal(doc);
+         Gantt gantt = (Gantt) UnmarshalHelper.unmarshal(CONTEXT, stream);
 
          readProjectProperties(gantt);
          readCalendar(gantt);
@@ -135,9 +111,16 @@ public final class GanttDesignerReader extends AbstractProjectReader
       {
          m_projectFile = null;
          m_eventManager = null;
-         m_projectListeners = null;
          m_taskMap = null;
       }
+   }
+
+   /**
+    * {@inheritDoc}
+    */
+   @Override public List<ProjectFile> readAll(InputStream inputStream) throws MPXJException
+   {
+      return Arrays.asList(read(inputStream));
    }
 
    /**
@@ -193,6 +176,8 @@ public final class GanttDesignerReader extends AbstractProjectReader
          ProjectCalendarException exception = calendar.addCalendarException(holiday.getDate(), holiday.getDate());
          exception.setName(holiday.getContent());
       }
+
+      m_eventManager.fireCalendarReadEvent(calendar);
    }
 
    /**
@@ -238,6 +223,8 @@ public final class GanttDesignerReader extends AbstractProjectReader
 
          task.setFinish(calendar.getDate(task.getStart(), task.getDuration(), false));
          m_taskMap.put(wbs, task);
+
+         m_eventManager.fireTaskReadEvent(task);
       }
    }
 
@@ -258,7 +245,8 @@ public final class GanttDesignerReader extends AbstractProjectReader
             for (String predecessor : predecessors.split(";"))
             {
                Task predecessorTask = m_projectFile.getTaskByID(Integer.valueOf(predecessor));
-               task.addPredecessor(predecessorTask, RelationType.FINISH_START, ganttTask.getL());
+               Relation relation = task.addPredecessor(predecessorTask, RelationType.FINISH_START, ganttTask.getL());
+               m_eventManager.fireRelationReadEvent(relation);
             }
          }
       }
@@ -346,7 +334,6 @@ public final class GanttDesignerReader extends AbstractProjectReader
 
    private ProjectFile m_projectFile;
    private EventManager m_eventManager;
-   private List<ProjectListener> m_projectListeners;
    Map<String, Task> m_taskMap;
 
    /**

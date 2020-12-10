@@ -26,9 +26,9 @@ package net.sf.mpxj.turboproject;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
@@ -53,26 +53,13 @@ import net.sf.mpxj.ResourceField;
 import net.sf.mpxj.Task;
 import net.sf.mpxj.TaskField;
 import net.sf.mpxj.common.StreamHelper;
-import net.sf.mpxj.listener.ProjectListener;
-import net.sf.mpxj.reader.AbstractProjectReader;
+import net.sf.mpxj.reader.AbstractProjectStreamReader;
 
 /**
  * This class creates a new ProjectFile instance by reading a TurboProject PEP file.
  */
-public final class TurboProjectReader extends AbstractProjectReader
+public final class TurboProjectReader extends AbstractProjectStreamReader
 {
-   /**
-    * {@inheritDoc}
-    */
-   @Override public void addProjectListener(ProjectListener listener)
-   {
-      if (m_projectListeners == null)
-      {
-         m_projectListeners = new LinkedList<>();
-      }
-      m_projectListeners.add(listener);
-   }
-
    /**
     * {@inheritDoc}
     */
@@ -97,7 +84,7 @@ public final class TurboProjectReader extends AbstractProjectReader
          m_projectFile.getProjectProperties().setFileApplication("TurboProject");
          m_projectFile.getProjectProperties().setFileType("PEP");
 
-         m_eventManager.addProjectListeners(m_projectListeners);
+         addListenersToProject(m_projectFile);
 
          applyAliases();
 
@@ -125,9 +112,16 @@ public final class TurboProjectReader extends AbstractProjectReader
       {
          m_projectFile = null;
          m_eventManager = null;
-         m_projectListeners = null;
          m_tables = null;
       }
+   }
+
+   /**
+    * {@inheritDoc}
+    */
+   @Override public List<ProjectFile> readAll(InputStream inputStream) throws MPXJException
+   {
+      return Arrays.asList(read(inputStream));
    }
 
    /**
@@ -164,11 +158,7 @@ public final class TurboProjectReader extends AbstractProjectReader
       for (int offsetIndex = 1; offsetIndex < offsetList.size() - 1; offsetIndex++)
       {
          String name = nameList.get(offsetIndex - 1);
-         Class<? extends Table> tableClass = TABLE_CLASSES.get(name);
-         if (tableClass == null)
-         {
-            tableClass = Table.class;
-         }
+         Class<? extends Table> tableClass = TABLE_CLASSES.getOrDefault(name, Table.class);
 
          Table table;
          try
@@ -442,12 +432,7 @@ public final class TurboProjectReader extends AbstractProjectReader
     */
    private Table getTable(String name)
    {
-      Table table = m_tables.get(name);
-      if (table == null)
-      {
-         table = EMPTY_TABLE;
-      }
-      return table;
+      return m_tables.getOrDefault(name, EMPTY_TABLE);
    }
 
    /**
@@ -458,7 +443,7 @@ public final class TurboProjectReader extends AbstractProjectReader
       CustomFieldContainer fields = m_projectFile.getCustomFields();
       for (Map.Entry<FieldType, String> entry : ALIASES.entrySet())
       {
-         fields.getCustomField(entry.getKey()).setAlias(entry.getValue());
+         fields.getCustomField(entry.getKey()).setAlias(entry.getValue()).setUserDefined(false);
       }
    }
 
@@ -512,7 +497,6 @@ public final class TurboProjectReader extends AbstractProjectReader
 
    private ProjectFile m_projectFile;
    private EventManager m_eventManager;
-   private List<ProjectListener> m_projectListeners;
    private HashMap<String, Table> m_tables;
 
    private static final Table EMPTY_TABLE = new Table();

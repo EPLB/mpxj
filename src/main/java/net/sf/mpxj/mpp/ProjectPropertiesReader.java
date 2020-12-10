@@ -61,7 +61,7 @@ public final class ProjectPropertiesReader
    {
       try
       {
-         //MPPUtility.fileDump("c:\\temp\\props.txt", props.toString().getBytes());
+         // MPPUtility.fileDump("c:\\temp\\props.txt", props.toString().getBytes());
          ProjectProperties ph = file.getProjectProperties();
          ph.setStartDate(props.getTimestamp(Props.PROJECT_START_DATE));
          ph.setFinishDate(props.getTimestamp(Props.PROJECT_FINISH_DATE));
@@ -149,7 +149,7 @@ public final class ProjectPropertiesReader
          }
          ph.setCustomProperties(customPropertiesMap);
 
-         ph.setCalculateMultipleCriticalPaths(props.getBoolean(Props.CALCULATE_MULTIPLE_CRITICAL_PATHS));
+         ph.setMultipleCriticalPaths(props.getBoolean(Props.MULTIPLE_CRITICAL_PATHS));
 
          ph.setBaselineDate(props.getTimestamp(Props.BASELINE_DATE));
          ph.setBaselineDate(1, props.getTimestamp(Props.BASELINE1_DATE));
@@ -162,6 +162,8 @@ public final class ProjectPropertiesReader
          ph.setBaselineDate(8, props.getTimestamp(Props.BASELINE8_DATE));
          ph.setBaselineDate(9, props.getTimestamp(Props.BASELINE9_DATE));
          ph.setBaselineDate(10, props.getTimestamp(Props.BASELINE10_DATE));
+
+         ph.setNewTasksAreManual(props.getBoolean(Props.NEW_TASKS_ARE_MANUAL));
       }
 
       catch (Exception ex)

@@ -26,10 +26,10 @@ package net.sf.mpxj.mpp;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -758,15 +758,18 @@ final class MPP14Reader implements MPPVariantReader
     */
    private void processViewPropertyData() throws IOException
    {
-      Props14 props = new Props14(m_inputStreamFactory.getInstance(m_viewDir, "Props"));
-      byte[] data = props.getByteArray(Props.FONT_BASES);
-      if (data != null)
+      if (m_viewDir.hasEntry("Props"))
       {
-         processBaseFonts(data);
-      }
+         Props14 props = new Props14(m_inputStreamFactory.getInstance(m_viewDir, "Props"));
+         byte[] data = props.getByteArray(Props.FONT_BASES);
+         if (data != null)
+         {
+            processBaseFonts(data);
+         }
 
-      ProjectProperties properties = m_file.getProjectProperties();
-      properties.setShowProjectSummaryTask(props.getBoolean(Props.SHOW_PROJECT_SUMMARY_TASK));
+         ProjectProperties properties = m_file.getProjectProperties();
+         properties.setShowProjectSummaryTask(props.getBoolean(Props.SHOW_PROJECT_SUMMARY_TASK));
+      }
    }
 
    /**
@@ -810,10 +813,11 @@ final class MPP14Reader implements MPPVariantReader
     * @param fieldMap field map
     * @param taskFixedMeta Fixed meta data for this task
     * @param taskFixedData Fixed data for this task
+    * @param taskFixed2Data Fixed data for this task
     * @param taskVarData Variable task data
     * @return Mapping between task identifiers and block position
     */
-   private TreeMap<Integer, Integer> createTaskMap(FieldMap fieldMap, FixedMeta taskFixedMeta, FixedData taskFixedData, Var2Data taskVarData)
+   private TreeMap<Integer, Integer> createTaskMap(FieldMap fieldMap, FixedMeta taskFixedMeta, FixedData taskFixedData, FixedData taskFixed2Data, Var2Data taskVarData)
    {
       TreeMap<Integer, Integer> taskMap = new TreeMap<>();
       int uniqueIdOffset = fieldMap.getFixedDataOffset(TaskField.UNIQUE_ID);
@@ -823,12 +827,16 @@ final class MPP14Reader implements MPPVariantReader
       Integer key;
 
       //
-      // First three items are not tasks, so let's skip them
+      // First three items are not tasks, so let's skip them.
+      // Note we're working backwards: where we have duplicate tasks the later ones
+      // appear to be the correct versions (https://github.com/joniles/mpxj/issues/152)
       //
-      for (int loop = 3; loop < itemCount; loop++)
+      for (int loop = itemCount - 1; loop > 2; loop--)
       {
          byte[] data = taskFixedData.getByteArrayValue(loop);
-         if (data != null)
+         byte[] data2 = taskFixed2Data.getByteArrayValue(loop);
+
+         if (data != null && data2 != null)
          {
             byte[] metaData = taskFixedMeta.getByteArrayValue(loop);
 
@@ -983,7 +991,7 @@ final class MPP14Reader implements MPPVariantReader
          new CustomFieldAliasReader(m_file.getCustomFields(), props.getByteArray(TASK_FIELD_NAME_ALIASES)).process();
       }
 
-      TreeMap<Integer, Integer> taskMap = createTaskMap(fieldMap, taskFixedMeta, taskFixedData, taskVarData);
+      TreeMap<Integer, Integer> taskMap = createTaskMap(fieldMap, taskFixedMeta, taskFixedData, taskFixed2Data, taskVarData);
       // The var data may not contain all the tasks as tasks with no var data assigned will
       // not be saved in there. Most notably these are tasks with no name. So use the task map
       // which contains all the tasks.
@@ -994,7 +1002,7 @@ final class MPP14Reader implements MPPVariantReader
       byte[] metaData2;
       Task task;
       boolean autoWBS = true;
-      LinkedList<Task> externalTasks = new LinkedList<>();
+      List<Task> externalTasks = new ArrayList<>();
       RecurringTaskReader recurringTaskReader = null;
       String notes;
 
@@ -1259,15 +1267,12 @@ final class MPP14Reader implements MPPVariantReader
          // need to mark this task as a null task after all.
          if (task.getName() == null && ((task.getStart() == null || task.getStart().getTime() == MPPUtility.getEpochDate().getTime()) || (task.getFinish() == null || task.getFinish().getTime() == MPPUtility.getEpochDate().getTime()) || (task.getCreateDate() == null || task.getCreateDate().getTime() == MPPUtility.getEpochDate().getTime())))
          {
-            // Remove this to avoid passing bad data to the client
             m_file.removeTask(task);
-
             task = m_file.addTask();
             task.setNull(true);
             task.setUniqueID(uniqueID);
             task.setID(id);
             m_nullTaskOrder.put(task.getID(), task.getUniqueID());
-            //System.out.println(task);
             continue;
          }
 
@@ -1317,7 +1322,7 @@ final class MPP14Reader implements MPPVariantReader
       // space for later inserts.
       //
       TreeMap<Integer, Integer> taskMap = new TreeMap<>();
-      int nextIDIncrement = ((m_nullTaskOrder.size() / 1000) + 1) * 1000;
+      int nextIDIncrement = ((m_nullTaskOrder.size() / 1000) + 1) * 2000;
       int nextID = (m_file.getTaskByUniqueID(Integer.valueOf(0)) == null ? nextIDIncrement : 0);
       for (Map.Entry<Long, Integer> entry : m_taskOrder.entrySet())
       {
@@ -1796,30 +1801,33 @@ final class MPP14Reader implements MPPVariantReader
     */
    private void processViewData() throws IOException
    {
-      DirectoryEntry dir = (DirectoryEntry) m_viewDir.getEntry("CV_iew");
-      VarMeta viewVarMeta = new VarMeta12(new DocumentInputStream(((DocumentEntry) dir.getEntry("VarMeta"))));
-      Var2Data viewVarData = new Var2Data(viewVarMeta, new DocumentInputStream(((DocumentEntry) dir.getEntry("Var2Data"))));
-      FixedMeta fixedMeta = new FixedMeta(new DocumentInputStream(((DocumentEntry) dir.getEntry("FixedMeta"))), 10);
-      FixedData fixedData = new FixedData(138, m_inputStreamFactory.getInstance(dir, "FixedData"));
-
-      int items = fixedMeta.getAdjustedItemCount();
-      View view;
-      ViewFactory factory = new ViewFactory14();
-
-      int lastOffset = -1;
-      for (int loop = 0; loop < items; loop++)
+      if (m_viewDir.hasEntry("CV_iew"))
       {
-         byte[] fm = fixedMeta.getByteArrayValue(loop);
-         int offset = MPPUtility.getShort(fm, 4);
-         if (offset > lastOffset)
+         DirectoryEntry dir = (DirectoryEntry) m_viewDir.getEntry("CV_iew");
+         VarMeta viewVarMeta = new VarMeta12(new DocumentInputStream(((DocumentEntry) dir.getEntry("VarMeta"))));
+         Var2Data viewVarData = new Var2Data(viewVarMeta, new DocumentInputStream(((DocumentEntry) dir.getEntry("Var2Data"))));
+         FixedMeta fixedMeta = new FixedMeta(new DocumentInputStream(((DocumentEntry) dir.getEntry("FixedMeta"))), 10);
+         FixedData fixedData = new FixedData(138, m_inputStreamFactory.getInstance(dir, "FixedData"));
+
+         int items = fixedMeta.getAdjustedItemCount();
+         View view;
+         ViewFactory factory = new ViewFactory14();
+
+         int lastOffset = -1;
+         for (int loop = 0; loop < items; loop++)
          {
-            byte[] fd = fixedData.getByteArrayValue(fixedData.getIndexFromOffset(offset));
-            if (fd != null)
+            byte[] fm = fixedMeta.getByteArrayValue(loop);
+            int offset = MPPUtility.getShort(fm, 4);
+            if (offset > lastOffset)
             {
-               view = factory.createView(m_file, fm, fd, viewVarData, m_fontBases);
-               m_file.getViews().add(view);
+               byte[] fd = fixedData.getByteArrayValue(fixedData.getIndexFromOffset(offset));
+               if (fd != null)
+               {
+                  view = factory.createView(m_file, fm, fd, viewVarData, m_fontBases);
+                  m_file.getViews().add(view);
+               }
+               lastOffset = offset;
             }
-            lastOffset = offset;
          }
       }
    }
@@ -1831,24 +1839,27 @@ final class MPP14Reader implements MPPVariantReader
     */
    private void processTableData() throws IOException
    {
-      DirectoryEntry dir = (DirectoryEntry) m_viewDir.getEntry("CTable");
-
-      VarMeta varMeta = new VarMeta12(new DocumentInputStream(((DocumentEntry) dir.getEntry("VarMeta"))));
-      Var2Data varData = new Var2Data(varMeta, new DocumentInputStream(((DocumentEntry) dir.getEntry("Var2Data"))));
-      FixedData fixedData = new FixedData(230, new DocumentInputStream(((DocumentEntry) dir.getEntry("FixedData"))));
-      //System.out.println(varMeta);
-      //System.out.println(varData);
-      //System.out.println(fixedData);
-
-      TableContainer container = m_file.getTables();
-      TableFactory14 factory = new TableFactory14(TABLE_COLUMN_DATA_STANDARD, TABLE_COLUMN_DATA_ENTERPRISE, TABLE_COLUMN_DATA_BASELINE);
-      int items = fixedData.getItemCount();
-      for (int loop = 0; loop < items; loop++)
+      if (m_viewDir.hasEntry("CTable"))
       {
-         byte[] data = fixedData.getByteArrayValue(loop);
-         Table table = factory.createTable(m_file, data, varMeta, varData);
-         container.add(table);
-         //System.out.println(table);
+         DirectoryEntry dir = (DirectoryEntry) m_viewDir.getEntry("CTable");
+
+         VarMeta varMeta = new VarMeta12(new DocumentInputStream(((DocumentEntry) dir.getEntry("VarMeta"))));
+         Var2Data varData = new Var2Data(varMeta, new DocumentInputStream(((DocumentEntry) dir.getEntry("Var2Data"))));
+         FixedData fixedData = new FixedData(230, new DocumentInputStream(((DocumentEntry) dir.getEntry("FixedData"))));
+         //System.out.println(varMeta);
+         //System.out.println(varData);
+         //System.out.println(fixedData);
+
+         TableContainer container = m_file.getTables();
+         TableFactory14 factory = new TableFactory14(TABLE_COLUMN_DATA_STANDARD, TABLE_COLUMN_DATA_ENTERPRISE, TABLE_COLUMN_DATA_BASELINE);
+         int items = fixedData.getItemCount();
+         for (int loop = 0; loop < items; loop++)
+         {
+            byte[] data = fixedData.getByteArrayValue(loop);
+            Table table = factory.createTable(m_file, data, varMeta, varData);
+            container.add(table);
+            //System.out.println(table);
+         }
       }
    }
 
@@ -1859,42 +1870,45 @@ final class MPP14Reader implements MPPVariantReader
     */
    private void processFilterData() throws IOException
    {
-      DirectoryEntry dir = (DirectoryEntry) m_viewDir.getEntry("CFilter");
-
-      FixedMeta fixedMeta;
-      FixedData fixedData;
-      VarMeta varMeta;
-      Var2Data varData;
-
-      try
+      if (m_viewDir.hasEntry("CFilter"))
       {
-         fixedMeta = new FixedMeta(new DocumentInputStream(((DocumentEntry) dir.getEntry("FixedMeta"))), 10);
-         fixedData = new FixedData(fixedMeta, m_inputStreamFactory.getInstance(dir, "FixedData"));
-         varMeta = new VarMeta12(new DocumentInputStream(((DocumentEntry) dir.getEntry("VarMeta"))));
-         varData = new Var2Data(varMeta, new DocumentInputStream(((DocumentEntry) dir.getEntry("Var2Data"))));
+         DirectoryEntry dir = (DirectoryEntry) m_viewDir.getEntry("CFilter");
+
+         FixedMeta fixedMeta;
+         FixedData fixedData;
+         VarMeta varMeta;
+         Var2Data varData;
+
+         try
+         {
+            fixedMeta = new FixedMeta(new DocumentInputStream(((DocumentEntry) dir.getEntry("FixedMeta"))), 10);
+            fixedData = new FixedData(fixedMeta, m_inputStreamFactory.getInstance(dir, "FixedData"));
+            varMeta = new VarMeta12(new DocumentInputStream(((DocumentEntry) dir.getEntry("VarMeta"))));
+            varData = new Var2Data(varMeta, new DocumentInputStream(((DocumentEntry) dir.getEntry("Var2Data"))));
+         }
+
+         catch (IndexOutOfBoundsException ex)
+         {
+            // From a sample file where the stream reports an available number of bytes
+            // but attempting to read that number of bytes raises an exception.
+            return;
+         }
+
+         catch (IOException ex)
+         {
+            // I've come across an unusual sample where the VarMeta magic number is zero, which throws this exception.
+            // MS Project opens the file fine. If we get into this state, we'll just ignore the filter definitions.
+            return;
+         }
+
+         //System.out.println(fixedMeta);
+         //System.out.println(fixedData);
+         //System.out.println(varMeta);
+         //System.out.println(varData);
+
+         FilterReader reader = new FilterReader14();
+         reader.process(m_file.getProjectProperties(), m_file.getFilters(), fixedData, varData);
       }
-
-      catch (IndexOutOfBoundsException ex)
-      {
-         // From a sample file where the stream reports an available number of bytes
-         // but attempting to read that number of bytes raises an exception.
-         return;
-      }
-
-      catch (IOException ex)
-      {
-         // I've come across an unusual sample where the VarMeta magic number is zero, which throws this exception.
-         // MS Project opens the file fine. If we get into this state, we'll just ignore the filter definitions.
-         return;
-      }
-
-      //System.out.println(fixedMeta);
-      //System.out.println(fixedData);
-      //System.out.println(varMeta);
-      //System.out.println(varData);
-
-      FilterReader reader = new FilterReader14();
-      reader.process(m_file.getProjectProperties(), m_file.getFilters(), fixedData, varData);
    }
 
    /**
@@ -1904,20 +1918,23 @@ final class MPP14Reader implements MPPVariantReader
     */
    private void processSavedViewState() throws IOException
    {
-      DirectoryEntry dir = (DirectoryEntry) m_viewDir.getEntry("CEdl");
-      VarMeta varMeta = new VarMeta12(new DocumentInputStream(((DocumentEntry) dir.getEntry("VarMeta"))));
-      Var2Data varData = new Var2Data(varMeta, new DocumentInputStream(((DocumentEntry) dir.getEntry("Var2Data"))));
-      //System.out.println(varMeta);
-      //System.out.println(varData);
+      if (m_viewDir.hasEntry("CEdl"))
+      {
+         DirectoryEntry dir = (DirectoryEntry) m_viewDir.getEntry("CEdl");
+         VarMeta varMeta = new VarMeta12(new DocumentInputStream(((DocumentEntry) dir.getEntry("VarMeta"))));
+         Var2Data varData = new Var2Data(varMeta, new DocumentInputStream(((DocumentEntry) dir.getEntry("Var2Data"))));
+         //System.out.println(varMeta);
+         //System.out.println(varData);
 
-      InputStream is = new DocumentInputStream(((DocumentEntry) dir.getEntry("FixedData")));
-      byte[] fixedData = new byte[is.available()];
-      is.read(fixedData);
-      is.close();
-      //System.out.println(ByteArrayHelper.hexdump(fixedData, false, 16, ""));
+         InputStream is = new DocumentInputStream(((DocumentEntry) dir.getEntry("FixedData")));
+         byte[] fixedData = new byte[is.available()];
+         is.read(fixedData);
+         is.close();
+         //System.out.println(ByteArrayHelper.hexdump(fixedData, false, 16, ""));
 
-      ViewStateReader reader = new ViewStateReader12();
-      reader.process(m_file, varData, fixedData);
+         ViewStateReader reader = new ViewStateReader12();
+         reader.process(m_file, varData, fixedData);
+      }
    }
 
    /**
@@ -1927,19 +1944,22 @@ final class MPP14Reader implements MPPVariantReader
     */
    private void processGroupData() throws IOException
    {
-      DirectoryEntry dir = (DirectoryEntry) m_viewDir.getEntry("CGrouping");
-      FixedMeta fixedMeta = new FixedMeta(new DocumentInputStream(((DocumentEntry) dir.getEntry("FixedMeta"))), 10);
-      FixedData fixedData = new FixedData(fixedMeta, m_inputStreamFactory.getInstance(dir, "FixedData"));
-      VarMeta varMeta = new VarMeta12(new DocumentInputStream(((DocumentEntry) dir.getEntry("VarMeta"))));
-      Var2Data varData = new Var2Data(varMeta, new DocumentInputStream(((DocumentEntry) dir.getEntry("Var2Data"))));
+      if (m_viewDir.hasEntry("CGrouping"))
+      {
+         DirectoryEntry dir = (DirectoryEntry) m_viewDir.getEntry("CGrouping");
+         FixedMeta fixedMeta = new FixedMeta(new DocumentInputStream(((DocumentEntry) dir.getEntry("FixedMeta"))), 10);
+         FixedData fixedData = new FixedData(fixedMeta, m_inputStreamFactory.getInstance(dir, "FixedData"));
+         VarMeta varMeta = new VarMeta12(new DocumentInputStream(((DocumentEntry) dir.getEntry("VarMeta"))));
+         Var2Data varData = new Var2Data(varMeta, new DocumentInputStream(((DocumentEntry) dir.getEntry("Var2Data"))));
 
-      //System.out.println(fixedMeta);
-      //System.out.println(fixedData);
-      //System.out.println(varMeta);
-      //System.out.println(varData);
+         //System.out.println(fixedMeta);
+         //System.out.println(fixedData);
+         //System.out.println(varMeta);
+         //System.out.println(varData);
 
-      GroupReader14 reader = new GroupReader14();
-      reader.process(m_file, fixedData, varData, m_fontBases);
+         GroupReader14 reader = new GroupReader14();
+         reader.process(m_file, fixedData, varData, m_fontBases);
+      }
    }
 
    /**
@@ -1947,14 +1967,17 @@ final class MPP14Reader implements MPPVariantReader
     */
    private void processDataLinks() throws IOException
    {
-      DirectoryEntry dir = (DirectoryEntry) m_viewDir.getEntry("CEdl");
-      FixedMeta fixedMeta = new FixedMeta(new DocumentInputStream(((DocumentEntry) dir.getEntry("FixedMeta"))), 11);
-      FixedData fixedData = new FixedData(fixedMeta, m_inputStreamFactory.getInstance(dir, "FixedData"));
-      VarMeta varMeta = new VarMeta12(new DocumentInputStream(((DocumentEntry) dir.getEntry("VarMeta"))));
-      Var2Data varData = new Var2Data(varMeta, new DocumentInputStream(((DocumentEntry) dir.getEntry("Var2Data"))));
+      if (m_viewDir.hasEntry("CEdl"))
+      {
+         DirectoryEntry dir = (DirectoryEntry) m_viewDir.getEntry("CEdl");
+         FixedMeta fixedMeta = new FixedMeta(new DocumentInputStream(((DocumentEntry) dir.getEntry("FixedMeta"))), 11);
+         FixedData fixedData = new FixedData(fixedMeta, m_inputStreamFactory.getInstance(dir, "FixedData"));
+         VarMeta varMeta = new VarMeta12(new DocumentInputStream(((DocumentEntry) dir.getEntry("VarMeta"))));
+         Var2Data varData = new Var2Data(varMeta, new DocumentInputStream(((DocumentEntry) dir.getEntry("Var2Data"))));
 
-      DataLinkFactory factory = new DataLinkFactory(m_file, fixedData, varData);
-      factory.process();
+         DataLinkFactory factory = new DataLinkFactory(m_file, fixedData, varData);
+         factory.process();
+      }
    }
 
    /**

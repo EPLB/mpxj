@@ -85,10 +85,10 @@ public enum ResourceField implements FieldType
    OVERTIME_COST(DataType.CURRENCY),
    ACTUAL_OVERTIME_COST(DataType.CURRENCY),
    REMAINING_OVERTIME_COST(DataType.CURRENCY),
-   BCWS(DataType.NUMERIC),
-   BCWP(DataType.NUMERIC),
-   ACWP(DataType.NUMERIC),
-   SV(DataType.NUMERIC),
+   BCWS(DataType.CURRENCY),
+   BCWP(DataType.CURRENCY),
+   ACWP(DataType.CURRENCY),
+   SV(DataType.CURRENCY),
    AVAILABLE_FROM(DataType.DATE),
    AVAILABLE_TO(DataType.DATE),
    INDICATORS(DataType.STRING),
@@ -135,7 +135,7 @@ public enum ResourceField implements FieldType
    ASSIGNMENT(DataType.STRING),
    TASK_SUMMARY_NAME(DataType.STRING),
    CAN_LEVEL(DataType.BOOLEAN),
-   WORK_CONTOUR(DataType.STRING),
+   WORK_CONTOUR(DataType.WORK_CONTOUR),
    COST4(DataType.CURRENCY),
    COST5(DataType.CURRENCY),
    COST6(DataType.CURRENCY),
@@ -226,7 +226,7 @@ public enum ResourceField implements FieldType
    RESPONSE_PENDING(DataType.BOOLEAN),
 
    TEAMSTATUS_PENDING(DataType.BOOLEAN),
-   CV(DataType.NUMERIC),
+   CV(DataType.CURRENCY),
    UPDATE_NEEDED(DataType.BOOLEAN),
    COST_RATE_TABLE(DataType.STRING),
    ACTUAL_START(DataType.DATE),
@@ -581,6 +581,10 @@ public enum ResourceField implements FieldType
    PARENT_ID(DataType.INTEGER),
    CALENDAR(DataType.BINARY),
    CALENDAR_UNIQUE_ID(DataType.INTEGER),
+   PROPOSED_START(DataType.DATE),
+   PROPOSED_FINISH(DataType.DATE),
+   PROPOSED_MAX_UNITS(DataType.UNITS),
+   ENGAGEMENT_STATUS(DataType.STRING), // Check this type
 
    // KEEP THESE TOGETHER AND IN ORDER
    ENTERPRISE_CUSTOM_FIELD1(DataType.STRING),

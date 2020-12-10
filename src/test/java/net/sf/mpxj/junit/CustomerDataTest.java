@@ -35,6 +35,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 import org.junit.Test;
 
@@ -48,6 +49,7 @@ import net.sf.mpxj.mpx.MPXWriter;
 import net.sf.mpxj.mspdi.MSPDIReader;
 import net.sf.mpxj.mspdi.MSPDIWriter;
 import net.sf.mpxj.planner.PlannerWriter;
+import net.sf.mpxj.primavera.PrimaveraDatabaseFileReader;
 import net.sf.mpxj.primavera.PrimaveraPMFileWriter;
 import net.sf.mpxj.primavera.PrimaveraXERFileReader;
 import net.sf.mpxj.reader.UniversalProjectReader;
@@ -66,6 +68,8 @@ public class CustomerDataTest
    {
       m_privateDirectory = configureDirectory("mpxj.junit.privatedir");
       m_baselineDirectory = configureDirectory("mpxj.junit.baselinedir");
+      m_primaveraFile = System.getProperty("mpxj.junit.primavera.file");
+      m_primaveraBaselineDir = configureDirectory("mpxj.junit.primavera.baselinedir");
 
       m_universalReader = new UniversalProjectReader();
       m_mpxReader = new MPXReader();
@@ -173,6 +177,62 @@ public class CustomerDataTest
    }
 
    /**
+    * Test extracting projects from a sample SQLite P6 database.
+    */
+   @Test public void testPrimaveraDatabase() throws Exception
+   {
+      if (m_primaveraFile == null)
+      {
+         return;
+      }
+
+      File file = new File(m_primaveraFile);
+      Map<Integer, String> projects = new PrimaveraDatabaseFileReader().listProjects(file);
+      long failures = projects.entrySet().stream().map(entry -> testPrimaveraProject(file, entry.getKey().intValue(), entry.getValue())).filter(x -> !x.booleanValue()).count();
+
+      if (DIFF_BASELINE_DIR != null)
+      {
+         System.out.println();
+         System.out.println("Baseline: " + DIFF_BASELINE_DIR.getPath());
+         System.out.println("Test: " + DIFF_TEST_DIR.getPath());
+      }
+
+      assertEquals("Failed to read " + failures + " Primavera database projects", 0, failures);
+   }
+
+   /**
+    * Test a project from a Primavera SQLite database.
+    *
+    * @param file database file
+    * @param projectID ID of the project to extract
+    * @param projectName Name of the project to extract
+    * @return true if project read and validated successfully
+    */
+   private Boolean testPrimaveraProject(File file, int projectID, String projectName)
+   {
+      Boolean result = Boolean.TRUE;
+
+      try
+      {
+         PrimaveraDatabaseFileReader reader = new PrimaveraDatabaseFileReader();
+         reader.setProjectID(projectID);
+         ProjectFile project = reader.read(file);
+         if (!testBaseline(projectName, project, m_primaveraBaselineDir))
+         {
+            System.err.println("Failed to validate Primavera database project baseline " + projectName);
+            result = Boolean.FALSE;
+         }
+      }
+      catch (Exception e)
+      {
+         System.err.println("Failed to read Primavera database project: " + projectName);
+         result = Boolean.FALSE;
+      }
+
+      return result;
+   }
+
+   /**
     * Create a File instance from a path stored as a property.
     *
     * @param propertyName property name
@@ -267,6 +327,8 @@ public class CustomerDataTest
    private void executeTests(List<File> files)
    {
       int failures = 0;
+      int sourceDirNameLength = m_privateDirectory.getPath().length();
+
       for (File file : files)
       {
          String name = file.getName().toUpperCase();
@@ -288,6 +350,8 @@ public class CustomerDataTest
                continue;
             }
 
+            testPopulatedFields(mpxj);
+
             if (!testHierarchy(mpxj))
             {
                System.err.println("Failed to validate hierarchy " + name);
@@ -295,7 +359,7 @@ public class CustomerDataTest
                continue;
             }
 
-            if (!testBaseline(file, mpxj))
+            if (!testBaseline(file.getPath().substring(sourceDirNameLength), mpxj, m_baselineDirectory))
             {
                System.err.println("Failed to validate baseline " + name);
                ++failures;
@@ -319,7 +383,7 @@ public class CustomerDataTest
          System.out.println("Baseline: " + DIFF_BASELINE_DIR.getPath());
          System.out.println("Test: " + DIFF_TEST_DIR.getPath());
       }
-      
+
       assertEquals("Failed to read " + failures + " files", 0, failures);
    }
 
@@ -362,11 +426,24 @@ public class CustomerDataTest
          // For now, ignore files with non-standard encodings.
          if (name.endsWith(".XER") && !name.endsWith(".ENCODING.XER"))
          {
-            m_xerReader.readAll(new FileInputStream(file), true);
+            m_xerReader.setLinkCrossProjectRelations(true);
+            m_xerReader.readAll(new FileInputStream(file));
          }
       }
 
       return mpxj;
+   }
+
+   /**
+    * Ensure that the populated fields methods work for all data.
+    * 
+    * @param file schedule file to test
+    */
+   private void testPopulatedFields(ProjectFile file)
+   {
+      file.getTasks().getPopulatedFields();
+      file.getResources().getPopulatedFields();
+      file.getResourceAssignments().getPopulatedFields();
    }
 
    /**
@@ -401,37 +478,41 @@ public class CustomerDataTest
     * changes in functionality. If we do not have a baseline for this particular
     * file, we'll generate one.
     *
-    * @param file file under test
+    * @param name name of the project under test
     * @param project ProjectFile instance
+    * @param baselineDirectory directory in which baseline files are held
     * @return true if the baseline test is successful
     */
-   private boolean testBaseline(File file, ProjectFile project) throws Exception
+   private boolean testBaseline(String name, ProjectFile project, File baselineDirectory) throws Exception
    {
-      if (m_baselineDirectory == null)
+      if (baselineDirectory == null)
       {
          return true;
       }
 
-      boolean mspdi = testBaseline(file, project, new File(m_baselineDirectory, "mspdi"), MSPDIWriter.class);
-      boolean pmxml = testBaseline(file, project, new File(m_baselineDirectory, "pmxml"), PrimaveraPMFileWriter.class);
-      boolean json = testBaseline(file, project, new File(m_baselineDirectory, "json"), JsonWriter.class);
+      boolean mspdi = testBaseline(name, project, baselineDirectory, "mspdi", MSPDIWriter.class);
+      boolean pmxml = testBaseline(name, project, baselineDirectory, "pmxml", PrimaveraPMFileWriter.class);
+      boolean json = testBaseline(name, project, baselineDirectory, "json", JsonWriter.class);
+      boolean planner = testBaseline(name, project, baselineDirectory, "planner", PlannerWriter.class);
 
-      return mspdi && pmxml && json;
+      return mspdi && pmxml && json && planner;
    }
 
    /**
     * Generate a baseline for a specific file type.
     *
-    * @param file file under test
+    * @param name name of the project under test
     * @param project ProjectFile instance
-    * @param baselineDirectory baseline directory location
+    * @param baselineDir baseline directory location
+    * @param subDir sub directory name
     * @param writerClass file writer class
     * @return true if the baseline test is successful
     */
-   @SuppressWarnings("unused") private boolean testBaseline(File file, ProjectFile project, File baselineDirectory, Class<? extends ProjectWriter> writerClass) throws Exception
+   @SuppressWarnings("unused") private boolean testBaseline(String name, ProjectFile project, File baselineDir, String subDir, Class<? extends ProjectWriter> writerClass) throws Exception
    {
+      File baselineDirectory = new File(baselineDir, subDir);
+
       boolean success = true;
-      int sourceDirNameLength = m_privateDirectory.getPath().length();
 
       ProjectWriter writer = writerClass.newInstance();
       String suffix;
@@ -447,7 +528,7 @@ public class CustomerDataTest
          suffix = ".xml";
       }
 
-      File baselineFile = new File(baselineDirectory, file.getPath().substring(sourceDirNameLength) + suffix);
+      File baselineFile = new File(baselineDirectory, name + suffix);
 
       project.getProjectProperties().setCurrentDate(BASELINE_CURRENT_DATE);
 
@@ -463,7 +544,7 @@ public class CustomerDataTest
          }
          else
          {
-            debugFailure(baselineFile, out);
+            debugFailure(baselineFile, subDir, out);
          }
       }
       else
@@ -478,11 +559,12 @@ public class CustomerDataTest
    /**
     * Write a diagnostic message and populate directories to make
     * it easier to diff multiple files.
-    * 
+    *
     * @param baseline baseline file
+    * @param writerType identifies the writer type which failed the baseline comparison
     * @param test test file
     */
-   private void debugFailure(File baseline, File test) throws IOException
+   private void debugFailure(File baseline, String writerType, File test) throws IOException
    {
       System.out.println();
       System.out.println("Baseline: " + baseline.getPath());
@@ -497,11 +579,16 @@ public class CustomerDataTest
          FileHelper.mkdirs(DIFF_BASELINE_DIR);
          FileHelper.mkdirs(DIFF_TEST_DIR);
       }
-            
-      Files.copy(baseline.toPath(), new File(DIFF_BASELINE_DIR, baseline.getName()).toPath(), StandardCopyOption.REPLACE_EXISTING);
-      Files.copy(test.toPath(), new File(DIFF_TEST_DIR, baseline.getName()).toPath(), StandardCopyOption.REPLACE_EXISTING);
+
+      int index = baseline.getName().lastIndexOf('.');
+      String name = baseline.getName().substring(0, index);
+      String extension = baseline.getName().substring(index);
+      String newName = name + "." + writerType + extension;
+
+      Files.copy(baseline.toPath(), new File(DIFF_BASELINE_DIR, newName).toPath(), StandardCopyOption.REPLACE_EXISTING);
+      Files.copy(test.toPath(), new File(DIFF_TEST_DIR, newName).toPath(), StandardCopyOption.REPLACE_EXISTING);
    }
-   
+
    /**
     * Ensure that we can export the file under test through our writers, without error.
     *
@@ -542,12 +629,15 @@ public class CustomerDataTest
 
    private final File m_privateDirectory;
    private final File m_baselineDirectory;
+   private final String m_primaveraFile;
+   private final File m_primaveraBaselineDir;
+
    private UniversalProjectReader m_universalReader;
    private MPXReader m_mpxReader;
    private PrimaveraXERFileReader m_xerReader;
    private static File DIFF_BASELINE_DIR;
    private static File DIFF_TEST_DIR;
-   
+
    private static final List<Class<? extends ProjectWriter>> WRITER_CLASSES = new ArrayList<>();
 
    private static final Date BASELINE_CURRENT_DATE = new Date(1544100702438L);
@@ -562,7 +652,8 @@ public class CustomerDataTest
       // Exercised by baseline test
       //WRITER_CLASSES.add(MSPDIWriter.class);
 
-      WRITER_CLASSES.add(PlannerWriter.class);
+      // Exercised by baseline test
+      //WRITER_CLASSES.add(PlannerWriter.class);
 
       // Exercise by baseline test
       //WRITER_CLASSES.add(PrimaveraPMFileWriter.class);

@@ -25,15 +25,17 @@ package net.sf.mpxj.mpx;
 
 import java.io.IOException;
 import java.text.ParseException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
-import java.util.LinkedList;
+import java.util.List;
 import java.util.Locale;
 
 import net.sf.mpxj.AccrueType;
 import net.sf.mpxj.CodePage;
 import net.sf.mpxj.CurrencySymbolPosition;
 import net.sf.mpxj.DateOrder;
+import net.sf.mpxj.DayType;
 import net.sf.mpxj.Duration;
 import net.sf.mpxj.MPXJException;
 import net.sf.mpxj.ProjectDateFormat;
@@ -66,7 +68,7 @@ final class Record
 
          m_formats = formats;
 
-         LinkedList<String> list = new LinkedList<>();
+         List<String> list = new ArrayList<>();
 
          while (tk.nextToken() == Tokenizer.TT_WORD)
          {
@@ -92,7 +94,7 @@ final class Record
     *
     * @param list MPX record
     */
-   private void setRecordNumber(LinkedList<String> list)
+   private void setRecordNumber(List<String> list)
    {
       try
       {
@@ -736,6 +738,28 @@ final class Record
       else
       {
          result = null;
+      }
+
+      return (result);
+   }
+
+   /**
+    * Accessor method to retrieve a DayType instance.
+    *
+    * @param field the index number of the field to be retrieved
+    * @return the value of the required field
+    */
+   public DayType getDayType(int field)
+   {
+      DayType result;
+
+      if ((field < m_fields.length) && (m_fields[field].length() != 0))
+      {
+         result = DayType.getInstance(Integer.parseInt(m_fields[field]));
+      }
+      else
+      {
+         result = DayType.DEFAULT;
       }
 
       return (result);

@@ -23,7 +23,6 @@
 
 package net.sf.mpxj.primavera;
 
-import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -36,7 +35,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -52,26 +50,13 @@ import net.sf.mpxj.common.MultiDateFormat;
 import net.sf.mpxj.common.NumberHelper;
 import net.sf.mpxj.common.ReaderTokenizer;
 import net.sf.mpxj.common.Tokenizer;
-import net.sf.mpxj.listener.ProjectListener;
-import net.sf.mpxj.reader.AbstractProjectReader;
+import net.sf.mpxj.reader.AbstractProjectStreamReader;
 
 /**
  * This class creates a new ProjectFile instance by reading a Primavera XER file.
  */
-public final class PrimaveraXERFileReader extends AbstractProjectReader
+public final class PrimaveraXERFileReader extends AbstractProjectStreamReader
 {
-   /**
-    * {@inheritDoc}
-    */
-   @Override public void addProjectListener(ProjectListener listener)
-   {
-      if (m_projectListeners == null)
-      {
-         m_projectListeners = new LinkedList<>();
-      }
-      m_projectListeners.add(listener);
-   }
-
    /**
     * Set the ID of the project to be read.
     *
@@ -98,9 +83,31 @@ public final class PrimaveraXERFileReader extends AbstractProjectReader
     *
     * @param charset Charset used when reading the file
     */
-   public void setCharset(Charset charset)
+   @Override public void setCharset(Charset charset)
    {
       m_charset = charset;
+   }
+
+   /**
+    * Retrieve a flag indicating if, when using `realAll` to retrieve all
+    * projects from a file, cross project relations should be linked together.
+    *
+    * @return true if cross project relations should be linked
+    */
+   public boolean getLinkCrossProjectRelations()
+   {
+      return m_linkCrossProjectRelations;
+   }
+
+   /**
+    * Sets a flag indicating if, when using `realAll` to retrieve all
+    * projects from a file, cross project relations should be linked together.
+    *
+    * @param linkCrossProjectRelations true if cross project relations should be linked
+    */
+   public void setLinkCrossProjectRelations(boolean linkCrossProjectRelations)
+   {
+      m_linkCrossProjectRelations = linkCrossProjectRelations;
    }
 
    /**
@@ -108,23 +115,30 @@ public final class PrimaveraXERFileReader extends AbstractProjectReader
     */
    @Override public ProjectFile read(InputStream is) throws MPXJException
    {
-      try
-      {
-         m_tables = new HashMap<>();
-         m_numberFormat = new DecimalFormat();
+      ProjectFile project = null;
 
-         processFile(is);
-         m_reader = new PrimaveraReader(m_taskUdfCounters, m_resourceUdfCounters, m_assignmentUdfCounters, m_resourceFields, m_wbsFields, m_taskFields, m_assignmentFields, m_aliases, m_matchPrimaveraWBS);
-         ProjectFile project = readProject();
-         return (project);
+      // Preserve the requested project ID, this member variable is used when reading all projects
+      Integer targetProjectID = m_projectID;
+
+      // Using readAll ensures that cross project relations can be included if required
+      List<ProjectFile> projects = readAll(is);
+
+      if (!projects.isEmpty())
+      {
+         if (targetProjectID == null)
+         {
+            // We haven't been asked for a specific project: the first one will be the exported project
+            project = projects.get(0);
+         }
+         else
+         {
+            // We have been asked for a specific project: find it
+            String uniqueID = targetProjectID.toString();
+            project = projects.stream().filter(p -> uniqueID.equals(p.getProjectProperties().getUniqueID())).findFirst().orElse(null);
+         }
       }
 
-      finally
-      {
-         m_tables = null;
-         m_numberFormat = null;
-         m_reader = null;
-      }
+      return project;
    }
 
    /**
@@ -134,23 +148,8 @@ public final class PrimaveraXERFileReader extends AbstractProjectReader
     *
     * @param is input stream
     * @return list of ProjectFile instances
-    * @throws MPXJException
     */
-   public List<ProjectFile> readAll(InputStream is) throws MPXJException
-   {
-      return readAll(is, false);
-   }
-
-   /**
-    * This is a convenience method which allows all projects in an
-    * XER file to be read in a single pass.
-    *
-    * @param is input stream
-    * @param linkCrossProjectRelations add Relation links that cross ProjectFile boundaries
-    * @return list of ProjectFile instances
-    * @throws MPXJException
-    */
-   public List<ProjectFile> readAll(InputStream is, boolean linkCrossProjectRelations) throws MPXJException
+   @Override public List<ProjectFile> readAll(InputStream is) throws MPXJException
    {
       try
       {
@@ -161,27 +160,30 @@ public final class PrimaveraXERFileReader extends AbstractProjectReader
 
          List<Row> rows = getRows("project", null, null);
          List<ProjectFile> result = new ArrayList<>(rows.size());
-         List<ExternalPredecessorRelation> externalPredecessors = new ArrayList<>();
+         List<ExternalRelation> externalRelations = new ArrayList<>();
          for (Row row : rows)
          {
             setProjectID(row.getInt("proj_id"));
-            m_reader = new PrimaveraReader(m_taskUdfCounters, m_resourceUdfCounters, m_assignmentUdfCounters, m_resourceFields, m_wbsFields, m_taskFields, m_assignmentFields, m_aliases, m_matchPrimaveraWBS);
+            m_reader = new PrimaveraReader(m_taskUdfCounters, m_resourceUdfCounters, m_assignmentUdfCounters, m_resourceFields, m_wbsFields, m_taskFields, m_assignmentFields, m_aliases, m_matchPrimaveraWBS, m_wbsIsFullPath);
             ProjectFile project = readProject();
-            externalPredecessors.addAll(m_reader.getExternalPredecessors());
+            externalRelations.addAll(m_reader.getExternalRelations());
 
             result.add(project);
          }
 
-         if (linkCrossProjectRelations)
+         // Sort to ensure exported project is first
+         result.sort((o1, o2) -> Boolean.compare(o2.getProjectProperties().getExportFlag(), o1.getProjectProperties().getExportFlag()));
+
+         if (m_linkCrossProjectRelations)
          {
-            for (ExternalPredecessorRelation externalRelation : externalPredecessors)
+            for (ExternalRelation externalRelation : externalRelations)
             {
                Task predecessorTask;
                // we could aggregate the project task id maps but that's likely more work
                // than just looping through the projects
                for (ProjectFile proj : result)
                {
-                  predecessorTask = proj.getTaskByUniqueID(externalRelation.getSourceUniqueID());
+                  predecessorTask = proj.getTaskByUniqueID(externalRelation.externalTaskUniqueID());
                   if (predecessorTask != null)
                   {
                      Relation relation = externalRelation.getTargetTask().addPredecessor(predecessorTask, externalRelation.getType(), externalRelation.getLag());
@@ -205,6 +207,21 @@ public final class PrimaveraXERFileReader extends AbstractProjectReader
    }
 
    /**
+    * This is a convenience method which allows all projects in an
+    * XER file to be read in a single pass.
+    *
+    * @param is input stream
+    * @param linkCrossProjectRelations add Relation links that cross ProjectFile boundaries
+    * @return list of ProjectFile instances
+    * @deprecated use setLinkCrossProjectRelations(flag) and readAll(is) instead
+    */
+   @Deprecated public List<ProjectFile> readAll(InputStream is, boolean linkCrossProjectRelations) throws MPXJException
+   {
+      m_linkCrossProjectRelations = linkCrossProjectRelations;
+      return readAll(is);
+   }
+
+   /**
     * Common project read functionality.
     *
     * @return ProjectFile instance
@@ -216,18 +233,21 @@ public final class PrimaveraXERFileReader extends AbstractProjectReader
          ProjectFile project = m_reader.getProject();
          project.getProjectProperties().setFileApplication("Primavera");
          project.getProjectProperties().setFileType("XER");
-         project.getEventManager().addProjectListeners(m_projectListeners);
+         addListenersToProject(project);
 
          processProjectID();
          processProjectProperties();
          processActivityCodes();
          processUserDefinedFields();
+         processExpenseCategories();
+         processCostAccounts();
          processCalendars();
          processResources();
          processResourceRates();
          processTasks();
          processPredecessors();
          processAssignments();
+         processExpenseItems();
 
          project.updateStructure();
 
@@ -258,31 +278,30 @@ public final class PrimaveraXERFileReader extends AbstractProjectReader
 
       try
       {
-         //
-         // Test the header and extract the separator. If this is successful,
-         // we reset the stream back as far as we can. The design of the
-         // BufferedInputStream class means that we can't get back to character
-         // zero, so the first record we will read will get "RMHDR" rather than
-         // "ERMHDR" in the first field position.
-         //
-         BufferedInputStream bis = new BufferedInputStream(is);
-         byte[] data = new byte[6];
-         data[0] = (byte) bis.read();
-         bis.mark(1024);
-         bis.read(data, 1, 5);
-
-         if (!new String(data).equals("ERMHDR"))
-         {
-            throw new MPXJException(MPXJException.INVALID_FILE);
-         }
-
-         bis.reset();
-
-         InputStreamReader reader = new InputStreamReader(bis, getCharset());
+         InputStreamReader reader = new InputStreamReader(is, getCharset());
          Tokenizer tk = new ReaderTokenizer(reader);
          tk.setDelimiter('\t');
          List<String> record = new ArrayList<>();
 
+         //
+         // Read the first record as a special case so we can check for the header record token
+         //
+         if (tk.getType() == Tokenizer.TT_EOF)
+         {
+            throw new MPXJException(MPXJException.INVALID_FILE);
+         }
+
+         readRecord(tk, record);
+         if (record.isEmpty() || !"ERMHDR".equals(record.get(0)))
+         {
+            throw new MPXJException(MPXJException.INVALID_FILE);
+         }
+
+         processRecord(record);
+
+         //
+         // Read the remaining records
+         //
          while (tk.getType() != Tokenizer.TT_EOF)
          {
             readRecord(tk, record);
@@ -418,6 +437,30 @@ public final class PrimaveraXERFileReader extends AbstractProjectReader
    }
 
    /**
+    * Process expense categories.
+    */
+   private void processExpenseCategories()
+   {
+      m_reader.processExpenseCategories(getRows("costtype", null, null));
+   }
+
+   /**
+    * Process expense items.
+    */
+   private void processExpenseItems()
+   {
+      m_reader.processExpenseItems(getRows("projcost", "proj_id", m_projectID));
+   }
+
+   /**
+    * Process cost accounts.
+    */
+   private void processCostAccounts()
+   {
+      m_reader.processCostAccounts(getRows("account", null, null));
+   }
+
+   /**
     * Process activity code data.
     */
    private void processActivityCodes()
@@ -439,11 +482,60 @@ public final class PrimaveraXERFileReader extends AbstractProjectReader
       {
          Row row = rows.get(0);
          Map<String, Object> customProperties = new TreeMap<>();
+
+         //
+         // Leveling Options
+         //
+         // Automatically level resources when scheduling
+         customProperties.put("ConsiderAssignmentsInOtherProjects", Boolean.valueOf(row.getBoolean("level_outer_assign_flag")));
+         customProperties.put("ConsiderAssignmentsInOtherProjectsWithPriorityEqualHigherThan", row.getString("level_outer_assign_priority"));
+         customProperties.put("PreserveScheduledEarlyAndLateDates", Boolean.valueOf(row.getBoolean("level_keep_sched_date_flag")));
+         // Recalculate assignment costs after leveling
+         customProperties.put("LevelAllResources", Boolean.valueOf(row.getBoolean("level_all_rsrc_flag")));
+         customProperties.put("LevelResourcesOnlyWithinActivityTotalFloat", Boolean.valueOf(row.getBoolean("level_within_float_flag")));
+         customProperties.put("PreserveMinimumFloatWhenLeveling", row.getString("level_float_thrs_cnt"));
+         customProperties.put("MaxPercentToOverallocateResources", row.getString("level_over_alloc_pct"));
+         customProperties.put("LevelingPriorities", row.getString("levelprioritylist"));
+
+         //
+         // Schedule
+         //
+         customProperties.put("SetDataDateAndPlannedStartToProjectForecastStart", Boolean.valueOf(row.getBoolean("sched_setplantoforecast")));
+
+         //
+         // Schedule Options - General
+         //
+         customProperties.put("IgnoreRelationshipsToAndFromOtherProjects", row.getString("sched_outer_depend_type"));
+         customProperties.put("MakeOpenEndedActivitiesCritical", Boolean.valueOf(row.getBoolean("sched_open_critical_flag")));
+         customProperties.put("UseExpectedFinishDates", Boolean.valueOf(row.getBoolean("sched_use_expect_end_flag")));
+         // Schedule automatically when a change affects dates
+         // Level resources during scheduling
+         customProperties.put("WhenSchedulingProgressedActivitiesUseRetainedLogic", Boolean.valueOf(row.getBoolean("sched_retained_logic")));
+         customProperties.put("WhenSchedulingProgressedActivitiesUseProgressOverride", Boolean.valueOf(row.getBoolean("sched_progress_override")));
+         customProperties.put("ComputeStartToStartLagFromEarlyStart", Boolean.valueOf(row.getBoolean("sched_lag_early_start_flag")));
+         // Define critical activities as
+         customProperties.put("CalculateFloatBasedOnFishDateOfEachProject", Boolean.valueOf(row.getBoolean("sched_use_project_end_date_for_float")));
+         customProperties.put("ComputeTotalFloatAs", row.getString("sched_float_type"));
+         customProperties.put("CalendarForSchedulingRelationshipLag", row.getString("sched_calendar_on_relationship_lag"));
+
+         //
+         // Schedule Options - Advanced
+         //
+         customProperties.put("CalculateMultipleFloatPaths", Boolean.valueOf(row.getBoolean("enable_multiple_longest_path_calc")));
+         customProperties.put("CalculateMultiplePathsUsingTotalFloat", Boolean.valueOf(row.getBoolean("use_total_float_multiple_longest_paths")));
+         customProperties.put("DisplayMultipleFloatPathsEndingWithActivity", row.getString("key_activity_for_multiple_longest_paths"));
+         customProperties.put("LimitNumberOfPathsToCalculate", Boolean.valueOf(row.getBoolean("limit_multiple_longest_path_calc")));
+         customProperties.put("NumberofPathsToCalculate", row.getString("max_multiple_longest_path"));
+
+         //
+         // Backward Compatibility
+         //
          customProperties.put("LagCalendar", row.getString("sched_calendar_on_relationship_lag"));
          customProperties.put("RetainedLogic", Boolean.valueOf(row.getBoolean("sched_retained_logic")));
          customProperties.put("ProgressOverride", Boolean.valueOf(row.getBoolean("sched_progress_override")));
          customProperties.put("IgnoreOtherProjectRelationships", row.getString("sched_outer_depend_type"));
          customProperties.put("StartToStartLagCalculationType", Boolean.valueOf(row.getBoolean("sched_lag_early_start_flag")));
+
          m_reader.getProject().getProjectProperties().setCustomProperties(customProperties);
       }
    }
@@ -533,22 +625,28 @@ public final class PrimaveraXERFileReader extends AbstractProjectReader
    }
 
    /**
-    * Handles a complete record at a time, stores it in a form ready for
-    * further processing.
+    * Determine the XER record type and process.
     *
     * @param record record to be processed
     * @return flag indicating if this is the last record in the file to be processed
-    * @throws MPXJException
     */
-   private boolean processRecord(List<String> record) throws MPXJException
+   private boolean processRecord(List<String> record)
+   {
+      XerRecordType type = RECORD_TYPE_MAP.get(record.get(0));
+      return type == null ? false : processRecord(type, record);
+   }
+
+   /**
+    * Handles a complete record at a time, stores it in a form ready for
+    * further processing.
+    *
+    * @param type XER record type
+    * @param record record to be processed
+    * @return flag indicating if this is the last record in the file to be processed
+    */
+   private boolean processRecord(XerRecordType type, List<String> record)
    {
       boolean done = false;
-
-      XerRecordType type = RECORD_TYPE_MAP.get(record.get(0));
-      if (type == null)
-      {
-         throw new MPXJException(MPXJException.INVALID_FORMAT);
-      }
 
       switch (type)
       {
@@ -560,7 +658,7 @@ public final class PrimaveraXERFileReader extends AbstractProjectReader
 
          case TABLE:
          {
-            m_currentTableName = record.get(1).toLowerCase();
+            m_currentTableName = record.size() > 1 ? record.get(1).toLowerCase() : null;
             m_skipTable = !REQUIRED_TABLES.contains(m_currentTableName);
             if (m_skipTable)
             {
@@ -568,7 +666,7 @@ public final class PrimaveraXERFileReader extends AbstractProjectReader
             }
             else
             {
-               m_currentTable = new LinkedList<>();
+               m_currentTable = new ArrayList<>();
                m_tables.put(m_currentTableName, m_currentTable);
             }
             break;
@@ -595,86 +693,7 @@ public final class PrimaveraXERFileReader extends AbstractProjectReader
          {
             if (!m_skipTable)
             {
-               Map<String, Object> map = new HashMap<>();
-               for (int loop = 1; loop < record.size(); loop++)
-               {
-                  String fieldName = m_currentFieldNames[loop];
-                  String fieldValue = record.get(loop);
-                  XerFieldType fieldType = m_fieldTypes.get(fieldName);
-                  if (fieldType == null)
-                  {
-                     fieldType = XerFieldType.STRING;
-                  }
-
-                  Object objectValue;
-                  if (fieldValue.length() == 0)
-                  {
-                     objectValue = null;
-                  }
-                  else
-                  {
-                     switch (fieldType)
-                     {
-                        case DATE:
-                        {
-                           try
-                           {
-                              objectValue = m_df.parseObject(fieldValue);
-                           }
-
-                           catch (ParseException ex)
-                           {
-                              objectValue = fieldValue;
-                           }
-
-                           break;
-                        }
-
-                        case CURRENCY:
-                        case DOUBLE:
-                        case DURATION:
-                        {
-                           try
-                           {
-                              objectValue = Double.valueOf(m_numberFormat.parse(fieldValue.trim()).doubleValue());
-                           }
-
-                           catch (ParseException ex)
-                           {
-                              objectValue = fieldValue;
-                           }
-                           break;
-                        }
-
-                        case INTEGER:
-                        {
-                           objectValue = Integer.valueOf(fieldValue.trim());
-                           break;
-                        }
-
-                        default:
-                        {
-                           objectValue = fieldValue;
-                           break;
-                        }
-                     }
-                  }
-
-                  map.put(fieldName, objectValue);
-               }
-
-               Row currentRow = new MapRow(map);
-               m_currentTable.add(currentRow);
-
-               //
-               // Special case - we need to know the default currency format
-               // ahead of time, so process each row as we get it so that
-               // we can correctly parse currency values in later tables.
-               //
-               if (m_currentTableName.equals("currtype"))
-               {
-                  processCurrency(currentRow);
-               }
+               processData(record);
             }
             break;
          }
@@ -692,6 +711,130 @@ public final class PrimaveraXERFileReader extends AbstractProjectReader
       }
 
       return done;
+   }
+
+   /**
+    * Populate a table row from a data record.
+    *
+    * @param record data record.
+    */
+   private void processData(List<String> record)
+   {
+      Map<String, Object> map = new HashMap<>();
+      for (int loop = 1; loop < record.size(); loop++)
+      {
+         // We have more fields than field names, stop processing
+         if (loop == m_currentFieldNames.length)
+         {
+            break;
+         }
+
+         String fieldName = m_currentFieldNames[loop];
+         String fieldValue = record.get(loop);
+         XerFieldType fieldType = getFieldType(fieldName);
+
+         Object objectValue;
+         if (fieldValue.length() == 0)
+         {
+            objectValue = null;
+         }
+         else
+         {
+            switch (fieldType)
+            {
+               case DATE:
+               {
+                  try
+                  {
+                     objectValue = m_df.parseObject(fieldValue);
+                  }
+
+                  catch (ParseException ex)
+                  {
+                     objectValue = fieldValue;
+                  }
+
+                  break;
+               }
+
+               case CURRENCY:
+               case DOUBLE:
+               case DURATION:
+               {
+                  try
+                  {
+                     objectValue = Double.valueOf(m_numberFormat.parse(fieldValue.trim()).doubleValue());
+                  }
+
+                  catch (ParseException ex)
+                  {
+                     objectValue = fieldValue;
+                  }
+                  break;
+               }
+
+               case INTEGER:
+               {
+                  try
+                  {
+                     objectValue = Integer.valueOf(fieldValue.trim());
+                  }
+
+                  catch (NumberFormatException ex)
+                  {
+                     objectValue = fieldValue;
+                  }
+                  break;
+               }
+
+               default:
+               {
+                  objectValue = fieldValue;
+                  break;
+               }
+            }
+         }
+
+         map.put(fieldName, objectValue);
+      }
+
+      Row currentRow = new MapRow(map);
+      m_currentTable.add(currentRow);
+
+      //
+      // Special case - we need to know the default currency format
+      // ahead of time, so process each row as we get it so that
+      // we can correctly parse currency values in later tables.
+      //
+      if (m_currentTableName.equals("currtype"))
+      {
+         processCurrency(currentRow);
+      }
+   }
+
+   /**
+    * Given a field name, retrieve its type.
+    *
+    * @param fieldName field name
+    * @return field type
+    */
+   private XerFieldType getFieldType(String fieldName)
+   {
+      XerFieldType fieldType;
+
+      // This is the only field name collision we've encountered so far
+      // when determining the field type. Ideally we'd perform a lookup
+      // based on table name and field name, but as we only have this one
+      // collision, we'll take a simpler approach for now.
+      if (m_currentTableName.equals("projcost") && fieldName.equals("target_qty"))
+      {
+         fieldType = XerFieldType.CURRENCY;
+      }
+      else
+      {
+         fieldType = m_fieldTypes.getOrDefault(fieldName, XerFieldType.STRING);
+      }
+      return fieldType;
    }
 
    /**
@@ -823,7 +966,7 @@ public final class PrimaveraXERFileReader extends AbstractProjectReader
          }
          else
          {
-            result = new LinkedList<>();
+            result = new ArrayList<>();
             for (Row row : table)
             {
                if (NumberHelper.equals(id, row.getInteger(columnName)))
@@ -861,6 +1004,28 @@ public final class PrimaveraXERFileReader extends AbstractProjectReader
    }
 
    /**
+    * Returns true if the WBS attribute of a summary task
+    * contains a dot separated list representing the WBS hierarchy.
+    *
+    * @return true if WBS attribute is a hierarchy
+    */
+   public boolean getWbsIsFullPath()
+   {
+      return m_wbsIsFullPath;
+   }
+
+   /**
+    * Sets a flag indicating if the WBS attribute of a summary task
+    * contains a dot separated list representing the WBS hierarchy.
+    *
+    * @param wbsIsFullPath true if WBS attribute is a hierarchy
+    */
+   public void setWbsIsFullPath(boolean wbsIsFullPath)
+   {
+      m_wbsIsFullPath = wbsIsFullPath;
+   }
+
+   /**
     * Rather than using FIELD_TYPE_MAP directly, we copy it. This allows the
     * caller to add or modify type mappings for an individual instance of
     * the reader class.
@@ -886,7 +1051,6 @@ public final class PrimaveraXERFileReader extends AbstractProjectReader
    private DecimalFormat m_numberFormat;
    private Row m_defaultCurrencyData;
    private DateFormat m_df = new MultiDateFormat("yyyy-MM-dd HH:mm", "yyyy-MM-dd");
-   private List<ProjectListener> m_projectListeners;
    private UserFieldCounters m_taskUdfCounters = new UserFieldCounters();
    private UserFieldCounters m_resourceUdfCounters = new UserFieldCounters();
    private UserFieldCounters m_assignmentUdfCounters = new UserFieldCounters();
@@ -897,6 +1061,8 @@ public final class PrimaveraXERFileReader extends AbstractProjectReader
    private Map<FieldType, String> m_aliases = PrimaveraReader.getDefaultAliases();
    private Map<String, XerFieldType> m_fieldTypes = getDefaultFieldTypes();
    private boolean m_matchPrimaveraWBS = true;
+   private boolean m_wbsIsFullPath = true;
+   private boolean m_linkCrossProjectRelations;
 
    /**
     * Represents expected record types.
@@ -916,7 +1082,7 @@ public final class PrimaveraXERFileReader extends AbstractProjectReader
    private static final Map<String, XerRecordType> RECORD_TYPE_MAP = new HashMap<>();
    static
    {
-      RECORD_TYPE_MAP.put("RMHDR", XerRecordType.HEADER);
+      RECORD_TYPE_MAP.put("ERMHDR", XerRecordType.HEADER);
       RECORD_TYPE_MAP.put("%T", XerRecordType.TABLE);
       RECORD_TYPE_MAP.put("%F", XerRecordType.FIELDS);
       RECORD_TYPE_MAP.put("%R", XerRecordType.DATA);
@@ -930,6 +1096,8 @@ public final class PrimaveraXERFileReader extends AbstractProjectReader
    private static final Map<String, XerFieldType> FIELD_TYPE_MAP = new HashMap<>();
    static
    {
+      FIELD_TYPE_MAP.put("acct_id", XerFieldType.INTEGER);
+      FIELD_TYPE_MAP.put("acct_seq_num", XerFieldType.INTEGER);
       FIELD_TYPE_MAP.put("act_cost", XerFieldType.DOUBLE);
       FIELD_TYPE_MAP.put("act_end_date", XerFieldType.DATE);
       FIELD_TYPE_MAP.put("act_equip_qty", XerFieldType.DOUBLE);
@@ -948,9 +1116,9 @@ public final class PrimaveraXERFileReader extends AbstractProjectReader
       FIELD_TYPE_MAP.put("clndr_id", XerFieldType.INTEGER);
       FIELD_TYPE_MAP.put("clndr_name", XerFieldType.STRING);
       FIELD_TYPE_MAP.put("clndr_type", XerFieldType.STRING);
+      FIELD_TYPE_MAP.put("cost_item_id", XerFieldType.INTEGER);
       FIELD_TYPE_MAP.put("cost_per_qty", XerFieldType.DOUBLE);
-      FIELD_TYPE_MAP.put("create_date", XerFieldType.DATE);
-      FIELD_TYPE_MAP.put("create_date", XerFieldType.DATE);
+      FIELD_TYPE_MAP.put("cost_type_id", XerFieldType.INTEGER);
       FIELD_TYPE_MAP.put("create_date", XerFieldType.DATE);
       FIELD_TYPE_MAP.put("cstr_date", XerFieldType.DATE);
       FIELD_TYPE_MAP.put("cstr_date2", XerFieldType.DATE);
@@ -974,6 +1142,7 @@ public final class PrimaveraXERFileReader extends AbstractProjectReader
       FIELD_TYPE_MAP.put("max_qty_per_hr", XerFieldType.DOUBLE);
       FIELD_TYPE_MAP.put("month_hr_cnt", XerFieldType.DOUBLE);
       FIELD_TYPE_MAP.put("orig_cost", XerFieldType.CURRENCY);
+      FIELD_TYPE_MAP.put("parent_acct_id", XerFieldType.INTEGER);
       FIELD_TYPE_MAP.put("parent_actv_code_id", XerFieldType.INTEGER);
       FIELD_TYPE_MAP.put("parent_rsrc_id", XerFieldType.INTEGER);
       FIELD_TYPE_MAP.put("parent_wbs_id", XerFieldType.INTEGER);
@@ -982,7 +1151,6 @@ public final class PrimaveraXERFileReader extends AbstractProjectReader
       FIELD_TYPE_MAP.put("plan_start_date", XerFieldType.DATE);
       FIELD_TYPE_MAP.put("pred_task_id", XerFieldType.INTEGER);
       FIELD_TYPE_MAP.put("proj_id", XerFieldType.INTEGER);
-      FIELD_TYPE_MAP.put("proj_id", XerFieldType.INTEGER);
       FIELD_TYPE_MAP.put("reend_date", XerFieldType.DATE);
       FIELD_TYPE_MAP.put("remain_cost", XerFieldType.DOUBLE);
       FIELD_TYPE_MAP.put("remain_drtn_hr_cnt", XerFieldType.DURATION);
@@ -990,21 +1158,20 @@ public final class PrimaveraXERFileReader extends AbstractProjectReader
       FIELD_TYPE_MAP.put("remain_qty", XerFieldType.DURATION);
       FIELD_TYPE_MAP.put("remain_work_qty", XerFieldType.DURATION);
       FIELD_TYPE_MAP.put("restart_date", XerFieldType.DATE);
+      FIELD_TYPE_MAP.put("resume_date", XerFieldType.DATE);
       FIELD_TYPE_MAP.put("rsrc_id", XerFieldType.INTEGER);
       FIELD_TYPE_MAP.put("sched_calendar_on_relationship_lag", XerFieldType.STRING);
       FIELD_TYPE_MAP.put("seq_num", XerFieldType.INTEGER);
       FIELD_TYPE_MAP.put("start_date", XerFieldType.DATE);
       FIELD_TYPE_MAP.put("super_flag", XerFieldType.STRING);
+      FIELD_TYPE_MAP.put("suspend_date", XerFieldType.DATE);
       FIELD_TYPE_MAP.put("table_name", XerFieldType.STRING);
       FIELD_TYPE_MAP.put("target_cost", XerFieldType.CURRENCY);
-      FIELD_TYPE_MAP.put("target_cost", XerFieldType.DOUBLE);
       FIELD_TYPE_MAP.put("target_drtn_hr_cnt", XerFieldType.DURATION);
-      FIELD_TYPE_MAP.put("target_end_date", XerFieldType.DATE);
       FIELD_TYPE_MAP.put("target_end_date", XerFieldType.DATE);
       FIELD_TYPE_MAP.put("target_lag_drtn_hr_cnt", XerFieldType.DURATION);
       FIELD_TYPE_MAP.put("target_qty", XerFieldType.DURATION);
       FIELD_TYPE_MAP.put("target_qty_per_hr", XerFieldType.DOUBLE);
-      FIELD_TYPE_MAP.put("target_start_date", XerFieldType.DATE);
       FIELD_TYPE_MAP.put("target_start_date", XerFieldType.DATE);
       FIELD_TYPE_MAP.put("target_work_qty", XerFieldType.DURATION);
       FIELD_TYPE_MAP.put("task_id", XerFieldType.INTEGER);
@@ -1042,6 +1209,9 @@ public final class PrimaveraXERFileReader extends AbstractProjectReader
       REQUIRED_TABLES.add("actvtype");
       REQUIRED_TABLES.add("actvcode");
       REQUIRED_TABLES.add("taskactv");
+      REQUIRED_TABLES.add("costtype");
+      REQUIRED_TABLES.add("account");
+      REQUIRED_TABLES.add("projcost");
    }
 
    private static final WbsRowComparatorXER WBS_ROW_COMPARATOR = new WbsRowComparatorXER();

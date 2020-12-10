@@ -47,9 +47,10 @@ final class VarMeta9 extends AbstractVarMeta
    VarMeta9(InputStream is)
       throws IOException
    {
-      if (readInt(is) != MAGIC)
+      int magic = readInt(is);
+      if (magic != MAGIC)
       {
-         throw new IOException("Bad magic number");
+         throw new IOException("Bad magic number: " + magic);
       }
 
       /*m_unknown1 =*/readInt(is);
@@ -80,12 +81,7 @@ final class VarMeta9 extends AbstractVarMeta
          type = Integer.valueOf(readByte(is));
          offset = Integer.valueOf(readInt(is));
 
-         map = m_table.get(uniqueID);
-         if (map == null)
-         {
-            map = new TreeMap<>();
-            m_table.put(uniqueID, map);
-         }
+         map = m_table.computeIfAbsent(uniqueID, k -> new TreeMap<>());
          map.put(type, offset);
          offsets[loop] = offset.intValue();
       }

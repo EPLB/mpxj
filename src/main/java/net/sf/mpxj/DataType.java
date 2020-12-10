@@ -71,7 +71,9 @@ public enum DataType implements MpxjEnum
    BOOKING_TYPE(38),
    TIME_UNITS(39),
    DATE_RANGE_LIST(40),
-   SUBPROJECT(41);
+   SUBPROJECT(41),
+   WORK_CONTOUR(42),
+   EXPENSE_ITEM_LIST(43);
 
    /**
     * Private constructor.

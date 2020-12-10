@@ -25,10 +25,10 @@ package net.sf.mpxj.mpp;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -180,6 +180,8 @@ final class MPP9Reader implements MPPVariantReader
 
       m_fontBases = new HashMap<>();
       m_taskSubProjects = new HashMap<>();
+      m_taskOrder = new TreeMap<>();
+      m_nullTaskOrder = new TreeMap<>();
 
       m_file.getProjectProperties().setMppFileType(Integer.valueOf(9));
       m_file.getProjectProperties().setAutoFilter(props9.getBoolean(Props.AUTO_FILTER));
@@ -199,6 +201,8 @@ final class MPP9Reader implements MPPVariantReader
       m_viewDir = null;
       m_outlineCodeVarData = null;
       m_fontBases = null;
+      m_taskOrder = null;
+      m_nullTaskOrder = null;
       m_taskSubProjects = null;
    }
 
@@ -702,15 +706,18 @@ final class MPP9Reader implements MPPVariantReader
     */
    private void processViewPropertyData() throws IOException
    {
-      Props9 props = new Props9(m_inputStreamFactory.getInstance(m_viewDir, "Props"));
-      byte[] data = props.getByteArray(Props.FONT_BASES);
-      if (data != null)
+      if (m_viewDir.hasEntry("Props"))
       {
-         processBaseFonts(data);
-      }
+         Props9 props = new Props9(m_inputStreamFactory.getInstance(m_viewDir, "Props"));
+         byte[] data = props.getByteArray(Props.FONT_BASES);
+         if (data != null)
+         {
+            processBaseFonts(data);
+         }
 
-      ProjectProperties properties = m_file.getProjectProperties();
-      properties.setShowProjectSummaryTask(props.getBoolean(Props.SHOW_PROJECT_SUMMARY_TASK));
+         ProjectProperties properties = m_file.getProjectProperties();
+         properties.setShowProjectSummaryTask(props.getBoolean(Props.SHOW_PROJECT_SUMMARY_TASK));
+      }
    }
 
    /**
@@ -770,7 +777,7 @@ final class MPP9Reader implements MPPVariantReader
       {
          return null;
       }
-      List<String> descriptions = new LinkedList<>();
+      List<String> descriptions = new ArrayList<>();
       int offset = 0;
       while (offset < data.length)
       {
@@ -798,7 +805,7 @@ final class MPP9Reader implements MPPVariantReader
          return null;
       }
 
-      List<Object> list = new LinkedList<>();
+      List<Object> list = new ArrayList<>();
       int offset = 0;
 
       switch (field.getDataType())
@@ -908,9 +915,11 @@ final class MPP9Reader implements MPPVariantReader
       Integer key;
 
       //
-      // First three items are not tasks, so let's skip them
+      // First three items are not tasks, so let's skip them.
+      // Note we're working backwards: where we have duplicate tasks the later ones
+      // appear to be the correct versions (https://github.com/joniles/mpxj/issues/152)
       //
-      for (int loop = 3; loop < itemCount; loop++)
+      for (int loop = itemCount - 1; loop > 2; loop--)
       {
          byte[] data = taskFixedData.getByteArrayValue(loop);
          if (data != null)
@@ -933,10 +942,7 @@ final class MPP9Reader implements MPPVariantReader
                //
                uniqueID = MPPUtility.getShort(data, TASK_UNIQUE_ID_FIXED_OFFSET); // Only a short stored for deleted tasks?
                key = Integer.valueOf(uniqueID);
-               if (taskMap.containsKey(key) == false)
-               {
-                  taskMap.put(key, null); // use null so we can easily ignore this later
-               }
+               taskMap.put(key, null); // use null so we can easily ignore this later
             }
             else
             {
@@ -963,6 +969,7 @@ final class MPP9Reader implements MPPVariantReader
                   {
                      uniqueID = MPPUtility.getInt(data, uniqueIdOffset);
                      key = Integer.valueOf(uniqueID);
+
                      // Accept this task if it does not have a deleted unique ID or it has a deleted unique ID but the name is not null
                      if (!taskMap.containsKey(key) || taskVarData.getUnicodeString(key, taskNameKey) != null)
                      {
@@ -1057,7 +1064,7 @@ final class MPP9Reader implements MPPVariantReader
       byte[] metaData;
       Task task;
       boolean autoWBS = true;
-      LinkedList<Task> externalTasks = new LinkedList<>();
+      List<Task> externalTasks = new ArrayList<>();
       RecurringTaskReader recurringTaskReader = null;
       String notes;
 
@@ -1079,6 +1086,7 @@ final class MPP9Reader implements MPPVariantReader
             task.setNull(true);
             task.setUniqueID(Integer.valueOf(MPPUtility.getShort(data, TASK_UNIQUE_ID_FIXED_OFFSET)));
             task.setID(Integer.valueOf(MPPUtility.getShort(data, TASK_ID_FIXED_OFFSET)));
+            m_nullTaskOrder.put(task.getID(), task.getUniqueID());
             continue;
          }
 
@@ -1286,6 +1294,11 @@ final class MPP9Reader implements MPPVariantReader
          }
 
          //
+         // Process any enterprise columns
+         //
+         processTaskEnterpriseColumns(fieldMap, task, taskVarData);
+
+         //
          // Unfortunately it looks like 'null' tasks sometimes make it through,
          // so let's check for to see if we need to mark this task as a null
          // task after all.
@@ -1297,13 +1310,11 @@ final class MPP9Reader implements MPPVariantReader
             task.setNull(true);
             task.setUniqueID(uniqueID);
             task.setID(id);
+            m_nullTaskOrder.put(task.getID(), task.getUniqueID());
             continue;
          }
 
-         //
-         // Process any enterprise columns
-         //
-         processTaskEnterpriseColumns(fieldMap, task, taskVarData);
+         m_taskOrder.put(task.getID(), task.getUniqueID());
 
          //
          // Fire the task read event
@@ -1908,31 +1919,34 @@ final class MPP9Reader implements MPPVariantReader
     */
    private void processViewData() throws IOException
    {
-      DirectoryEntry dir = (DirectoryEntry) m_viewDir.getEntry("CV_iew");
-      VarMeta viewVarMeta = new VarMeta9(new DocumentInputStream(((DocumentEntry) dir.getEntry("VarMeta"))));
-      Var2Data viewVarData = new Var2Data(viewVarMeta, new DocumentInputStream(((DocumentEntry) dir.getEntry("Var2Data"))));
-      FixedMeta fixedMeta = new FixedMeta(new DocumentInputStream(((DocumentEntry) dir.getEntry("FixedMeta"))), 10);
-      FixedData fixedData = new FixedData(122, m_inputStreamFactory.getInstance(dir, "FixedData"));
-
-      int items = fixedMeta.getAdjustedItemCount();
-      View view;
-      ViewFactory factory = new ViewFactory9();
-
-      int lastOffset = -1;
-      for (int loop = 0; loop < items; loop++)
+      if (m_viewDir.hasEntry("CV_iew"))
       {
-         byte[] fm = fixedMeta.getByteArrayValue(loop);
-         int offset = MPPUtility.getShort(fm, 4);
-         if (offset > lastOffset)
+         DirectoryEntry dir = (DirectoryEntry) m_viewDir.getEntry("CV_iew");
+         VarMeta viewVarMeta = new VarMeta9(new DocumentInputStream(((DocumentEntry) dir.getEntry("VarMeta"))));
+         Var2Data viewVarData = new Var2Data(viewVarMeta, new DocumentInputStream(((DocumentEntry) dir.getEntry("Var2Data"))));
+         FixedMeta fixedMeta = new FixedMeta(new DocumentInputStream(((DocumentEntry) dir.getEntry("FixedMeta"))), 10);
+         FixedData fixedData = new FixedData(122, m_inputStreamFactory.getInstance(dir, "FixedData"));
+
+         int items = fixedMeta.getAdjustedItemCount();
+         View view;
+         ViewFactory factory = new ViewFactory9();
+
+         int lastOffset = -1;
+         for (int loop = 0; loop < items; loop++)
          {
-            byte[] fd = fixedData.getByteArrayValue(fixedData.getIndexFromOffset(offset));
-            if (fd != null)
+            byte[] fm = fixedMeta.getByteArrayValue(loop);
+            int offset = MPPUtility.getShort(fm, 4);
+            if (offset > lastOffset)
             {
-               view = factory.createView(m_file, fm, fd, viewVarData, m_fontBases);
-               m_file.getViews().add(view);
-               //System.out.print(view);
+               byte[] fd = fixedData.getByteArrayValue(fixedData.getIndexFromOffset(offset));
+               if (fd != null)
+               {
+                  view = factory.createView(m_file, fm, fd, viewVarData, m_fontBases);
+                  m_file.getViews().add(view);
+                  //System.out.print(view);
+               }
+               lastOffset = offset;
             }
-            lastOffset = offset;
          }
       }
    }
@@ -1947,23 +1961,26 @@ final class MPP9Reader implements MPPVariantReader
     */
    private void processTableData() throws IOException
    {
-      DirectoryEntry dir = (DirectoryEntry) m_viewDir.getEntry("CTable");
-      //FixedMeta fixedMeta = new FixedMeta(getEncryptableInputStream(dir, "FixedMeta"), 9);
-      InputStream stream = m_inputStreamFactory.getInstance(dir, "FixedData");
-      int blockSize = stream.available() % 115 == 0 ? 115 : 110;
-      FixedData fixedData = new FixedData(blockSize, stream);
-      VarMeta varMeta = new VarMeta9(new DocumentInputStream(((DocumentEntry) dir.getEntry("VarMeta"))));
-      Var2Data varData = new Var2Data(varMeta, new DocumentInputStream(((DocumentEntry) dir.getEntry("Var2Data"))));
-
-      TableContainer container = m_file.getTables();
-      TableFactory factory = new TableFactory(TABLE_COLUMN_DATA_STANDARD, TABLE_COLUMN_DATA_ENTERPRISE, TABLE_COLUMN_DATA_BASELINE);
-      int items = fixedData.getItemCount();
-      for (int loop = 0; loop < items; loop++)
+      if (m_viewDir.hasEntry("CTable"))
       {
-         byte[] data = fixedData.getByteArrayValue(loop);
-         Table table = factory.createTable(m_file, data, varMeta, varData);
-         container.add(table);
-         //System.out.println(table);
+         DirectoryEntry dir = (DirectoryEntry) m_viewDir.getEntry("CTable");
+         //FixedMeta fixedMeta = new FixedMeta(getEncryptableInputStream(dir, "FixedMeta"), 9);
+         InputStream stream = m_inputStreamFactory.getInstance(dir, "FixedData");
+         int blockSize = stream.available() % 115 == 0 ? 115 : 110;
+         FixedData fixedData = new FixedData(blockSize, stream);
+         VarMeta varMeta = new VarMeta9(new DocumentInputStream(((DocumentEntry) dir.getEntry("VarMeta"))));
+         Var2Data varData = new Var2Data(varMeta, new DocumentInputStream(((DocumentEntry) dir.getEntry("Var2Data"))));
+
+         TableContainer container = m_file.getTables();
+         TableFactory factory = new TableFactory(TABLE_COLUMN_DATA_STANDARD, TABLE_COLUMN_DATA_ENTERPRISE, TABLE_COLUMN_DATA_BASELINE);
+         int items = fixedData.getItemCount();
+         for (int loop = 0; loop < items; loop++)
+         {
+            byte[] data = fixedData.getByteArrayValue(loop);
+            Table table = factory.createTable(m_file, data, varMeta, varData);
+            container.add(table);
+            //System.out.println(table);
+         }
       }
    }
 
@@ -1975,22 +1992,25 @@ final class MPP9Reader implements MPPVariantReader
     */
    private void processFilterData() throws IOException
    {
-      DirectoryEntry dir = (DirectoryEntry) m_viewDir.getEntry("CFilter");
-      //FixedMeta fixedMeta = new FixedMeta(new DocumentInputStream(((DocumentEntry) dir.getEntry("FixedMeta"))), 9);
-      //FixedData fixedData = new FixedData(fixedMeta, getEncryptableInputStream(dir, "FixedData"));
-      InputStream stream = m_inputStreamFactory.getInstance(dir, "FixedData");
-      int blockSize = stream.available() % 115 == 0 ? 115 : 110;
-      FixedData fixedData = new FixedData(blockSize, stream, true);
-      VarMeta varMeta = new VarMeta9(new DocumentInputStream(((DocumentEntry) dir.getEntry("VarMeta"))));
-      Var2Data varData = new Var2Data(varMeta, new DocumentInputStream(((DocumentEntry) dir.getEntry("Var2Data"))));
+      if (m_viewDir.hasEntry("CFilter"))
+      {
+         DirectoryEntry dir = (DirectoryEntry) m_viewDir.getEntry("CFilter");
+         //FixedMeta fixedMeta = new FixedMeta(new DocumentInputStream(((DocumentEntry) dir.getEntry("FixedMeta"))), 9);
+         //FixedData fixedData = new FixedData(fixedMeta, getEncryptableInputStream(dir, "FixedData"));
+         InputStream stream = m_inputStreamFactory.getInstance(dir, "FixedData");
+         int blockSize = stream.available() % 115 == 0 ? 115 : 110;
+         FixedData fixedData = new FixedData(blockSize, stream, true);
+         VarMeta varMeta = new VarMeta9(new DocumentInputStream(((DocumentEntry) dir.getEntry("VarMeta"))));
+         Var2Data varData = new Var2Data(varMeta, new DocumentInputStream(((DocumentEntry) dir.getEntry("Var2Data"))));
 
-      //System.out.println(fixedMeta);
-      //System.out.println(fixedData);
-      //System.out.println(varMeta);
-      //System.out.println(varData);
+         //System.out.println(fixedMeta);
+         //System.out.println(fixedData);
+         //System.out.println(varMeta);
+         //System.out.println(varData);
 
-      FilterReader reader = new FilterReader9();
-      reader.process(m_file.getProjectProperties(), m_file.getFilters(), fixedData, varData);
+         FilterReader reader = new FilterReader9();
+         reader.process(m_file.getProjectProperties(), m_file.getFilters(), fixedData, varData);
+      }
    }
 
    /**
@@ -2001,19 +2021,22 @@ final class MPP9Reader implements MPPVariantReader
     */
    private void processGroupData() throws IOException
    {
-      DirectoryEntry dir = (DirectoryEntry) m_viewDir.getEntry("CGrouping");
-      //FixedMeta fixedMeta = new FixedMeta(new DocumentInputStream(((DocumentEntry) dir.getEntry("FixedMeta"))), 9);
-      FixedData fixedData = new FixedData(110, m_inputStreamFactory.getInstance(dir, "FixedData"));
-      VarMeta varMeta = new VarMeta9(new DocumentInputStream(((DocumentEntry) dir.getEntry("VarMeta"))));
-      Var2Data varData = new Var2Data(varMeta, new DocumentInputStream(((DocumentEntry) dir.getEntry("Var2Data"))));
+      if (m_viewDir.hasEntry("CGrouping"))
+      {
+         DirectoryEntry dir = (DirectoryEntry) m_viewDir.getEntry("CGrouping");
+         //FixedMeta fixedMeta = new FixedMeta(new DocumentInputStream(((DocumentEntry) dir.getEntry("FixedMeta"))), 9);
+         FixedData fixedData = new FixedData(110, m_inputStreamFactory.getInstance(dir, "FixedData"));
+         VarMeta varMeta = new VarMeta9(new DocumentInputStream(((DocumentEntry) dir.getEntry("VarMeta"))));
+         Var2Data varData = new Var2Data(varMeta, new DocumentInputStream(((DocumentEntry) dir.getEntry("Var2Data"))));
 
-      //      System.out.println(fixedMeta);
-      //      System.out.println(fixedData);
-      //      System.out.println(varMeta);
-      //      System.out.println(varData);
+         //      System.out.println(fixedMeta);
+         //      System.out.println(fixedData);
+         //      System.out.println(varMeta);
+         //      System.out.println(varData);
 
-      GroupReader reader = new GroupReader9();
-      reader.process(m_file, fixedData, varData, m_fontBases);
+         GroupReader reader = new GroupReader9();
+         reader.process(m_file, fixedData, varData, m_fontBases);
+      }
    }
 
    /**
@@ -2023,19 +2046,22 @@ final class MPP9Reader implements MPPVariantReader
     */
    private void processSavedViewState() throws IOException
    {
-      DirectoryEntry dir = (DirectoryEntry) m_viewDir.getEntry("CEdl");
-      VarMeta varMeta = new VarMeta9(new DocumentInputStream(((DocumentEntry) dir.getEntry("VarMeta"))));
-      Var2Data varData = new Var2Data(varMeta, new DocumentInputStream(((DocumentEntry) dir.getEntry("Var2Data"))));
-      //System.out.println(varMeta);
-      //System.out.println(varData);
+      if (m_viewDir.hasEntry("CEdl"))
+      {
+         DirectoryEntry dir = (DirectoryEntry) m_viewDir.getEntry("CEdl");
+         VarMeta varMeta = new VarMeta9(new DocumentInputStream(((DocumentEntry) dir.getEntry("VarMeta"))));
+         Var2Data varData = new Var2Data(varMeta, new DocumentInputStream(((DocumentEntry) dir.getEntry("Var2Data"))));
+         //System.out.println(varMeta);
+         //System.out.println(varData);
 
-      InputStream is = m_inputStreamFactory.getInstance(dir, "FixedData");
-      byte[] fixedData = new byte[is.available()];
-      is.read(fixedData);
-      //System.out.println(ByteArrayHelper.hexdump(fixedData, false, 16, ""));
+         InputStream is = m_inputStreamFactory.getInstance(dir, "FixedData");
+         byte[] fixedData = new byte[is.available()];
+         is.read(fixedData);
+         //System.out.println(ByteArrayHelper.hexdump(fixedData, false, 16, ""));
 
-      ViewStateReader reader = new ViewStateReader9();
-      reader.process(m_file, varData, fixedData);
+         ViewStateReader reader = new ViewStateReader9();
+         reader.process(m_file, varData, fixedData);
+      }
    }
 
    /**
@@ -2043,46 +2069,108 @@ final class MPP9Reader implements MPPVariantReader
     */
    private void processDataLinks() throws IOException
    {
-      DirectoryEntry dir = (DirectoryEntry) m_viewDir.getEntry("CEdl");
-      FixedMeta fixedMeta = new FixedMeta(new DocumentInputStream(((DocumentEntry) dir.getEntry("FixedMeta"))), 10);
-      FixedData fixedData = new FixedData(fixedMeta, m_inputStreamFactory.getInstance(dir, "FixedData"));
-      VarMeta varMeta = new VarMeta9(new DocumentInputStream(((DocumentEntry) dir.getEntry("VarMeta"))));
-      Var2Data varData = new Var2Data(varMeta, new DocumentInputStream(((DocumentEntry) dir.getEntry("Var2Data"))));
+      if (m_viewDir.hasEntry("CEdl"))
+      {
+         DirectoryEntry dir = (DirectoryEntry) m_viewDir.getEntry("CEdl");
+         FixedMeta fixedMeta = new FixedMeta(new DocumentInputStream(((DocumentEntry) dir.getEntry("FixedMeta"))), 10);
+         FixedData fixedData = new FixedData(fixedMeta, m_inputStreamFactory.getInstance(dir, "FixedData"));
+         VarMeta varMeta = new VarMeta9(new DocumentInputStream(((DocumentEntry) dir.getEntry("VarMeta"))));
+         Var2Data varData = new Var2Data(varMeta, new DocumentInputStream(((DocumentEntry) dir.getEntry("Var2Data"))));
 
-      DataLinkFactory factory = new DataLinkFactory(m_file, fixedData, varData);
-      factory.process();
+         DataLinkFactory factory = new DataLinkFactory(m_file, fixedData, varData);
+         factory.process();
+      }
    }
 
    /**
     * This method is called to try to catch any invalid tasks that may have sneaked past all our other checks.
     * This is done by validating the tasks by task ID.
     */
-   private void postProcessTasks()
+   //   private void postProcessTasks()
+   //   {
+   //      List<Task> allTasks = m_file.getTasks();
+   //      if (allTasks.size() > 1)
+   //      {
+   //         Collections.sort(allTasks);
+   //
+   //         int taskID = -1;
+   //         int lastTaskID = -1;
+   //
+   //         for (int i = 0; i < allTasks.size(); i++)
+   //         {
+   //            Task task = allTasks.get(i);
+   //            taskID = NumberHelper.getInt(task.getID());
+   //            // In Project the tasks IDs are always contiguous so we can spot invalid tasks by making sure all
+   //            // IDs are represented.
+   //            if (!task.getNull() && lastTaskID != -1 && taskID > lastTaskID + 1)
+   //            {
+   //               // This task looks to be invalid.
+   //               task.setNull(true);
+   //            }
+   //            else
+   //            {
+   //               lastTaskID = taskID;
+   //            }
+   //         }
+   //      }
+   //   }
+
+   private void postProcessTasks() throws MPXJException
    {
-      List<Task> allTasks = m_file.getTasks();
-      if (allTasks.size() > 1)
+      //
+      // Renumber ID values using a large increment to allow
+      // space for later inserts.
+      //
+      TreeMap<Integer, Integer> taskMap = new TreeMap<>();
+      int nextIDIncrement = ((m_nullTaskOrder.size() / 1000) + 1) * 2000;
+      int nextID = (m_file.getTaskByUniqueID(Integer.valueOf(0)) == null ? nextIDIncrement : 0);
+      for (Map.Entry<Integer, Integer> entry : m_taskOrder.entrySet())
       {
-         Collections.sort(allTasks);
+         taskMap.put(Integer.valueOf(nextID), entry.getValue());
+         nextID += nextIDIncrement;
+      }
 
-         int taskID = -1;
-         int lastTaskID = -1;
+      //
+      // Insert any null tasks into the correct location
+      //
+      int insertionCount = 0;
+      Map<Integer, Integer> offsetMap = new HashMap<>();
+      for (Map.Entry<Integer, Integer> entry : m_nullTaskOrder.entrySet())
+      {
+         int idValue = entry.getKey().intValue();
+         int baseTargetIdValue = (idValue - insertionCount) * nextIDIncrement;
+         int targetIDValue = baseTargetIdValue;
+         Integer previousOffsetKey = Integer.valueOf(baseTargetIdValue);
+         Integer previousOffset = offsetMap.get(previousOffsetKey);
+         int offset = previousOffset == null ? 0 : previousOffset.intValue() + 1;
+         ++insertionCount;
 
-         for (int i = 0; i < allTasks.size(); i++)
+         while (taskMap.containsKey(Integer.valueOf(targetIDValue)))
          {
-            Task task = allTasks.get(i);
-            taskID = NumberHelper.getInt(task.getID());
-            // In Project the tasks IDs are always contiguous so we can spot invalid tasks by making sure all
-            // IDs are represented.
-            if (!task.getNull() && lastTaskID != -1 && taskID > lastTaskID + 1)
+            ++offset;
+            if (offset == nextIDIncrement)
             {
-               // This task looks to be invalid.
-               task.setNull(true);
+               throw new MPXJException("Unable to fix task order");
             }
-            else
-            {
-               lastTaskID = taskID;
-            }
+            targetIDValue = baseTargetIdValue - (nextIDIncrement - offset);
          }
+
+         offsetMap.put(previousOffsetKey, Integer.valueOf(offset));
+         taskMap.put(Integer.valueOf(targetIDValue), entry.getValue());
+      }
+
+      //
+      // Finally, we can renumber the tasks
+      //
+      nextID = (m_file.getTaskByUniqueID(Integer.valueOf(0)) == null ? 1 : 0);
+      for (Map.Entry<Integer, Integer> entry : taskMap.entrySet())
+      {
+         Task task = m_file.getTaskByUniqueID(entry.getValue());
+         if (task != null)
+         {
+            task.setID(Integer.valueOf(nextID));
+         }
+         nextID++;
       }
    }
 
@@ -2126,6 +2214,8 @@ final class MPP9Reader implements MPPVariantReader
    private Map<Integer, SubProject> m_taskSubProjects;
    private DirectoryEntry m_projectDir;
    private DirectoryEntry m_viewDir;
+   private Map<Integer, Integer> m_taskOrder;
+   private Map<Integer, Integer> m_nullTaskOrder;
    private DocumentInputStreamFactory m_inputStreamFactory;
 
    // Signals the end of the list of subproject task unique ids

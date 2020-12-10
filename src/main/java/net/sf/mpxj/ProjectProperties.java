@@ -24,8 +24,8 @@
 
 package net.sf.mpxj;
 
+import java.util.ArrayList;
 import java.util.Date;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
@@ -141,6 +141,7 @@ public final class ProjectProperties extends ProjectEntity implements FieldConta
       setBaselineForEarnedValue(DEFAULT_BASELINE_FOR_EARNED_VALUE);
       setFiscalYearStartMonth(DEFAULT_FISCAL_YEAR_START_MONTH);
       setNewTaskStartIsProjectStart(true);
+      setNewTasksAreManual(true);
       setWeekStartDay(DEFAULT_WEEK_START_DAY);
    }
 
@@ -2034,6 +2035,28 @@ public final class ProjectProperties extends ProjectEntity implements FieldConta
    }
 
    /**
+    * Retrieve the flag indicating if new tasks task mode should default to
+    * manual (true) or automatic (false).
+    *
+    * @return new task type is manual or auto
+    */
+   public boolean getNewTasksAreManual()
+   {
+      return BooleanHelper.getBoolean((Boolean) getCachedValue(ProjectField.NEW_TASKS_ARE_MANUAL));
+   }
+
+   /**
+    * Set the flag indicating if new tasks task mode should default to
+    * manual (true) or automatic (false).
+    *
+    * @param newTasksAreManual new task type is manual or auto
+    */
+   public void setNewTasksAreManual(boolean newTasksAreManual)
+   {
+      set(ProjectField.NEW_TASKS_ARE_MANUAL, newTasksAreManual);
+   }
+
+   /**
     * Retrieve the week start day.
     *
     * @return week start day
@@ -2057,20 +2080,22 @@ public final class ProjectProperties extends ProjectEntity implements FieldConta
     * Sets the calculate multiple critical paths flag.
     *
     * @param flag boolean flag
+    * @deprecated use setMultipleCriticalPaths
     */
-   public void setCalculateMultipleCriticalPaths(boolean flag)
+   @Deprecated public void setCalculateMultipleCriticalPaths(boolean flag)
    {
-      set(ProjectField.CALCULATE_MULTIPLE_CRITICAL_PATHS, flag);
+      set(ProjectField.MULTIPLE_CRITICAL_PATHS, flag);
    }
 
    /**
     * Retrieves the calculate multiple critical paths flag.
     *
     * @return boolean flag
+    * @deprecated use getMultipleCriticalPaths
     */
-   public boolean getCalculateMultipleCriticalPaths()
+   @Deprecated public boolean getCalculateMultipleCriticalPaths()
    {
-      return BooleanHelper.getBoolean((Boolean) getCachedValue(ProjectField.CALCULATE_MULTIPLE_CRITICAL_PATHS));
+      return BooleanHelper.getBoolean((Boolean) getCachedValue(ProjectField.MULTIPLE_CRITICAL_PATHS));
    }
 
    /**
@@ -2632,6 +2657,28 @@ public final class ProjectProperties extends ProjectEntity implements FieldConta
    }
 
    /**
+    * Retrieve an enterprise custom field value.
+    *
+    * @param index field index
+    * @return field value
+    */
+   public byte[] getEnterpriseCustomField(int index)
+   {
+      return ((byte[]) getCachedValue(selectField(ProjectFieldLists.ENTERPRISE_CUSTOM_FIELD, index)));
+   }
+
+   /**
+    * Set an enterprise custom field value.
+    *
+    * @param index field index
+    * @param value field value
+    */
+   public void setEnterpriseCustomField(int index, byte[] value)
+   {
+      set(selectField(ProjectFieldLists.ENTERPRISE_CUSTOM_FIELD, index), value);
+   }
+
+   /**
     * Sets the export flag to populate this ProjectFile instance.
     *
     * @param value boolean flag
@@ -2648,7 +2695,7 @@ public final class ProjectProperties extends ProjectEntity implements FieldConta
    {
       if (m_listeners == null)
       {
-         m_listeners = new LinkedList<>();
+         m_listeners = new ArrayList<>();
       }
       m_listeners.add(listener);
    }

@@ -53,7 +53,7 @@ final class VarMeta12 extends AbstractVarMeta
       int magic = readInt(is);
       if (magic != 0 && magic != MAGIC)
       {
-         throw new IOException("Bad magic number");
+         throw new IOException("Bad magic number: " + magic);
       }
 
       /*m_unknown1 =*/readInt(is);
@@ -76,13 +76,7 @@ final class VarMeta12 extends AbstractVarMeta
          Integer type = Integer.valueOf(readShort(is));
          readShort(is); // unknown 2 bytes
 
-         Map<Integer, Integer> map = m_table.get(uniqueID);
-         if (map == null)
-         {
-            map = new TreeMap<>();
-            m_table.put(uniqueID, map);
-         }
-
+         Map<Integer, Integer> map = m_table.computeIfAbsent(uniqueID, k -> new TreeMap<>());
          map.put(type, offset);
          offsets[loop] = offset.intValue();
       }

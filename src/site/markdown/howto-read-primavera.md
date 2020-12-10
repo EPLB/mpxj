@@ -49,39 +49,22 @@ reader.setProjectID(selectedProjectID);
 ProjectFile projectFile = reader.read();
 ```
 
-You can also connect to a standalone SQLite P6 database, although a 
-property has to be set on the database connection in order for
-date and time values to be read correctly.
+You can also connect to a standalone SQLite P6 database. This
+is easier to achieve as a specific reader class has bee created
+which manages the database connection for you:
 
-```
-import java.sql.Connection;
-import java.sql.DriverManager;
+```java
 import net.sf.mpxj.ProjectFile;
-import net.sf.mpxj.primavera.PrimaveraDatabaseReader;
+import net.sf.mpxj.primavera.PrimaveraDatabaseFileReader;
 
 ...
 
-//
-// Load the JDBC driver
-//
-String driverClass="org.sqlite.JDBC";
-Class.forName(driverClass);
-
-//
-// Open a database connection. You will need to change
-// these details to match the location of your database file.
-//
-String connectionString="jdbc:sqlite:C:/temp/PPMDBSQLite.db";
-Properties props = new Properties();
-props.setProperty("date_string_format", "yyyy-MM-dd HH:mm:ss");
-Connection c = DriverManager.getConnection(connectionString, props);
-PrimaveraDatabaseReader reader = new PrimaveraDatabaseReader();
-reader.setConnection(c);
+PrimaveraDatabaseFileReader reader = new PrimaveraDatabaseFileReader();
 
 //
 // Retrieve a list of the projects available in the database
 //
-Map<Integer,String> projects = reader.listProjects();
+Map<Integer,String> projects = reader.listProjects("PPMDBSQLite.db");
 
 //
 // At this point you'll select the project
@@ -93,7 +76,7 @@ Map<Integer,String> projects = reader.listProjects();
 //
 int selectedProjectID = 1;
 reader.setProjectID(selectedProjectID);
-ProjectFile projectFile = reader.read();
+ProjectFile projectFile = reader.read("PPMDBSQLite.db");
 ```
 
 ### .Net
@@ -150,6 +133,25 @@ import net.sf.mpxj.primavera.PrimaveraDatabaseReader;
 
 PrimaveraDatabaseReader reader = new PrimaveraDatabaseReader();
 reader.setMatchPrimaveraWBS(false);
+```
+
+#### WBS is Full Path
+Currently the WBS attribute of summary tasks (WBS entities in P6) will be a dot
+separated hierarchy of all of the parent WBS attributes.
+In this example, `root.wbs1.wbs2` is the WBS attribute for `wbs2` which has
+the parents `root` and `wbs1`. To disabled this behaviour, and simply record
+the code for the current WBS entry (in the example above `wbs2`) call the
+`setWbsIsFullPath` method, passing in `false`, as illustrated below.  
+
+
+```java
+import net.sf.mpxj.ProjectFile;
+import net.sf.mpxj.primavera.PrimaveraDatabaseReader;
+
+...
+
+PrimaveraDatabaseReader reader = new PrimaveraDatabaseReader();
+reader.setWbsIsFullPath(false);
 ```
 
 #### User Defined Fields

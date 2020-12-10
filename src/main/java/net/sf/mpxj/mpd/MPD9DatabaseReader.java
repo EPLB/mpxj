@@ -29,9 +29,9 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -44,6 +44,7 @@ import net.sf.mpxj.ProjectConfig;
 import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.SubProject;
 import net.sf.mpxj.Task;
+import net.sf.mpxj.common.AutoCloseableHelper;
 import net.sf.mpxj.common.NumberHelper;
 import net.sf.mpxj.listener.ProjectListener;
 
@@ -61,7 +62,7 @@ public final class MPD9DatabaseReader extends MPD9AbstractReader
    {
       if (m_projectListeners == null)
       {
-         m_projectListeners = new LinkedList<>();
+         m_projectListeners = new ArrayList<>();
       }
       m_projectListeners.add(listener);
    }
@@ -148,18 +149,9 @@ public final class MPD9DatabaseReader extends MPD9AbstractReader
       {
          reset();
 
-         if (m_allocatedConnection && m_connection != null)
+         if (m_allocatedConnection)
          {
-            try
-            {
-               m_connection.close();
-            }
-
-            catch (SQLException ex)
-            {
-               // silently ignore errors on close
-            }
-
+            AutoCloseableHelper.closeQuietly(m_connection);
             m_connection = null;
          }
       }
@@ -479,7 +471,7 @@ public final class MPD9DatabaseReader extends MPD9AbstractReader
 
       try
       {
-         List<ResultSetRow> result = new LinkedList<>();
+         List<ResultSetRow> result = new ArrayList<>();
 
          m_ps = m_connection.prepareStatement(sql);
          m_rs = m_ps.executeQuery();
@@ -513,7 +505,7 @@ public final class MPD9DatabaseReader extends MPD9AbstractReader
 
       try
       {
-         List<ResultSetRow> result = new LinkedList<>();
+         List<ResultSetRow> result = new ArrayList<>();
 
          m_ps = m_connection.prepareStatement(sql);
          m_ps.setInt(1, NumberHelper.getInt(var));
@@ -549,7 +541,7 @@ public final class MPD9DatabaseReader extends MPD9AbstractReader
 
       try
       {
-         List<ResultSetRow> result = new LinkedList<>();
+         List<ResultSetRow> result = new ArrayList<>();
 
          m_ps = m_connection.prepareStatement(sql);
          m_ps.setInt(1, NumberHelper.getInt(var1));
@@ -591,35 +583,11 @@ public final class MPD9DatabaseReader extends MPD9AbstractReader
     */
    private void releaseConnection()
    {
-      if (m_rs != null)
-      {
-         try
-         {
-            m_rs.close();
-         }
+      AutoCloseableHelper.closeQuietly(m_rs);
+      m_rs = null;
 
-         catch (SQLException ex)
-         {
-            // silently ignore errors on close
-         }
-
-         m_rs = null;
-      }
-
-      if (m_ps != null)
-      {
-         try
-         {
-            m_ps.close();
-         }
-
-         catch (SQLException ex)
-         {
-            // silently ignore errors on close
-         }
-
-         m_ps = null;
-      }
+      AutoCloseableHelper.closeQuietly(m_ps);
+      m_ps = null;
    }
 
    /**
@@ -692,19 +660,8 @@ public final class MPD9DatabaseReader extends MPD9AbstractReader
 
       finally
       {
-         if (rs != null)
-         {
-            try
-            {
-               rs.close();
-            }
-
-            catch (SQLException ex)
-            {
-               // Ignore errors when closing result set
-            }
-            rs = null;
-         }
+         AutoCloseableHelper.closeQuietly(rs);
+         rs = null;
       }
    }
 

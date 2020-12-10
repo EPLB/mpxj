@@ -49,7 +49,8 @@ project = reader.read("my-sample.xer");
 
 #### Multiple Projects
 An XER file can contain multiple projects. By default MPXJ reads the first project
-it finds in the file. You can however use MPXJ to list the projects contained in
+it finds in the file which has been marked as the "exported" project, otherwise it will simply read the first project it finds.
+You can however use MPXJ to list the projects contained in
 an XER file, as shown below:
 
 ```java
@@ -99,16 +100,11 @@ List<ProjectFile> files = reader.readAll(is);
 The call to the `readAll` method returns a list of `ProjectFile` instances corresponding
 to the projects in the XER file.
 
-There is a variant of the `readAll` method taking a Boolean argument which determines
-if cross-project predecessors and successors are linked together. For example, if we
-have Project A with Task 1, and Project B with Task 2 and Task 1 is a predecessor of Task 2,
-when the `linkCrossProjectRelations` argument is set to true, Task 1 will appear as a predecessor
-of Task 2 despite the two tasks appearing in different projects. If `linkCrossProjectRelations` is set
-to false (or any of the other methods are used to read data from an XER file),
-Task 1 and Task 2 will no be linked.
-
-The sample below shows how `readAll` can be called with the `linkCrossProjectRelations`
-argument set to true:
+#### Link Cross-Project Relations
+An XER file can contain multiple projects with relations between activities which span
+those projects. By default these cross-project relations are ignored. However, if you set the
+`linkCrossProjectRelations` reader attribute to `true`, MPXJ will attempt to
+link these relations across projects: 
 
 ```java
 import net.sf.mpxj.ProjectFile;
@@ -117,8 +113,9 @@ import net.sf.mpxj.primavera.PrimaveraXERFileReader;
 ...
 
 PrimaveraXERFileReader reader = new PrimaveraXERFileReader();
+reader.setLinkCrossProjectRelations(true);
 InputStream is = new FileInputStream("my-sample.xer");
-List<ProjectFile> files = reader.readAll(is, true);
+List<ProjectFile> files = reader.readAll(is);
 ```
 
 #### Activity WBS
@@ -137,6 +134,25 @@ import net.sf.mpxj.primavera.PrimaveraXERFileReader;
 PrimaveraXERFileReader reader = new PrimaveraXERFileReader();
 reader.setMatchPrimaveraWBS(false);
 ProjectFile file = reader.read("my-sample.xer");
+```
+
+#### WBS is Full Path
+Currently the WBS attribute of summary tasks (WBS entities in P6) will be a dot
+separated hierarchy of all of the parent WBS attributes.
+In this example, `root.wbs1.wbs2` is the WBS attribute for `wbs2` which has
+the parents `root` and `wbs1`. To disabled this behaviour, and simply record
+the code for the current WBS entry (in the example above `wbs2`) call the
+`setWbsIsFullPath` method, passing in `false`, as illustrated below.  
+
+
+```java
+import net.sf.mpxj.ProjectFile;
+import net.sf.mpxj.primavera.PrimaveraXERFileReader;
+
+...
+
+PrimaveraXERFileReader reader = new PrimaveraXERFileReader();
+reader.setWbsIsFullPath(false);
 ```
 
 #### User Defined Fields

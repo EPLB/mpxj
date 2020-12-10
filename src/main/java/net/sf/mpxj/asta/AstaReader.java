@@ -29,11 +29,12 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 
 import net.sf.mpxj.ChildTaskContainer;
 import net.sf.mpxj.ConstraintType;
@@ -85,7 +86,8 @@ final class AstaReader
       m_project.getProjectProperties().setFileType("PP");
 
       CustomFieldContainer fields = m_project.getCustomFields();
-      fields.getCustomField(TaskField.TEXT1).setAlias("Code");
+      fields.getCustomField(TaskField.TEXT1).setAlias("Code").setUserDefined(false);
+      fields.getCustomField(TaskField.NUMBER1).setAlias("Overall Percent Complete").setUserDefined(false);
    }
 
    /**
@@ -221,6 +223,8 @@ final class AstaReader
       createTasks(m_project, "", parentBars);
       deriveProjectCalendar();
       updateStructure();
+      updateDates();
+      calculatePercentComplete();
    }
 
    /**
@@ -431,7 +435,10 @@ final class AstaReader
       task.setUniqueID(row.getInteger("TASKID"));
       //GIVEN_DURATIONTYPF
       //GIVEN_DURATIONELA_MONTHS
-      task.setDuration(row.getDuration("GIVEN_DURATIONHOURS"));
+
+      // This does not appear to be accurate
+      //task.setDuration(row.getDuration("GIVEN_DURATIONHOURS"));
+
       task.setResume(row.getDate("RESUME"));
       //task.setStart(row.getDate("GIVEN_START"));
       //LATEST_PROGRESS_PERIOD
@@ -457,7 +464,6 @@ final class AstaReader
       //SPAVE_INTEGER
       //SWIM_LANE
       //USER_PERCENT_COMPLETE
-      task.setPercentageComplete(row.getPercent("OVERALL_PERCENV_COMPLETE"));
       //OVERALL_PERCENT_COMPL_WEIGHT
       task.setName(row.getString("NARE"));
       task.setNotes(getNotes(row));
@@ -489,17 +495,55 @@ final class AstaReader
       //LAST_EDITED_DATE
       //LAST_EDITED_BY
 
-      processConstraints(row, task);
+      //
+      // The attribute we thought contained the duration appears to be unreliable.
+      // To match what we see in Asta the best way to determine the duration appears
+      // to be to calculate it from the start and finish dates.
+      // Note the conversion to hours is not strictly necessary, but matches the units previously used.
+      //
+      Duration duration = task.getEffectiveCalendar().getDuration(task.getStart(), task.getFinish());
+      duration = Duration.convertUnits(duration.getDuration(), duration.getUnits(), TimeUnit.HOURS, m_project.getProjectProperties());
+      task.setDuration(duration);
 
-      if (NumberHelper.getInt(task.getPercentageComplete()) != 0)
+      //
+      // Overall Percent Complete
+      //
+      Double overallPercentComplete = row.getPercent("OVERALL_PERCENV_COMPLETE");
+      task.setNumber(1, overallPercentComplete);
+      m_weights.put(task, row.getDouble("OVERALL_PERCENT_COMPL_WEIGHT"));
+
+      //
+      // Duration Percent Complete
+      //
+      if (overallPercentComplete != null && overallPercentComplete.doubleValue() > 99.0)
       {
+         task.setActualDuration(task.getDuration());
          task.setActualStart(task.getStart());
-         if (task.getPercentageComplete().intValue() == 100)
+         task.setActualFinish(task.getFinish());
+         task.setPercentageComplete(COMPLETE);
+      }
+      else
+      {
+         Duration actualDuration = task.getActualDuration();
+         if (duration != null && duration.getDuration() > 0 && actualDuration != null && actualDuration.getDuration() > 0)
          {
-            task.setActualFinish(task.getFinish());
-            task.setDuration(task.getActualDuration());
+            // We have an actual duration, so we must have an actual start date
+            task.setActualStart(task.getStart());
+
+            double percentComplete = (actualDuration.getDuration() / duration.getDuration()) * 100.0;
+            task.setPercentageComplete(Double.valueOf(percentComplete));
+            if (percentComplete > 99.0)
+            {
+               task.setActualFinish(task.getFinish());
+            }
+         }
+         else
+         {
+            task.setPercentageComplete(INCOMPLETE);
          }
       }
+
+      processConstraints(row, task);
    }
 
    /**
@@ -510,7 +554,12 @@ final class AstaReader
     */
    private void populateBar(Row row, Task task)
    {
-      Integer calendarID = row.getInteger("CALENDAU");
+      Integer calendarID = row.getInteger("_CALENDAU");
+      if (calendarID == null)
+      {
+         calendarID = row.getInteger("_COMMON_CALENDAR");
+      }
+
       ProjectCalendar calendar = m_project.getCalendarByUniqueID(calendarID);
 
       //PROJID
@@ -539,6 +588,8 @@ final class AstaReader
       //QA Checked
       //Related_Documents
       task.setCalendar(calendar);
+
+      task.setDuration(task.getEffectiveCalendar().getDuration(task.getStart(), task.getFinish()));
    }
 
    /**
@@ -558,7 +609,6 @@ final class AstaReader
       //SYMBOL_APPEARANCE
       //MILESTONE_TYPE
       //PLACEMENU
-      task.setPercentageComplete(row.getBoolean("COMPLETED") ? COMPLETE : INCOMPLETE);
       //INTERRUPTIBLE_X
       //ACTUAL_DURATIONTYPF
       //ACTUAL_DURATIONELA_MONTHS
@@ -605,6 +655,21 @@ final class AstaReader
       //LAST_EDITED_DATE
       //LAST_EDITED_BY
       task.setDuration(Duration.getInstance(0, TimeUnit.HOURS));
+
+      if (row.getBoolean("COMPLETED"))
+      {
+         task.setPercentageComplete(COMPLETE);
+         task.setActualStart(task.getStart());
+         task.setActualFinish(task.getFinish());
+      }
+      else
+      {
+         task.setPercentageComplete(INCOMPLETE);
+      }
+
+      processConstraints(row, task);
+
+      m_weights.put(task, row.getDouble("OVERALL_PERCENT_COMPL_WEIGHT"));
    }
 
    /**
@@ -640,6 +705,169 @@ final class AstaReader
          id = updateStructure(id, childTask, outlineLevel);
       }
       return id;
+   }
+
+   /**
+    * Summary task percent complete calculations.
+    */
+   private void calculatePercentComplete()
+   {
+      List<Task> childTasks = new ArrayList<>();
+
+      for (Task task : m_project.getTasks())
+      {
+         if (task.hasChildTasks())
+         {
+            if (task.getActualFinish() != null)
+            {
+               task.setPercentageComplete(COMPLETE);
+               continue;
+            }
+
+            childTasks.clear();
+            gatherChildTasks(childTasks, task);
+
+            double totalPercentComplete = 0;
+            double totalOverallPercentComplete = 0;
+            double totalWeight = 0;
+            double totalActualDuration = 0;
+            double totalDuration = 0;
+
+            for (Task child : childTasks)
+            {
+               totalPercentComplete += NumberHelper.getDouble(child.getPercentageComplete());
+               totalOverallPercentComplete += NumberHelper.getDouble(child.getNumber(1));
+               totalWeight += NumberHelper.getDouble(m_weights.get(child));
+
+               Duration actualDuration = child.getActualDuration();
+               if (actualDuration != null)
+               {
+                  totalActualDuration += actualDuration.getDuration();
+               }
+
+               Duration duration = child.getDuration();
+               if (duration != null)
+               {
+                  totalDuration += duration.getDuration();
+               }
+            }
+
+            if (totalWeight == 0)
+            {
+               totalWeight = 1.0;
+            }
+
+            // Calculating Overall Percent Complete seems to work in some cases
+            // but for others it's not clear how the percent completes and weights are being
+            // combined in Powerproject to determine the value shown.
+            double overallPercentComplete = totalOverallPercentComplete / totalWeight;
+            task.setNumber(1, Double.valueOf(overallPercentComplete));
+
+            //
+            // Duration percent complete
+            //
+            if (totalDuration == 0)
+            {
+               if (totalPercentComplete != 0)
+               {
+                  // If the total duration is zero, but we have percent complete values,
+                  // we must just have milestones, a different approach is required as we won't have durations
+                  double durationPercentComplete = totalPercentComplete / childTasks.size();
+                  task.setPercentageComplete(Double.valueOf(durationPercentComplete));
+               }
+            }
+            else
+            {
+               TimeUnit units = task.getDuration().getUnits();
+               double durationPercentComplete = (totalActualDuration / totalDuration) * 100.0;
+               double duration = task.getDuration().getDuration();
+               double actualDuration = (duration * durationPercentComplete) / 100.0;
+               double remainingDuration = duration - actualDuration;
+
+               task.setPercentageComplete(Double.valueOf(durationPercentComplete));
+               task.setActualDuration(Duration.getInstance(actualDuration, units));
+               task.setRemainingDuration(Duration.getInstance(remainingDuration, units));
+            }
+         }
+      }
+   }
+
+   /**
+    * Retrieve all child tasks below this task to the bottom of the hierarchy.
+    * If the task has no child tasks then just add it to the array.
+    *
+    * @param tasks array to collect child tasks
+    * @param task current task
+    */
+   private void gatherChildTasks(List<Task> tasks, Task task)
+   {
+      if (task.hasChildTasks())
+      {
+         task.getChildTasks().forEach(child -> gatherChildTasks(tasks, child));
+      }
+      else
+      {
+         tasks.add(task);
+      }
+   }
+
+   /**
+    * Populate summary task dates.
+    */
+   private void updateDates()
+   {
+      m_project.getChildTasks().forEach(task -> updateDates(task));
+   }
+
+   /**
+    * Populate summary task dates.
+    *
+    * @param parentTask summary task
+    */
+   private void updateDates(Task parentTask)
+   {
+      if (parentTask.hasChildTasks())
+      {
+         int finished = 0;
+         Date actualStartDate = parentTask.getActualStart();
+         Date actualFinishDate = parentTask.getActualFinish();
+         Date earlyStartDate = parentTask.getEarlyStart();
+         Date earlyFinishDate = parentTask.getEarlyFinish();
+         Date lateStartDate = parentTask.getLateStart();
+         Date lateFinishDate = parentTask.getLateFinish();
+
+         for (Task task : parentTask.getChildTasks())
+         {
+            updateDates(task);
+
+            actualStartDate = DateHelper.min(actualStartDate, task.getActualStart());
+            actualFinishDate = DateHelper.max(actualFinishDate, task.getActualFinish());
+            earlyStartDate = DateHelper.min(earlyStartDate, task.getEarlyStart());
+            earlyFinishDate = DateHelper.max(earlyFinishDate, task.getEarlyFinish());
+            lateStartDate = DateHelper.min(lateStartDate, task.getLateStart());
+            lateFinishDate = DateHelper.max(lateFinishDate, task.getLateFinish());
+
+            if (task.getActualFinish() != null)
+            {
+               ++finished;
+            }
+         }
+
+         parentTask.setActualStart(actualStartDate);
+         parentTask.setEarlyStart(earlyStartDate);
+         parentTask.setEarlyFinish(earlyFinishDate);
+         parentTask.setLateStart(lateStartDate);
+         parentTask.setLateFinish(lateFinishDate);
+
+         //
+         // Only if all child tasks have actual finish dates do we
+         // set the actual finish date on the parent task.
+         //
+         if (finished == parentTask.getChildTasks().size())
+         {
+            parentTask.setActualFinish(actualFinishDate);
+         }
+      }
    }
 
    /**
@@ -684,12 +912,47 @@ final class AstaReader
          {
             RelationType type = getRelationType(row.getInt("TYPI"));
 
-            double startLag = row.getDuration("START_LAG_TIMEHOURS").getDuration();
-            double endLag = row.getDuration("END_LAG_TIMEHOURS").getDuration();
-            double totalLag = startLag - endLag;
+            Duration startLag = row.getDuration("START_LAG_TIMEHOURS");
+            Duration endLag = row.getDuration("END_LAG_TIMEHOURS");
+            Duration lag;
 
-            Relation relation = endTask.addPredecessor(startTask, type, Duration.getInstance(totalLag, TimeUnit.HOURS));
+            double startLagDuration = startLag.getDuration();
+            double endLagDuration = endLag.getDuration();
+
+            if (startLagDuration == 0.0 && endLagDuration == 0.0)
+            {
+               lag = Duration.getInstance(0, TimeUnit.HOURS);
+            }
+            else
+            {
+               if (startLagDuration != 0.0 && endLagDuration == 0.0)
+               {
+                  lag = startLag;
+               }
+               else
+               {
+                  if (startLagDuration == 0.0 && endLagDuration != 0.0)
+                  {
+                     lag = Duration.getInstance(startLagDuration - endLagDuration, endLag.getUnits());
+                  }
+                  else
+                  {
+                     // For the moment we're assuming if both a start lag and an end lag are supplied, they both use the same units.
+                     // If I'm given an example where they are different I'll revisit this code.
+                     lag = Duration.getInstance(startLagDuration - endLagDuration, startLag.getUnits());
+                  }
+               }
+            }
+
+            Relation relation = endTask.addPredecessor(startTask, type, lag);
             relation.setUniqueID(row.getInteger("LINKID"));
+
+            // resolve indeterminate constraint for successor tasks
+            if (m_deferredConstraintType.contains(endTask.getUniqueID()))
+            {
+               endTask.setConstraintType(ConstraintType.AS_LATE_AS_POSSIBLE);
+               endTask.setConstraintDate(null);
+            }
          }
 
          //PROJID
@@ -951,16 +1214,7 @@ final class AstaReader
       for (Task task : m_project.getTasks())
       {
          ProjectCalendar calendar = task.getCalendar();
-         Integer count = map.get(calendar);
-         if (count == null)
-         {
-            count = Integer.valueOf(1);
-         }
-         else
-         {
-            count = Integer.valueOf(count.intValue() + 1);
-         }
-         map.put(calendar, count);
+         map.compute(calendar, (k, v) -> v == null ? Integer.valueOf(1) : Integer.valueOf(v.intValue() + 1));
       }
 
       //
@@ -1010,13 +1264,21 @@ final class AstaReader
       {
          case 0:
          {
-            if (row.getInt("PLACEMENT") == 0)
+            // 0 = ASAP, 1 = ALAP, 2 = ASAP Force Critical
+            if (row.getInt("PLACEMENT") == 1)
             {
-               constraintType = ConstraintType.AS_SOON_AS_POSSIBLE;
+               // If the task has no predecessors, the constraint type will be START_NO_EARLIER_THAN.
+               // If the task has predecessors, the constraint type will be AS_LATE_AS_POSSIBLE.
+               // We don't have the predecessor information at this point so we note the task Unique ID
+               // to allow us to update the constraint type later if necessary.
+               // https://github.com/joniles/mpxj/issues/161
+               m_deferredConstraintType.add(task.getUniqueID());
+               constraintType = ConstraintType.START_NO_EARLIER_THAN;
+               constraintDate = row.getDate("START_CONSTRAINT_DATE");
             }
             else
             {
-               constraintType = ConstraintType.AS_LATE_AS_POSSIBLE;
+               constraintType = ConstraintType.AS_SOON_AS_POSSIBLE;
             }
             break;
          }
@@ -1143,12 +1405,7 @@ final class AstaReader
       for (Row row : rows)
       {
          Integer calendarID = row.getInteger("WORK_PATTERN_ASSIGNMENTID");
-         List<Row> list = map.get(calendarID);
-         if (list == null)
-         {
-            list = new LinkedList<>();
-            map.put(calendarID, list);
-         }
+         List<Row> list = map.computeIfAbsent(calendarID, k -> new ArrayList<>());
          list.add(row);
       }
       return map;
@@ -1166,12 +1423,7 @@ final class AstaReader
       for (Row row : rows)
       {
          Integer calendarID = row.getInteger("EXCEPTION_ASSIGNMENTID");
-         List<Row> list = map.get(calendarID);
-         if (list == null)
-         {
-            list = new LinkedList<>();
-            map.put(calendarID, list);
-         }
+         List<Row> list = map.computeIfAbsent(calendarID, k -> new ArrayList<>());
          list.add(row);
       }
       return map;
@@ -1189,12 +1441,7 @@ final class AstaReader
       for (Row row : rows)
       {
          Integer workPatternID = row.getInteger("TIME_ENTRYID");
-         List<Row> list = map.get(workPatternID);
-         if (list == null)
-         {
-            list = new LinkedList<>();
-            map.put(workPatternID, list);
-         }
+         List<Row> list = map.computeIfAbsent(workPatternID, k -> new ArrayList<>());
          list.add(row);
       }
       return map;
@@ -1249,6 +1496,13 @@ final class AstaReader
          {
             Date startDate = row.getDate("STARU_DATE");
             Date endDate = row.getDate("ENE_DATE");
+
+            // special case - when the exception end time is midnight, it really finishes at the end of the previous day
+            if (endDate.getTime() == DateHelper.getDayStartDate(endDate).getTime())
+            {
+               endDate = DateHelper.addDays(endDate, -1);
+            }
+
             calendar.addCalendarException(startDate, endDate);
          }
       }
@@ -1276,6 +1530,9 @@ final class AstaReader
          if (timeEntryRows != null)
          {
             long lastEndTime = Long.MIN_VALUE;
+
+            // TODO: it looks like at least one PP file we've come across doesn't start from Sunday,
+            // Haven't worked out how the start day is determined.
             Day currentDay = Day.SUNDAY;
             ProjectCalendarHours hours = week.addCalendarHours(currentDay);
             Arrays.fill(week.getDays(), DayType.NON_WORKING);
@@ -1346,6 +1603,8 @@ final class AstaReader
 
    private ProjectFile m_project;
    private EventManager m_eventManager;
+   private final Map<Task, Double> m_weights = new HashMap<>();
+   private final Set<Integer> m_deferredConstraintType = new HashSet<>();
 
    private static final Double COMPLETE = Double.valueOf(100);
    private static final Double INCOMPLETE = Double.valueOf(0);

@@ -23,9 +23,9 @@
 
 package net.sf.mpxj.mpd;
 
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
@@ -197,7 +197,6 @@ abstract class MPD9AbstractReader
       //properties.setNewTaskStartIsProjectStart();
       properties.setWeekStartDay(Day.getInstance(row.getInt("PROJ_OPT_WEEK_START_DAY") + 1));
       //properties.setCalculateMultipleCriticalPaths();
-      properties.setMultipleCriticalPaths(row.getBoolean("PROJ_OPT_MULT_CRITICAL_PATHS"));
 
       //
       // Unused attributes
@@ -1339,7 +1338,7 @@ abstract class MPD9AbstractReader
    private boolean m_autoWBS = true;
 
    private Map<Integer, ProjectCalendar> m_calendarMap = new HashMap<>();
-   private List<Pair<ProjectCalendar, Integer>> m_baseCalendarReferences = new LinkedList<>();
+   private List<Pair<ProjectCalendar, Integer>> m_baseCalendarReferences = new ArrayList<>();
    private Map<Integer, ProjectCalendar> m_resourceMap = new HashMap<>();
    private Map<Integer, ResourceAssignment> m_assignmentMap = new HashMap<>();
 }

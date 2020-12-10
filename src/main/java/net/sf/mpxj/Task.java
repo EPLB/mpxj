@@ -24,9 +24,9 @@
 
 package net.sf.mpxj;
 
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.Iterator;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.UUID;
 
@@ -55,10 +55,8 @@ public final class Task extends ProjectEntity implements Comparable<Task>, Proje
       setConstraintType(ConstraintType.AS_SOON_AS_POSSIBLE);
       setTaskMode(TaskMode.AUTO_SCHEDULED);
       setActive(true);
-      set(TaskField.PREDECESSORS, new LinkedList<Relation>());
-      set(TaskField.SUCCESSORS, new LinkedList<Relation>());
-      //      m_array[TaskField.PREDECESSORS.getValue()] = new LinkedList<Relation>();
-      //      m_array[TaskField.SUCCESSORS.getValue()] = new LinkedList<Relation>();
+      set(TaskField.PREDECESSORS, new ArrayList<Relation>());
+      set(TaskField.SUCCESSORS, new ArrayList<Relation>());
 
       m_parent = parent;
       ProjectConfig config = file.getProjectConfig();
@@ -318,8 +316,14 @@ public final class Task extends ProjectEntity implements Comparable<Task>, Proje
     */
    public void clearChildTasks()
    {
-      m_children.clear();
-      setSummary(false);
+      // Only take action if the child list is populated. This ensures that
+      // the summary flag value is preserved. This is important when identifying
+      // WBS entries which have no child activities.
+      if (!m_children.isEmpty())
+      {
+         m_children.clear();
+         setSummary(false);
+      }
    }
 
    /**
@@ -2875,7 +2879,7 @@ public final class Task extends ProjectEntity implements Comparable<Task>, Proje
    /**
     * This method retrieves a flag indicating whether the duration of the
     * task has only been estimated.
-   
+    *
     * @param estimated Boolean flag
     */
    public void setEstimated(boolean estimated)
@@ -3975,9 +3979,9 @@ public final class Task extends ProjectEntity implements Comparable<Task>, Proje
     * @param index field index
     * @return field value
     */
-   public String getEnterpriseCustomField(int index)
+   public byte[] getEnterpriseCustomField(int index)
    {
-      return ((String) getCachedValue(selectField(TaskFieldLists.ENTERPRISE_CUSTOM_FIELD, index)));
+      return ((byte[]) getCachedValue(selectField(TaskFieldLists.ENTERPRISE_CUSTOM_FIELD, index)));
    }
 
    /**
@@ -3986,7 +3990,7 @@ public final class Task extends ProjectEntity implements Comparable<Task>, Proje
     * @param index field index
     * @param value field value
     */
-   public void setEnterpriseCustomField(int index, String value)
+   public void setEnterpriseCustomField(int index, byte[] value)
    {
       set(selectField(TaskFieldLists.ENTERPRISE_CUSTOM_FIELD, index), value);
    }
@@ -4580,6 +4584,26 @@ public final class Task extends ProjectEntity implements Comparable<Task>, Proje
    }
 
    /**
+    * Retrieve expense items for this task.
+    *
+    * @return list of expense items
+    */
+   @SuppressWarnings("unchecked") public List<ExpenseItem> getExpenseItems()
+   {
+      return (List<ExpenseItem>) getCachedValue(TaskField.EXPENSE_ITEMS);
+   }
+
+   /**
+    * Set the expense items for this task.
+    *
+    * @param items list of expense items
+    */
+   public void setExpenseItems(List<ExpenseItem> items)
+   {
+      set(TaskField.EXPENSE_ITEMS, items);
+   }
+
+   /**
     * Retrieve the effective calendar for this task. If the task does not have
     * a specific calendar associated with it, fall back to using the default calendar
     * for the project.
@@ -4960,7 +4984,7 @@ public final class Task extends ProjectEntity implements Comparable<Task>, Proje
    {
       if (m_listeners == null)
       {
-         m_listeners = new LinkedList<>();
+         m_listeners = new ArrayList<>();
       }
       m_listeners.add(listener);
    }
@@ -5082,17 +5106,17 @@ public final class Task extends ProjectEntity implements Comparable<Task>, Proje
     * This list holds references to all tasks that are children of the
     * current task as specified by the outline level.
     */
-   private List<Task> m_children = new LinkedList<>();
+   private List<Task> m_children = new ArrayList<>();
 
    /**
     * List of resource assignments for this task.
     */
-   private List<ResourceAssignment> m_assignments = new LinkedList<>();
+   private List<ResourceAssignment> m_assignments = new ArrayList<>();
 
    /**
     * List of activity codes for this task.
     */
-   private List<ActivityCodeValue> m_activityCodes = new LinkedList<>();
+   private List<ActivityCodeValue> m_activityCodes = new ArrayList<>();
 
    /**
     * Recurring task details associated with this task.

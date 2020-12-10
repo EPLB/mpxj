@@ -27,25 +27,19 @@ import java.io.InputStream;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
 import javax.xml.bind.JAXBContext;
 import javax.xml.bind.JAXBException;
-import javax.xml.bind.Unmarshaller;
 import javax.xml.parsers.ParserConfigurationException;
-import javax.xml.parsers.SAXParser;
-import javax.xml.parsers.SAXParserFactory;
-import javax.xml.transform.sax.SAXSource;
 
-import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
-import org.xml.sax.XMLReader;
 
 import net.sf.mpxj.ChildTaskContainer;
 import net.sf.mpxj.ConstraintType;
@@ -76,6 +70,7 @@ import net.sf.mpxj.common.NumberHelper;
 import net.sf.mpxj.common.Pair;
 import net.sf.mpxj.common.ResourceFieldLists;
 import net.sf.mpxj.common.TaskFieldLists;
+import net.sf.mpxj.common.UnmarshalHelper;
 import net.sf.mpxj.ganttproject.schema.Allocation;
 import net.sf.mpxj.ganttproject.schema.Allocations;
 import net.sf.mpxj.ganttproject.schema.Calendars;
@@ -91,26 +86,13 @@ import net.sf.mpxj.ganttproject.schema.Role;
 import net.sf.mpxj.ganttproject.schema.Roles;
 import net.sf.mpxj.ganttproject.schema.Taskproperty;
 import net.sf.mpxj.ganttproject.schema.Tasks;
-import net.sf.mpxj.listener.ProjectListener;
-import net.sf.mpxj.reader.AbstractProjectReader;
+import net.sf.mpxj.reader.AbstractProjectStreamReader;
 
 /**
  * This class creates a new ProjectFile instance by reading a GanttProject file.
  */
-public final class GanttProjectReader extends AbstractProjectReader
+public final class GanttProjectReader extends AbstractProjectStreamReader
 {
-   /**
-    * {@inheritDoc}
-    */
-   @Override public void addProjectListener(ProjectListener listener)
-   {
-      if (m_projectListeners == null)
-      {
-         m_projectListeners = new LinkedList<>();
-      }
-      m_projectListeners.add(listener);
-   }
-
    /**
     * {@inheritDoc}
     */
@@ -118,6 +100,11 @@ public final class GanttProjectReader extends AbstractProjectReader
    {
       try
       {
+         if (CONTEXT == null)
+         {
+            throw CONTEXT_EXCEPTION;
+         }
+
          m_projectFile = new ProjectFile();
          m_eventManager = m_projectFile.getEventManager();
          m_resourcePropertyDefinitions = new HashMap<>();
@@ -135,21 +122,9 @@ public final class GanttProjectReader extends AbstractProjectReader
          m_projectFile.getProjectProperties().setFileApplication("GanttProject");
          m_projectFile.getProjectProperties().setFileType("GAN");
 
-         m_eventManager.addProjectListeners(m_projectListeners);
+         addListenersToProject(m_projectFile);
 
-         SAXParserFactory factory = SAXParserFactory.newInstance();
-         SAXParser saxParser = factory.newSAXParser();
-         XMLReader xmlReader = saxParser.getXMLReader();
-         SAXSource doc = new SAXSource(xmlReader, new InputSource(stream));
-
-         if (CONTEXT == null)
-         {
-            throw CONTEXT_EXCEPTION;
-         }
-
-         Unmarshaller unmarshaller = CONTEXT.createUnmarshaller();
-
-         Project ganttProject = (Project) unmarshaller.unmarshal(doc);
+         Project ganttProject = (Project) UnmarshalHelper.unmarshal(CONTEXT, stream);
 
          readProjectProperties(ganttProject);
          readCalendars(ganttProject);
@@ -186,12 +161,19 @@ public final class GanttProjectReader extends AbstractProjectReader
          m_projectFile = null;
          m_mpxjCalendar = null;
          m_eventManager = null;
-         m_projectListeners = null;
          m_localeDateFormat = null;
          m_resourcePropertyDefinitions = null;
          m_taskPropertyDefinitions = null;
          m_roleDefinitions = null;
       }
+   }
+
+   /**
+    * {@inheritDoc}
+    */
+   @Override public List<ProjectFile> readAll(InputStream inputStream) throws MPXJException
+   {
+      return Arrays.asList(read(inputStream));
    }
 
    /**
@@ -358,7 +340,7 @@ public final class GanttProjectReader extends AbstractProjectReader
    private void readResourceCustomPropertyDefinitions(Resources gpResources)
    {
       CustomField field = m_projectFile.getCustomFields().getCustomField(ResourceField.TEXT1);
-      field.setAlias("Phone");
+      field.setAlias("Phone").setUserDefined(false);
 
       for (CustomPropertyDefinition definition : gpResources.getCustomPropertyDefinition())
       {
@@ -879,7 +861,6 @@ public final class GanttProjectReader extends AbstractProjectReader
    private ProjectFile m_projectFile;
    private ProjectCalendar m_mpxjCalendar;
    private EventManager m_eventManager;
-   private List<ProjectListener> m_projectListeners;
    private DateFormat m_localeDateFormat;
    private DateFormat m_dateFormat;
    private Map<String, Pair<FieldType, String>> m_resourcePropertyDefinitions;

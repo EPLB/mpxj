@@ -43,7 +43,7 @@
 
       <div id="breadcrumbs">
         <ul class="breadcrumb">
-        <li id="publishDate">Last Published: 2020-01-27</li>
+        <li id="publishDate">Last Published: 2020-12-10</li>
         </ul>
       </div>
       <div class="row-fluid">
@@ -92,8 +92,72 @@
 <th>Date</th>
 <th>Description</th></tr>
 <tr class="b">
-<td><a href="#a8.0.4">8.0.4</a></td>
+<td><a href="#a8.3.5">8.3.5</a></td>
 <td>git master</td>
+<td>&#160;</td></tr>
+<tr class="a">
+<td><a href="#a8.3.4">8.3.4</a></td>
+<td>10/12/2020</td>
+<td>&#160;</td></tr>
+<tr class="b">
+<td><a href="#a8.3.3">8.3.3</a></td>
+<td>24/11/2020</td>
+<td>&#160;</td></tr>
+<tr class="a">
+<td><a href="#a8.3.2">8.3.2</a></td>
+<td>22/10/2020</td>
+<td>&#160;</td></tr>
+<tr class="b">
+<td><a href="#a8.3.1">8.3.1</a></td>
+<td>14/10/2020</td>
+<td>&#160;</td></tr>
+<tr class="a">
+<td><a href="#a8.3.0">8.3.0</a></td>
+<td>13/10/2020</td>
+<td>&#160;</td></tr>
+<tr class="b">
+<td><a href="#a8.2.0">8.2.0</a></td>
+<td>09/09/2020</td>
+<td>&#160;</td></tr>
+<tr class="a">
+<td><a href="#a8.1.4">8.1.4</a></td>
+<td>31/08/2020</td>
+<td>&#160;</td></tr>
+<tr class="b">
+<td><a href="#a8.1.3">8.1.3</a></td>
+<td>25/06/2020</td>
+<td>&#160;</td></tr>
+<tr class="a">
+<td><a href="#a8.1.2">8.1.2</a></td>
+<td>18/06/2020</td>
+<td>&#160;</td></tr>
+<tr class="b">
+<td><a href="#a8.1.1">8.1.1</a></td>
+<td>17/06/2020</td>
+<td>&#160;</td></tr>
+<tr class="a">
+<td><a href="#a8.1.0">8.1.0</a></td>
+<td>11/06/2020</td>
+<td>&#160;</td></tr>
+<tr class="b">
+<td><a href="#a8.0.8">8.0.8</a></td>
+<td>20/04/2020</td>
+<td>&#160;</td></tr>
+<tr class="a">
+<td><a href="#a8.0.7">8.0.7</a></td>
+<td>17/04/2020</td>
+<td>&#160;</td></tr>
+<tr class="b">
+<td><a href="#a8.0.6">8.0.6</a></td>
+<td>05/03/2020</td>
+<td>&#160;</td></tr>
+<tr class="a">
+<td><a href="#a8.0.5">8.0.5</a></td>
+<td>07/02/2020</td>
+<td>&#160;</td></tr>
+<tr class="b">
+<td><a href="#a8.0.4">8.0.4</a></td>
+<td>06/02/2020</td>
 <td>&#160;</td></tr>
 <tr class="a">
 <td><a href="#a8.0.3">8.0.3</a></td>
@@ -653,8 +717,464 @@
 <td>&#160;</td></tr></table>
 <p>Get the RSS feed of the last changes:&#160;<a href="changes.rss"><img src="images/rss.png" alt="rss feed" title="rss feed" /></a></p></div>
 <div class="section">
-<h3><a name="Release_8.0.4_-_git_master"></a>Release 8.0.4 - git master</h3><a name="a8.0.4"></a>
+<h3><a name="Release_8.3.5_-_git_master"></a>Release 8.3.5 - git master</h3><a name="a8.3.5"></a>
 <p>No changes in this release.</p>
+<div class="section">
+<h3><a name="Release_8.3.4_-_10122020"></a>Release 8.3.4 - 10/12/2020</h3><a name="a8.3.4"></a>
+<table border="0" class="table table-striped">
+<tr class="b">
+<th>Type</th>
+<th>Changes</th>
+<th>By</th></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Updated PMXML schema to version 19.12.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Ensure that we always set the activity planned start and planned finish dates when writing a PMXML file.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Updated the getPopulatedFields methods to ignore fields with default values.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Made the Resource ID attribute available as a resource's TEXT1 custom field, with the alias &quot;Resource ID&quot; when reading PMXML and XER files, or from a P^ database. (Note that presently for XER files and P6 databases, the Resource ID value is also read into the initials attribute. This behaviour is deprecated and will be removed in the next major MPXJ release).</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Populate the Resource ID with the value read from a P6 schedule when writing a PMXML file.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Ensure that the hours per day, week, month and year attributes are read from and written to PMXML files.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Fix an issue causing the hours per day calendar attribute to be read inaccurately from XER files and P6 databases.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Read assignment actual overtime cost and work attributes from PMXML files.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Update calculation of assignment work, cost and units attributes for PMXML files.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr></table></div>
+<div class="section">
+<h3><a name="Release_8.3.3_-_24112020"></a>Release 8.3.3 - 24/11/2020</h3><a name="a8.3.3"></a>
+<table border="0" class="table table-striped">
+<tr class="b">
+<th>Type</th>
+<th>Changes</th>
+<th>By</th></tr>
+<tr class="a">
+<td><img src="images/add.gif" alt="add" title="add" /></td>
+<td>Added cost rate table support when reading from and writing to PMXML files.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/add.gif" alt="add" title="add" /></td>
+<td>Added a getPopulatedFields method to the TaskContainer, ResourceContainer and ResourceAssignmentContainer classes. This will retrieve the set of fields which are populated with a non-null value across the whole project for Tasks, Resources, and ResourceAssignments respectively.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/add.gif" alt="add" title="add" /></td>
+<td>Add START_ON, FINISH_ON constraint types. Deprecate MANDATORY_START, MANDATORY_FINISH constraint types. MANDATORY_START/FINISH are now represented as MUST_START/FINISH_ON. This change allows users to distinguish between START/FINISH_ON and the MANDATORY_* constraints when reading P6 schedules.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Improve handling of cost rate tables and availability tables when writing to an MSPDI file.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Handle P6 databases and XER files with user defined fields of type FT_FLOAT.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Align invalid XER record behaviour with P6.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Handle Planner files which don't contain an allocations tag.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Gracefully handle MPP files with missing view or table data.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr></table></div>
+<div class="section">
+<h3><a name="Release_8.3.2_-_22102020"></a>Release 8.3.2 - 22/10/2020</h3><a name="a8.3.2"></a>
+<table border="0" class="table table-striped">
+<tr class="a">
+<th>Type</th>
+<th>Changes</th>
+<th>By</th></tr>
+<tr class="b">
+<td><img src="images/add.gif" alt="add" title="add" /></td>
+<td>Added support for &quot;new tasks are manual&quot; project property (Contributed by Rohit Sinha)</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Improved support for reading and writing outline codes and extended attributes for MSPDI files (Based on a contribution by Dave McKay)</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Improved handling of enterprise custom fields when reading MPP files</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Update Primavera database and XER readers to avoid potential type conversion errors when the caller provides their own field mappings.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Improve handling of some MPP12 MPP file variants.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Avoid error when reading timephased data from certain MPP files.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Gracefully handle MPP files with missing view data.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Update junit to 4.13.1.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr></table></div>
+<div class="section">
+<h3><a name="Release_8.3.1_-_14102020"></a>Release 8.3.1 - 14/10/2020</h3><a name="a8.3.1"></a>
+<table border="0" class="table table-striped">
+<tr class="b">
+<th>Type</th>
+<th>Changes</th>
+<th>By</th></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Minor updates to PlannerReader.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr></table></div>
+<div class="section">
+<h3><a name="Release_8.3.0_-_13102020"></a>Release 8.3.0 - 13/10/2020</h3><a name="a8.3.0"></a>
+<table border="0" class="table table-striped">
+<tr class="b">
+<th>Type</th>
+<th>Changes</th>
+<th>By</th></tr>
+<tr class="a">
+<td><img src="images/add.gif" alt="add" title="add" /></td>
+<td>Add the &quot;userDefined&quot; attribute to the CustomField class to allow caller to determine if the field has been created by a user or MPXJ.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/add.gif" alt="add" title="add" /></td>
+<td>Add support for reading expense items, expense categories and cost accounts from XER files, PMXML files and Primavera databases.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/add.gif" alt="add" title="add" /></td>
+<td>Add support for writing expense items, expense categories and cost accounts to PMXML files.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Updated the XER file reader to ignore invalid records rather than reporting an error, matching the behaviour of P6</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Updated the XER file reader to ensure that activity suspend and resume dates are read correctly.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Updated the XER file reader to ensure that if the reader returns the project selected by the caller when the caller supplies a value for project ID.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Updated PMXML reader to avoid user defined field collisions.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Updated PMXML reader to add setProjectID and listProjects methods.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Update the .net extension method ToIEnumerable to work with java.lang.Iterable rather than java.util.Collection</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr></table></div>
+<div class="section">
+<h3><a name="Release_8.2.0_-_09092020"></a>Release 8.2.0 - 09/09/2020</h3><a name="a8.2.0"></a>
+<table border="0" class="table table-striped">
+<tr class="b">
+<th>Type</th>
+<th>Changes</th>
+<th>By</th></tr>
+<tr class="a">
+<td><img src="images/add.gif" alt="add" title="add" /></td>
+<td>All readers, including the UniversalProjectReader, now support a readAll method. If a file or database contains more than one project the readAll method can be used to retrieve them all in one operation. If the file format doesn't support multiple schedules, readAll will just return a single schedule.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/add.gif" alt="add" title="add" /></td>
+<td>Add PrimaveraDatabaseFileReader to encapsulate access to SQLite Primavera databases.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Ensure that the summary flag is true for WBS items in Primavera schedules, even if they have no child activities.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Ensure that the critical flag is rolled up appropriately to WBS items when reading Primavera schedules.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Set export flag property when reading projects from a PMXML file.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Corrected data type of resource assignment Work Contour field.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Corrected data type of resource fields: BCWS, BCWP, ACWP, SV, CV, and Work Contour.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Corrected data type of task fields: CV, ACWP, VAC, CPI, EAC, SPI, TCPI, and Work Contour.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr></table></div>
+<div class="section">
+<h3><a name="Release_8.1.4_-_31082020"></a>Release 8.1.4 - 31/08/2020</h3><a name="a8.1.4"></a>
+<table border="0" class="table table-striped">
+<tr class="a">
+<th>Type</th>
+<th>Changes</th>
+<th>By</th></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Fix CVE-2020-25020: XXE vulnerability (with thanks to Sangeetha Rajesh S, ZOHO Corporation)</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Import milestone constraints from Asta schedules (Contributed by Dave McKay)</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Handle elapsed durations in Asta schedules (Based on a contribution by Dave McKay)</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Correctly determine the constraint type for tasks with ALAP placement with or without predecessors when reading from from Asta schedules (Contributed by Dave McKay)</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Gracefully handle a missing table name when reading an XER file.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Gracefully handle a unexpected calendar data when reading an XER file.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Correctly handle XER files with multi-byte character encoding.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Import all schedule and leveling options from XER files.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Ensure project calendars are read from PMXML files.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/add.gif" alt="add" title="add" /></td>
+<td>Added readAll methods to PrimaveraPMFileReader to allow all projects contained in a PMXML file to be read in a single pass.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr></table></div>
+<div class="section">
+<h3><a name="Release_8.1.3_-_25062020"></a>Release 8.1.3 - 25/06/2020</h3><a name="a8.1.3"></a>
+<table border="0" class="table table-striped">
+<tr class="b">
+<th>Type</th>
+<th>Changes</th>
+<th>By</th></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Improve reliability when reading custom field values from certain MPP12 files.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Improve accuracy of activity percent complete when reading from certain XER files or P6 databases.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Improve accuracy of WBS percent complete when reading from certain XER files or P6 databases.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Improve accuracy of task durations when reading Asta schedules.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Fix an issue handling the end date of calendar exceptions when reading Asta schedules.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Fix an issue with correctly identifying the calendar applied to summary tasks when reading Asta schedules.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Populate percent complete, duration, actual start, actual finish, early start, late start, early finish and late finish attributes for summary tasks when reading Asta schedules.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>The percent complete value reported for tasks when reading Asta schedules is now Duration Percent Complete. The Overall Percent Complete value originally being returned is available in a custom field.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr></table></div>
+<div class="section">
+<h3><a name="Release_8.1.2_-_18062020"></a>Release 8.1.2 - 18/06/2020</h3><a name="a8.1.2"></a>
+<table border="0" class="table table-striped">
+<tr class="a">
+<th>Type</th>
+<th>Changes</th>
+<th>By</th></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Improve detection of unusual MSPDI file variants.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Updated to read task notes from FastTrack FTS files.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr></table></div>
+<div class="section">
+<h3><a name="Release_8.1.1_-_17062020"></a>Release 8.1.1 - 17/06/2020</h3><a name="a8.1.1"></a>
+<table border="0" class="table table-striped">
+<tr class="b">
+<th>Type</th>
+<th>Changes</th>
+<th>By</th></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Improve support for Synchro 6.2 SP files.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr></table></div>
+<div class="section">
+<h3><a name="Release_8.1.0_-_11062020"></a>Release 8.1.0 - 11/06/2020</h3><a name="a8.1.0"></a>
+<table border="0" class="table table-striped">
+<tr class="b">
+<th>Type</th>
+<th>Changes</th>
+<th>By</th></tr>
+<tr class="a">
+<td><img src="images/add.gif" alt="add" title="add" /></td>
+<td>Experimental support for reading Project Commander schedules.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Update to use JAXB 2.3.2.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Avoid failures caused by unreadable OLE compound documents when the UniversalProjectReader is trying to determine the file type.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Strip trailing ASCII NUL characters from text fields when reading from a Primavera database.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Improve accuracy of task order when reading Phoenix files.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Improve accuracy of task data when reading some MPP file variants.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Improve reliability when reading certain SureTrak files.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr></table></div>
+<div class="section">
+<h3><a name="Release_8.0.8_-_20042020"></a>Release 8.0.8 - 20/04/2020</h3><a name="a8.0.8"></a>
+<table border="0" class="table table-striped">
+<tr class="b">
+<th>Type</th>
+<th>Changes</th>
+<th>By</th></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Improve handling of numeric character references invalid for XML 1.0 in PMXML files.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Improve handling of resource calendars read from Planner files.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Improve handling of resource calendars read from MPX files.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Ignore the milestone flag when reading MPX files if the task has a non-zero duration.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Ensure JSON files can be written when Unique ID predecessor/successor attributes have been read from an MPX file.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr></table></div>
+<div class="section">
+<h3><a name="Release_8.0.7_-_17042020"></a>Release 8.0.7 - 17/04/2020</h3><a name="a8.0.7"></a>
+<table border="0" class="table table-striped">
+<tr class="b">
+<th>Type</th>
+<th>Changes</th>
+<th>By</th></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Updated to rtfparserkit 1.15.0.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Improve handling of PMXML files with empty calendar exception time ranges.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr></table></div>
+<div class="section">
+<h3><a name="Release_8.0.6_-_05032020"></a>Release 8.0.6 - 05/03/2020</h3><a name="a8.0.6"></a>
+<table border="0" class="table table-striped">
+<tr class="a">
+<th>Type</th>
+<th>Changes</th>
+<th>By</th></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Updated to use POI 4.1.2.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Improve handling of some XER file variants.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr></table></div>
+<div class="section">
+<h3><a name="Release_8.0.5_-_07022020"></a>Release 8.0.5 - 07/02/2020</h3><a name="a8.0.5"></a>
+<table border="0" class="table table-striped">
+<tr class="b">
+<th>Type</th>
+<th>Changes</th>
+<th>By</th></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Allow users to determine WBS attribute content with &quot;wbs is full path&quot; flag for Primavera readers.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Ensure summary task start and finish dates are populated when reading PMXML files.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Use baseline start and finish dates as planned start and finish dates when writing PMXML files.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Late start and late finish dates are now written to PMXML files.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr></table></div>
+<div class="section">
+<h3><a name="Release_8.0.4_-_06022020"></a>Release 8.0.4 - 06/02/2020</h3><a name="a8.0.4"></a>
+<table border="0" class="table table-striped">
+<tr class="a">
+<th>Type</th>
+<th>Changes</th>
+<th>By</th></tr>
+<tr class="b">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Update sqlite-jdbc dependency to 3.30.1</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr>
+<tr class="a">
+<td><img src="images/update.gif" alt="update" title="update" /></td>
+<td>Improve handling of characters invalid for XML 1.0 in PMXML files generated by P6.</td>
+<td><a href="team-list.html#joniles">joniles</a></td></tr></table></div>
 <div class="section">
 <h3><a name="Release_8.0.3_-_27012020"></a>Release 8.0.3 - 27/01/2020</h3><a name="a8.0.3"></a>
 <table border="0" class="table table-striped">
@@ -676,7 +1196,7 @@
 <td><a href="team-list.html#joniles">joniles</a></td></tr>
 <tr class="b">
 <td><img src="images/update.gif" alt="update" title="update" /></td>
-<td>Improve handling of invalid characters in PMXML files generated by P6.</td>
+<td>Improve handling of incorrectly encoded characters in PMXML files generated by P6.</td>
 <td><a href="team-list.html#joniles">joniles</a></td></tr>
 <tr class="a">
 <td><img src="images/update.gif" alt="update" title="update" /></td>

@@ -27,6 +27,7 @@ import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
@@ -37,13 +38,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import net.sf.mpxj.AccrueType;
 import net.sf.mpxj.ActivityCode;
 import net.sf.mpxj.ActivityCodeContainer;
 import net.sf.mpxj.ActivityCodeValue;
 import net.sf.mpxj.AssignmentField;
 import net.sf.mpxj.Availability;
-import net.sf.mpxj.AvailabilityTable;
 import net.sf.mpxj.ConstraintType;
+import net.sf.mpxj.CostAccount;
+import net.sf.mpxj.CostAccountContainer;
 import net.sf.mpxj.CostRateTable;
 import net.sf.mpxj.CostRateTableEntry;
 import net.sf.mpxj.CurrencySymbolPosition;
@@ -54,6 +57,9 @@ import net.sf.mpxj.Day;
 import net.sf.mpxj.DayType;
 import net.sf.mpxj.Duration;
 import net.sf.mpxj.EventManager;
+import net.sf.mpxj.ExpenseCategory;
+import net.sf.mpxj.ExpenseCategoryContainer;
+import net.sf.mpxj.ExpenseItem;
 import net.sf.mpxj.FieldContainer;
 import net.sf.mpxj.FieldType;
 import net.sf.mpxj.FieldTypeClass;
@@ -98,8 +104,9 @@ final class PrimaveraReader
     * @param assignmentFields assignment field mapping
     * @param aliases alias mapping
     * @param matchPrimaveraWBS determine WBS behaviour
+    * @param wbsIsFullPath determine the WBS attribute structure
     */
-   public PrimaveraReader(UserFieldCounters taskUdfCounters, UserFieldCounters resourceUdfCounters, UserFieldCounters assignmentUdfCounters, Map<FieldType, String> resourceFields, Map<FieldType, String> wbsFields, Map<FieldType, String> taskFields, Map<FieldType, String> assignmentFields, Map<FieldType, String> aliases, boolean matchPrimaveraWBS)
+   public PrimaveraReader(UserFieldCounters taskUdfCounters, UserFieldCounters resourceUdfCounters, UserFieldCounters assignmentUdfCounters, Map<FieldType, String> resourceFields, Map<FieldType, String> wbsFields, Map<FieldType, String> taskFields, Map<FieldType, String> assignmentFields, Map<FieldType, String> aliases, boolean matchPrimaveraWBS, boolean wbsIsFullPath)
    {
       m_project = new ProjectFile();
       m_eventManager = m_project.getEventManager();
@@ -125,6 +132,7 @@ final class PrimaveraReader
       m_assignmentUdfCounters.reset();
 
       m_matchPrimaveraWBS = matchPrimaveraWBS;
+      m_wbsIsFullPath = wbsIsFullPath;
    }
 
    /**
@@ -142,9 +150,9 @@ final class PrimaveraReader
     *
     * @return list of external predecessors
     */
-   public List<ExternalPredecessorRelation> getExternalPredecessors()
+   public List<ExternalRelation> getExternalRelations()
    {
-      return m_externalPredecessors;
+      return m_externalRelations;
    }
 
    /**
@@ -171,6 +179,29 @@ final class PrimaveraReader
          // cannot assign actual calendar yet as it has not been read yet
          m_defaultCalendarID = row.getInteger("clndr_id");
       }
+   }
+
+   /**
+    * Process expense categories.
+    *
+    * @param categories expense categories
+    */
+   public void processExpenseCategories(List<Row> categories)
+   {
+      ExpenseCategoryContainer container = m_project.getExpenseCategories();
+      categories.forEach(row -> container.add(new ExpenseCategory(row.getInteger("cost_type_id"), row.getString("cost_type"), row.getInteger("seq_num"))));
+   }
+
+   /**
+    * Process cost accounts.
+    *
+    * @param accounts cost accounts
+    */
+   public void processCostAccounts(List<Row> accounts)
+   {
+      CostAccountContainer container = m_project.getCostAccounts();
+      accounts.forEach(row -> container.add(new CostAccount(row.getInteger("acct_id"), row.getString("acct_short_name"), row.getString("acct_name"), row.getString("acct_descr"), row.getInteger("acct_seq_num"))));
+      accounts.forEach(row -> container.getByUniqueID(row.getInteger("acct_id")).setParent(container.getByUniqueID(row.getInteger("parent_acct_id"))));
    }
 
    /**
@@ -215,12 +246,7 @@ final class PrimaveraReader
       for (Row row : assignments)
       {
          Integer taskID = row.getInteger("task_id");
-         List<Integer> list = m_activityCodeAssignments.get(taskID);
-         if (list == null)
-         {
-            list = new ArrayList<>();
-            m_activityCodeAssignments.put(taskID, list);
-         }
+         List<Integer> list = m_activityCodeAssignments.computeIfAbsent(taskID, k -> new ArrayList<>());
          list.add(row.getInteger("actv_code_id"));
       }
    }
@@ -265,12 +291,7 @@ final class PrimaveraReader
          }
 
          Integer id = row.getInteger("fk_id");
-         List<Row> list = tableData.get(id);
-         if (list == null)
-         {
-            list = new ArrayList<>();
-            tableData.put(id, list);
-         }
+         List<Row> list = tableData.computeIfAbsent(id, k -> new ArrayList<>());
          list.add(row);
       }
    }
@@ -345,7 +366,7 @@ final class PrimaveraReader
 
       try
       {
-         calendar.setMinutesPerDay(Integer.valueOf((int) NumberHelper.getDouble(row.getDouble("day_hr_cnt")) * 60));
+         calendar.setMinutesPerDay(Integer.valueOf((int) (NumberHelper.getDouble(row.getDouble("day_hr_cnt")) * 60)));
          calendar.setMinutesPerWeek(Integer.valueOf((int) (NumberHelper.getDouble(row.getDouble("week_hr_cnt")) * 60)));
          calendar.setMinutesPerMonth(Integer.valueOf((int) (NumberHelper.getDouble(row.getDouble("month_hr_cnt")) * 60)));
          calendar.setMinutesPerYear(Integer.valueOf((int) (NumberHelper.getDouble(row.getDouble("year_hr_cnt")) * 60)));
@@ -424,21 +445,24 @@ final class PrimaveraReader
    {
       // ... for each day of the week
       Day day = Day.getInstance(Integer.parseInt(dayRecord.getField()));
-      // Get hours
-      List<Record> recHours = dayRecord.getChildren();
-      if (recHours.size() == 0)
+      if (day != null)
       {
-         // No data -> not working
-         calendar.setWorkingDay(day, false);
-      }
-      else
-      {
-         calendar.setWorkingDay(day, true);
-         // Read hours
-         ProjectCalendarHours hours = calendar.addCalendarHours(day);
-         for (Record recWorkingHours : recHours)
+         // Get hours
+         List<Record> recHours = dayRecord.getChildren();
+         if (recHours.size() == 0)
          {
-            addHours(hours, recWorkingHours);
+            // No data -> not working
+            calendar.setWorkingDay(day, false);
+         }
+         else
+         {
+            calendar.setWorkingDay(day, true);
+            // Read hours
+            ProjectCalendarHours hours = calendar.addCalendarHours(day);
+            for (Record recWorkingHours : recHours)
+            {
+               addHours(hours, recWorkingHours);
+            }
          }
       }
    }
@@ -631,7 +655,7 @@ final class PrimaveraReader
          Double costPerUse = NumberHelper.getDouble(0.0);
          Double maxUnits = NumberHelper.getDouble(NumberHelper.getDouble(row.getDouble("max_qty_per_hr")) * 100); // adjust to be % as in MS Project
          Date startDate = row.getDate("start_date");
-         Date endDate = DateHelper.LAST_DATE;
+         Date endDate = DateHelper.END_DATE_NA;
 
          if (i + 1 < rows.size())
          {
@@ -639,25 +663,36 @@ final class PrimaveraReader
             int nextResourceID = nextRow.getInt("rsrc_id");
             if (resourceID.intValue() == nextResourceID)
             {
-               endDate = nextRow.getDate("start_date");
+               Calendar cal = DateHelper.popCalendar(nextRow.getDate("start_date"));
+               cal.add(Calendar.MINUTE, -1);
+               endDate = cal.getTime();
+               DateHelper.pushCalendar(cal);
             }
          }
 
          Resource resource = m_project.getResourceByUniqueID(resourceID);
          if (resource != null)
          {
+            if (startDate.getTime() < DateHelper.START_DATE_NA.getTime())
+            {
+               startDate = DateHelper.START_DATE_NA;
+            }
+
+            if (endDate.getTime() > DateHelper.END_DATE_NA.getTime())
+            {
+               endDate = DateHelper.END_DATE_NA;
+            }
+
             CostRateTable costRateTable = resource.getCostRateTable(0);
             if (costRateTable == null)
             {
                costRateTable = new CostRateTable();
                resource.setCostRateTable(0, costRateTable);
             }
-            CostRateTableEntry entry = new CostRateTableEntry(standardRate, standardRateFormat, overtimeRate, overtimeRateFormat, costPerUse, endDate);
+            CostRateTableEntry entry = new CostRateTableEntry(standardRate, standardRateFormat, overtimeRate, overtimeRateFormat, costPerUse, startDate, endDate);
             costRateTable.add(entry);
 
-            AvailabilityTable availabilityTable = resource.getAvailability();
-            Availability newAvailability = new Availability(startDate, endDate, maxUnits);
-            availabilityTable.add(newAvailability);
+            resource.getAvailability().add(new Availability(startDate, endDate, maxUnits));
          }
       }
    }
@@ -707,7 +742,7 @@ final class PrimaveraReader
       //
       // Create hierarchical structure
       //
-      FieldType activityIDField = getActivityIDField(m_wbsFields);
+      FieldType activityIDField = getActivityIDField(m_taskFields);
       m_project.getChildTasks().clear();
       for (Row row : wbs)
       {
@@ -721,7 +756,12 @@ final class PrimaveraReader
          {
             m_project.getChildTasks().remove(task);
             parentTask.getChildTasks().add(task);
-            task.setWBS(parentTask.getWBS() + "." + task.getWBS());
+
+            if (m_wbsIsFullPath)
+            {
+               task.setWBS(parentTask.getWBS() + "." + task.getWBS());
+            }
+
             if (activityIDField != null)
             {
                task.set(activityIDField, task.getWBS());
@@ -1106,12 +1146,13 @@ final class PrimaveraReader
          Date actualFinishDate = parentTask.getActualFinish();
          Date earlyStartDate = parentTask.getEarlyStart();
          Date earlyFinishDate = parentTask.getEarlyFinish();
-         Date remainingEarlyStartDate = parentTask.getRemainingEarlyStart();
-         Date remainingEarlyFinishDate = parentTask.getRemainingEarlyFinish();
          Date lateStartDate = parentTask.getLateStart();
          Date lateFinishDate = parentTask.getLateFinish();
          Date baselineStartDate = parentTask.getBaselineStart();
          Date baselineFinishDate = parentTask.getBaselineFinish();
+         Date remainingEarlyStartDate = parentTask.getRemainingEarlyStart();
+         Date remainingEarlyFinishDate = parentTask.getRemainingEarlyFinish();
+         boolean critical = false;
 
          for (Task task : parentTask.getChildTasks())
          {
@@ -1137,6 +1178,8 @@ final class PrimaveraReader
             {
                ++finished;
             }
+
+            critical = critical || task.getCritical();
          }
 
          parentTask.setStart(plannedStartDate);
@@ -1170,16 +1213,24 @@ final class PrimaveraReader
          Duration remainingDuration = null;
          if (parentTask.getActualFinish() == null)
          {
-            Date startDate = parentTask.getEarlyStart();
+            Date startDate = parentTask.getRemainingEarlyStart();
             if (startDate == null)
             {
-               startDate = baselineStartDate;
+               startDate = parentTask.getEarlyStart();
+               if (startDate == null)
+               {
+                  startDate = baselineStartDate;
+               }
             }
 
-            Date finishDate = parentTask.getEarlyFinish();
+            Date finishDate = parentTask.getRemainingEarlyFinish();
             if (finishDate == null)
             {
-               finishDate = baselineFinishDate;
+               finishDate = parentTask.getEarlyFinish();
+               if (finishDate == null)
+               {
+                  finishDate = baselineFinishDate;
+               }
             }
 
             if (startDate != null && finishDate != null)
@@ -1193,7 +1244,7 @@ final class PrimaveraReader
          }
          parentTask.setRemainingDuration(remainingDuration);
 
-         if (baselineDuration != null && baselineDuration.getDuration() != 0 && remainingDuration != null)
+         if (baselineDuration != null && remainingDuration != null && baselineDuration.getDuration() != 0)
          {
             double durationPercentComplete = ((baselineDuration.getDuration() - remainingDuration.getDuration()) / baselineDuration.getDuration()) * 100.0;
             if (durationPercentComplete < 0)
@@ -1209,6 +1260,8 @@ final class PrimaveraReader
             }
             parentTask.setPercentageComplete(Double.valueOf(durationPercentComplete));
          }
+
+         parentTask.setCritical(critical);
       }
    }
 
@@ -1285,8 +1338,8 @@ final class PrimaveraReader
             else
             {
                // if we can't find the predecessor, it must lie outside the project
-               ExternalPredecessorRelation relation = new ExternalPredecessorRelation(predecessorID, currentTask, type, lag);
-               m_externalPredecessors.add(relation);
+               ExternalRelation relation = new ExternalRelation(predecessorID, currentTask, type, lag, true);
+               m_externalRelations.add(relation);
                relation.setUniqueID(uniqueID);
             }
          }
@@ -1418,6 +1471,51 @@ final class PrimaveraReader
       properties.setDecimalSeparator(row.getString("decimal_symbol").charAt(0));
    }
 
+   public void processExpenseItems(List<Row> rows)
+   {
+      for (Row row : rows)
+      {
+         Task task = m_project.getTaskByUniqueID(row.getInteger("task_id"));
+         if (task != null)
+         {
+            List<ExpenseItem> items = task.getExpenseItems();
+            if (items == null)
+            {
+               items = new ArrayList<>();
+               task.setExpenseItems(items);
+            }
+
+            ExpenseItem ei = new ExpenseItem(task);
+            items.add(ei);
+
+            ei.setAccount(m_project.getCostAccounts().getByUniqueID(row.getInteger("acct_id")));
+            ei.setAccrueType(ACCRUE_TYPE_MAP.get(row.getString("cost_load_type")));
+            ei.setActualCost(row.getDouble("act_cost"));
+            //ei.setAtCompletionCost();
+            //ei.setAtCompletionUnits();
+            ei.setAutoComputeActuals(row.getBoolean("auto_compute_act_flag"));
+            ei.setCategory(m_project.getExpenseCategories().getByUniqueID(row.getInteger("cost_type_id")));
+            ei.setDescription(row.getString("cost_descr"));
+            ei.setDocumentNumber(row.getString("po_number"));
+            ei.setName(row.getString("cost_name"));
+            ei.setPlannedCost(row.getDouble("target_cost"));
+            ei.setPlannedUnits(row.getDouble("target_qty"));
+            ei.setPricePerUnit(row.getDouble("cost_per_qty"));
+            ei.setRemainingCost(row.getDouble("remain_cost"));
+            ei.setUniqueID(row.getInteger("cost_item_id"));
+            ei.setUnitOfMeasure(row.getString("qty_name"));
+            ei.setVendor(row.getString("vendor_name"));
+
+            double pricePerUnit = NumberHelper.getDouble(ei.getPricePerUnit());
+            if (pricePerUnit != 0.0)
+            {
+               ei.setActualUnits(Double.valueOf(NumberHelper.getDouble(ei.getActualCost()) / pricePerUnit));
+               ei.setRemainingUnits(Double.valueOf(NumberHelper.getDouble(ei.getRemainingCost()) / pricePerUnit));
+            }
+         }
+      }
+   }
+
    /**
     * Generic method to extract Primavera fields and assign to MPXJ fields.
     *
@@ -1536,7 +1634,7 @@ final class PrimaveraReader
       CustomFieldContainer fields = m_project.getCustomFields();
       for (Map.Entry<FieldType, String> entry : aliases.entrySet())
       {
-         fields.getCustomField(entry.getKey()).setAlias(entry.getValue());
+         fields.getCustomField(entry.getKey()).setAlias(entry.getValue()).setUserDefined(false);
       }
    }
 
@@ -1550,24 +1648,33 @@ final class PrimaveraReader
    private Number calculatePercentComplete(Row row)
    {
       Number result;
-      switch (PercentCompleteType.getInstance(row.getString("complete_pct_type")))
+
+      // If we have an actual end date, we must be 100% complete.
+      if (row.getDate("act_end_date") != null)
       {
-         case UNITS:
+         result = Integer.valueOf(100);
+      }
+      else
+      {
+         switch (PercentCompleteType.getInstance(row.getString("complete_pct_type")))
          {
-            result = calculateUnitsPercentComplete(row);
-            break;
-         }
+            case UNITS:
+            {
+               result = calculateUnitsPercentComplete(row);
+               break;
+            }
 
-         case DURATION:
-         {
-            result = calculateDurationPercentComplete(row);
-            break;
-         }
+            case DURATION:
+            {
+               result = calculateDurationPercentComplete(row);
+               break;
+            }
 
-         default:
-         {
-            result = calculatePhysicalPercentComplete(row);
-            break;
+            default:
+            {
+               result = calculatePhysicalPercentComplete(row);
+               break;
+            }
          }
       }
 
@@ -1660,8 +1767,9 @@ final class PrimaveraReader
       map.put(ResourceField.NOTES, "rsrc_notes");
       map.put(ResourceField.CREATED, "create_date");
       map.put(ResourceField.TYPE, "rsrc_type");
-      map.put(ResourceField.INITIALS, "rsrc_short_name");
+      map.put(ResourceField.INITIALS, "rsrc_short_name"); // TODO - remove, deprecated and replaced by TEXT1
       map.put(ResourceField.PARENT_ID, "parent_rsrc_id");
+      map.put(ResourceField.TEXT1, "rsrc_short_name");
 
       return map;
    }
@@ -1682,9 +1790,6 @@ final class PrimaveraReader
       map.put(TaskField.REMAINING_COST, "indep_remain_total_cost");
       map.put(TaskField.REMAINING_WORK, "indep_remain_work_qty");
       map.put(TaskField.DEADLINE, "anticip_end_date");
-      map.put(TaskField.DATE1, "suspend_date");
-      map.put(TaskField.DATE2, "resume_date");
-      map.put(TaskField.TEXT1, "task_code");
       map.put(TaskField.WBS, "wbs_short_name");
 
       return map;
@@ -1732,6 +1837,8 @@ final class PrimaveraReader
       map.put(TaskField.TEXT2, "task_type");
       map.put(TaskField.TEXT3, "status_code");
       map.put(TaskField.NUMBER1, "rsrc_id");
+      map.put(TaskField.DATE1, "suspend_date");
+      map.put(TaskField.DATE2, "resume_date");
 
       return map;
    }
@@ -1773,10 +1880,11 @@ final class PrimaveraReader
 
       map.put(TaskField.DATE1, "Suspend Date");
       map.put(TaskField.DATE2, "Resume Date");
-      map.put(TaskField.TEXT1, "Code");
+      map.put(TaskField.TEXT1, "Code"); // TODO this should be renamed Activity ID
       map.put(TaskField.TEXT2, "Activity Type");
       map.put(TaskField.TEXT3, "Status");
       map.put(TaskField.NUMBER1, "Primary Resource Unique ID");
+      map.put(ResourceField.TEXT1, "Resource ID");
 
       return map;
    }
@@ -1794,8 +1902,9 @@ final class PrimaveraReader
    private Map<FieldType, String> m_wbsFields;
    private Map<FieldType, String> m_taskFields;
    private Map<FieldType, String> m_assignmentFields;
-   private List<ExternalPredecessorRelation> m_externalPredecessors = new ArrayList<>();
+   private List<ExternalRelation> m_externalRelations = new ArrayList<>();
    private final boolean m_matchPrimaveraWBS;
+   private final boolean m_wbsIsFullPath;
 
    private Map<Integer, String> m_udfFields = new HashMap<>();
    private Map<String, Map<Integer, List<Row>>> m_udfValues = new HashMap<>();
@@ -1815,17 +1924,15 @@ final class PrimaveraReader
    private static final Map<String, ConstraintType> CONSTRAINT_TYPE_MAP = new HashMap<>();
    static
    {
-      CONSTRAINT_TYPE_MAP.put("CS_MSO", ConstraintType.MUST_START_ON);
+      CONSTRAINT_TYPE_MAP.put("CS_MSO", ConstraintType.START_ON);
       CONSTRAINT_TYPE_MAP.put("CS_MSOB", ConstraintType.START_NO_LATER_THAN);
       CONSTRAINT_TYPE_MAP.put("CS_MSOA", ConstraintType.START_NO_EARLIER_THAN);
-      CONSTRAINT_TYPE_MAP.put("CS_MEO", ConstraintType.MUST_FINISH_ON);
+      CONSTRAINT_TYPE_MAP.put("CS_MEO", ConstraintType.FINISH_ON);
       CONSTRAINT_TYPE_MAP.put("CS_MEOB", ConstraintType.FINISH_NO_LATER_THAN);
       CONSTRAINT_TYPE_MAP.put("CS_MEOA", ConstraintType.FINISH_NO_EARLIER_THAN);
       CONSTRAINT_TYPE_MAP.put("CS_ALAP", ConstraintType.AS_LATE_AS_POSSIBLE);
       CONSTRAINT_TYPE_MAP.put("CS_MANDSTART", ConstraintType.MUST_START_ON);
       CONSTRAINT_TYPE_MAP.put("CS_MANDFIN", ConstraintType.MUST_FINISH_ON);
-      CONSTRAINT_TYPE_MAP.put("CS_MANDSTART", ConstraintType.MANDATORY_START);
-      CONSTRAINT_TYPE_MAP.put("CS_MANDFIN", ConstraintType.MANDATORY_FINISH);
    }
 
    private static final Map<String, Priority> PRIORITY_MAP = new HashMap<>();
@@ -1905,6 +2012,14 @@ final class PrimaveraReader
       FIELD_TYPE_MAP.put("TASK", FieldTypeClass.TASK);
       FIELD_TYPE_MAP.put("RSRC", FieldTypeClass.RESOURCE);
       FIELD_TYPE_MAP.put("TASKRSRC", FieldTypeClass.ASSIGNMENT);
+   }
+
+   private static final Map<String, AccrueType> ACCRUE_TYPE_MAP = new HashMap<>();
+   static
+   {
+      ACCRUE_TYPE_MAP.put("CL_Uniform", AccrueType.PRORATED);
+      ACCRUE_TYPE_MAP.put("CL_End", AccrueType.END);
+      ACCRUE_TYPE_MAP.put("CL_Start", AccrueType.START);
    }
 
    private static final long EXCEPTION_EPOCH = -2209161599935L;

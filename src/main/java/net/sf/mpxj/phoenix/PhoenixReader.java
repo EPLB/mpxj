@@ -24,27 +24,23 @@
 package net.sf.mpxj.phoenix;
 
 import java.io.InputStream;
+import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.StringJoiner;
 import java.util.UUID;
 
 import javax.xml.bind.JAXBContext;
 import javax.xml.bind.JAXBException;
-import javax.xml.bind.Unmarshaller;
 import javax.xml.parsers.ParserConfigurationException;
-import javax.xml.parsers.SAXParser;
-import javax.xml.parsers.SAXParserFactory;
-import javax.xml.transform.sax.SAXSource;
 
-import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
-import org.xml.sax.XMLReader;
 
 import net.sf.mpxj.ChildTaskContainer;
 import net.sf.mpxj.Day;
@@ -65,8 +61,9 @@ import net.sf.mpxj.TaskField;
 import net.sf.mpxj.TimeUnit;
 import net.sf.mpxj.common.AlphanumComparator;
 import net.sf.mpxj.common.DateHelper;
+import net.sf.mpxj.common.DebugLogPrintWriter;
 import net.sf.mpxj.common.NumberHelper;
-import net.sf.mpxj.listener.ProjectListener;
+import net.sf.mpxj.common.UnmarshalHelper;
 import net.sf.mpxj.phoenix.schema.Project;
 import net.sf.mpxj.phoenix.schema.Project.Layouts.Layout;
 import net.sf.mpxj.phoenix.schema.Project.Layouts.Layout.CodeOptions.CodeOption;
@@ -82,32 +79,27 @@ import net.sf.mpxj.phoenix.schema.Project.Storepoints.Storepoint.Calendars.Calen
 import net.sf.mpxj.phoenix.schema.Project.Storepoints.Storepoint.Relationships.Relationship;
 import net.sf.mpxj.phoenix.schema.Project.Storepoints.Storepoint.Resources;
 import net.sf.mpxj.phoenix.schema.Project.Storepoints.Storepoint.Resources.Resource.Assignment;
-import net.sf.mpxj.reader.AbstractProjectReader;
+import net.sf.mpxj.reader.AbstractProjectStreamReader;
 
 /**
  * This class creates a new ProjectFile instance by reading a Phoenix Project Manager file.
  */
-public final class PhoenixReader extends AbstractProjectReader
+public final class PhoenixReader extends AbstractProjectStreamReader
 {
-   /**
-    * {@inheritDoc}
-    */
-   @Override public void addProjectListener(ProjectListener listener)
-   {
-      if (m_projectListeners == null)
-      {
-         m_projectListeners = new LinkedList<>();
-      }
-      m_projectListeners.add(listener);
-   }
-
    /**
     * {@inheritDoc}
     */
    @Override public ProjectFile read(InputStream stream) throws MPXJException
    {
+      openLogFile();
+
       try
       {
+         if (CONTEXT == null)
+         {
+            throw CONTEXT_EXCEPTION;
+         }
+
          m_projectFile = new ProjectFile();
          m_activityMap = new HashMap<>();
          m_activityCodeValues = new HashMap<>();
@@ -126,23 +118,11 @@ public final class PhoenixReader extends AbstractProjectReader
          m_projectFile.getProjectProperties().setFileType("PPX");
 
          // Equivalent to Primavera's Activity ID
-         m_projectFile.getCustomFields().getCustomField(TaskField.TEXT1).setAlias("Code");
+         m_projectFile.getCustomFields().getCustomField(TaskField.TEXT1).setAlias("Code").setUserDefined(false);
 
-         m_eventManager.addProjectListeners(m_projectListeners);
+         addListenersToProject(m_projectFile);
 
-         SAXParserFactory factory = SAXParserFactory.newInstance();
-         SAXParser saxParser = factory.newSAXParser();
-         XMLReader xmlReader = saxParser.getXMLReader();
-         SAXSource doc = new SAXSource(xmlReader, new InputSource(new SkipNulInputStream(stream)));
-
-         if (CONTEXT == null)
-         {
-            throw CONTEXT_EXCEPTION;
-         }
-
-         Unmarshaller unmarshaller = CONTEXT.createUnmarshaller();
-
-         Project phoenixProject = (Project) unmarshaller.unmarshal(doc);
+         Project phoenixProject = (Project) UnmarshalHelper.unmarshal(CONTEXT, new SkipNulInputStream(stream));
          Storepoint storepoint = getCurrentStorepoint(phoenixProject);
          readProjectProperties(phoenixProject.getSettings(), storepoint);
          readCalendars(storepoint);
@@ -181,7 +161,17 @@ public final class PhoenixReader extends AbstractProjectReader
          m_activityCodeSequence = null;
          m_activityCodeCache = null;
          m_codeSequence = null;
+
+         closeLogFile();
       }
+   }
+
+   /**
+    * {@inheritDoc}
+    */
+   @Override public List<ProjectFile> readAll(InputStream inputStream) throws MPXJException
+   {
+      return Arrays.asList(read(inputStream));
    }
 
    /**
@@ -335,10 +325,12 @@ public final class PhoenixReader extends AbstractProjectReader
       for (Code code : storepoint.getActivityCodes().getCode())
       {
          int sequence = 0;
+         UUID codeUUID = getCodeUUID(code.getUuid(), code.getName());
          for (Value value : code.getValue())
          {
-            UUID uuid = getUUID(value.getUuid(), value.getName());
-            m_activityCodeValues.put(uuid, value.getName());
+            String name = value.getName();
+            UUID uuid = getValueUUID(codeUUID, value.getUuid(), name);
+            m_activityCodeValues.put(uuid, name);
             m_activityCodeSequence.put(uuid, Integer.valueOf(++sequence));
          }
       }
@@ -363,7 +355,7 @@ public final class PhoenixReader extends AbstractProjectReader
       {
          if (option.isShown().booleanValue())
          {
-            m_codeSequence.add(getUUID(option.getCodeUuid(), option.getCode()));
+            m_codeSequence.add(getCodeUUID(option.getCodeUuid(), option.getCode()));
          }
       }
    }
@@ -409,6 +401,40 @@ public final class PhoenixReader extends AbstractProjectReader
    {
       final AlphanumComparator comparator = new AlphanumComparator();
       List<Activity> activities = phoenixProject.getActivities().getActivity();
+
+      // If logging enabled, dump detail to investigate "Comparison method violates its general contract!" error
+      if (m_log != null)
+      {
+         m_log.println("{");
+         StringJoiner codeJoiner = new StringJoiner(",");
+         m_codeSequence.stream().forEach(code -> codeJoiner.add("\"" + code + "\""));
+         m_log.println("\"codeSequence\": [" + codeJoiner + "],");
+
+         StringJoiner sequenceJoiner = new StringJoiner(",");
+         m_activityCodeSequence.entrySet().stream().forEach(entry -> sequenceJoiner.add("\"" + entry.getKey() + "\": " + entry.getValue() + ""));
+         m_log.println("\"activityCodeSequence\": {" + sequenceJoiner + "},");
+
+         StringJoiner activityJoiner = new StringJoiner(",");
+         for (Activity activity : activities)
+         {
+            Map<UUID, UUID> codes = getActivityCodes(activity);
+            StringJoiner activityCodeJoiner = new StringJoiner(",");
+            codes.entrySet().stream().forEach(entry -> activityCodeJoiner.add("\"" + entry.getKey() + "\": \"" + entry.getValue() + "\""));
+            activityJoiner.add("\"" + activity.getId() + "\": {" + activityCodeJoiner + "}");
+         }
+         m_log.println("\"activityCodes\": {" + activityJoiner + "}}");
+      }
+
+      // First pass: sort the activities by ID to avoid "Comparison method violates its general contract!" error
+      Collections.sort(activities, new Comparator<Activity>()
+      {
+         @Override public int compare(Activity o1, Activity o2)
+         {
+            return comparator.compare(o1.getId(), o2.getId());
+         }
+      });
+
+      // Second pass: perform the main sort
       Collections.sort(activities, new Comparator<Activity>()
       {
          @Override public int compare(Activity o1, Activity o2)
@@ -517,18 +543,18 @@ public final class PhoenixReader extends AbstractProjectReader
          // duration tasks (which aren't tagged as milestones) the finish date
          // will be the same as the start date, so applying our "subtract 1" fix
          // gives us a finish date before the start date. The code below
-         // deals with this situation. 
-         if (DateHelper.compare(task.getStart(), task.getFinish()) > 0)         
+         // deals with this situation.
+         if (DateHelper.compare(task.getStart(), task.getFinish()) > 0)
          {
             task.setFinish(task.getStart());
          }
-         
+
          if (task.getActualStart() != null && task.getActualFinish() != null && DateHelper.compare(task.getActualStart(), task.getActualFinish()) > 0)
          {
             task.setActualFinish(task.getActualStart());
          }
       }
-      
+
       if (task.getActualStart() == null)
       {
          task.setPercentageComplete(Integer.valueOf(0));
@@ -711,17 +737,17 @@ public final class PhoenixReader extends AbstractProjectReader
     */
    Map<UUID, UUID> getActivityCodes(Activity activity)
    {
-      Map<UUID, UUID> map = m_activityCodeCache.get(activity);
-      if (map == null)
+      return m_activityCodeCache.computeIfAbsent(activity, k -> getActivityCodesForCache(k));
+   }
+
+   private Map<UUID, UUID> getActivityCodesForCache(Activity activity)
+   {
+      Map<UUID, UUID> map = new HashMap<>();
+      for (CodeAssignment ca : activity.getCodeAssignment())
       {
-         map = new HashMap<>();
-         m_activityCodeCache.put(activity, map);
-         for (CodeAssignment ca : activity.getCodeAssignment())
-         {
-            UUID code = getUUID(ca.getCodeUuid(), ca.getCode());
-            UUID value = getUUID(ca.getValueUuid(), ca.getValue());
-            map.put(code, value);
-         }
+         UUID code = getCodeUUID(ca.getCodeUuid(), ca.getCode());
+         UUID value = getValueUUID(code, ca.getValueUuid(), ca.getValue());
+         map.put(code, value);
       }
       return map;
    }
@@ -746,17 +772,41 @@ public final class PhoenixReader extends AbstractProjectReader
    }
 
    /**
-    * Utility method. In some cases older compressed PPX files only have a name (or other string attribute)
+    * Utility method. In some cases older compressed PPX files only have a code name
     * but no UUID. This method ensures that we either use the UUID supplied, or if it is missing, we
     * generate a UUID from the name.
     *
-    * @param uuid uuid from object
+    * @param uuid UUID from object
     * @param name name from object
     * @return UUID instance
     */
-   private UUID getUUID(UUID uuid, String name)
+   private UUID getCodeUUID(UUID uuid, String name)
    {
       return uuid == null ? UUID.nameUUIDFromBytes(name.getBytes()) : uuid;
+   }
+
+   /**
+    * Utility method. In some cases older compressed PPX files only have a value name
+    * but no UUID. This method ensures that we either use the UUID supplied, or if it is missing, we
+    * generate a UUID from the value name and parent code UUID.
+    *
+    * @param parent parent code UUID
+    * @param uuid value UUID
+    * @param name value name
+    * @return UUID instance
+    */
+   private UUID getValueUUID(UUID parent, UUID uuid, String name)
+   {
+      UUID result;
+      if (uuid == null)
+      {
+         result = UUID.nameUUIDFromBytes((parent.toString() + ":" + name).getBytes());
+      }
+      else
+      {
+         result = uuid;
+      }
+      return result;
    }
 
    /**
@@ -834,13 +884,33 @@ public final class PhoenixReader extends AbstractProjectReader
       }
    }
 
+   /**
+    * Open the log file for writing.
+    */
+   private void openLogFile()
+   {
+      m_log = DebugLogPrintWriter.getInstance();
+   }
+
+   /**
+    * Close the log file.
+    */
+   private void closeLogFile()
+   {
+      if (m_log != null)
+      {
+         m_log.flush();
+         m_log.close();
+      }
+   }
+
+   private PrintWriter m_log;
    private ProjectFile m_projectFile;
    private Map<String, Task> m_activityMap;
    private Map<UUID, String> m_activityCodeValues;
    Map<UUID, Integer> m_activityCodeSequence;
    private Map<Activity, Map<UUID, UUID>> m_activityCodeCache;
    private EventManager m_eventManager;
-   private List<ProjectListener> m_projectListeners;
    List<UUID> m_codeSequence;
 
    /**

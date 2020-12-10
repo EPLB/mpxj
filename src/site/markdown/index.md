@@ -100,10 +100,13 @@ which MPXJ can read.
 * **SDEF:** SDEF is the Standard Data Exchange Format, as defined by the USACE (United States
 Army Corps of Engineers). SDEF is a fixed column format text file, used to import
 a project schedule up into the QCS (Quality Control System) software from USACE.
-MPXJ can read and write SDEF files.
+MPXJ can read and write SDEF files. The specification for the file format can be found [here](https://www.publications.usace.army.mil/Portals/76/Publications/EngineerRegulations/ER_1-1-11.pdf).
 
 * **SCHEDULE_GRID:** Schedule grid files are produced when a schedule is exported from
 Sage 100 Contractor. MPXJ can read schedule grid files.
+
+* **PROJECT COMMANDER:** Project Commander files are are the native file format used by the
+Project Commander application. MPXJ can read Project Commander files.
 
 ## Java, .Net, Ruby, PHP...
 MPXJ is written and maintained in Java, however this is no barrier to
@@ -137,7 +140,7 @@ dependency of your project:
 <dependency>
   <groupId>net.sf.mpxj</groupId>
   <artifactId>mpxj</artifactId>
-  <version>7.7.1</version>
+  <version>8.0.8</version>
 </dependency>
 ```
 

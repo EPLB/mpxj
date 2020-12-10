@@ -51,25 +51,4 @@ public final class StreamHelper
          count -= skipped;
       }
    }
-
-   /**
-    * Close a stream without raising an exception on error.
-    *
-    * @param stream stream to close
-    */
-   public static void closeQuietly(InputStream stream)
-   {
-      if (stream != null)
-      {
-         try
-         {
-            stream.close();
-         }
-
-         catch (IOException ex)
-         {
-            // Silently ignored
-         }
-      }
-   }
 }

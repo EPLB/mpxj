@@ -49,7 +49,13 @@ import javax.xml.transform.sax.TransformerHandler;
 import javax.xml.transform.stream.StreamResult;
 import javax.xml.transform.stream.StreamSource;
 
+import net.sf.mpxj.AccrueType;
+import net.sf.mpxj.Availability;
+import net.sf.mpxj.AvailabilityTable;
 import net.sf.mpxj.ConstraintType;
+import net.sf.mpxj.CostAccount;
+import net.sf.mpxj.CostRateTable;
+import net.sf.mpxj.CostRateTableEntry;
 import net.sf.mpxj.CurrencySymbolPosition;
 import net.sf.mpxj.CustomField;
 import net.sf.mpxj.CustomFieldContainer;
@@ -57,6 +63,8 @@ import net.sf.mpxj.DataType;
 import net.sf.mpxj.DateRange;
 import net.sf.mpxj.Day;
 import net.sf.mpxj.Duration;
+import net.sf.mpxj.ExpenseCategory;
+import net.sf.mpxj.ExpenseItem;
 import net.sf.mpxj.FieldContainer;
 import net.sf.mpxj.FieldType;
 import net.sf.mpxj.FieldTypeClass;
@@ -68,6 +76,7 @@ import net.sf.mpxj.Relation;
 import net.sf.mpxj.RelationType;
 import net.sf.mpxj.Resource;
 import net.sf.mpxj.ResourceAssignment;
+import net.sf.mpxj.ResourceField;
 import net.sf.mpxj.Task;
 import net.sf.mpxj.TaskField;
 import net.sf.mpxj.TaskType;
@@ -77,17 +86,21 @@ import net.sf.mpxj.common.DateHelper;
 import net.sf.mpxj.common.FieldTypeHelper;
 import net.sf.mpxj.common.NumberHelper;
 import net.sf.mpxj.primavera.schema.APIBusinessObjects;
+import net.sf.mpxj.primavera.schema.ActivityExpenseType;
 import net.sf.mpxj.primavera.schema.ActivityType;
 import net.sf.mpxj.primavera.schema.CalendarType;
 import net.sf.mpxj.primavera.schema.CalendarType.HolidayOrExceptions;
 import net.sf.mpxj.primavera.schema.CalendarType.HolidayOrExceptions.HolidayOrException;
 import net.sf.mpxj.primavera.schema.CalendarType.StandardWorkWeek;
 import net.sf.mpxj.primavera.schema.CalendarType.StandardWorkWeek.StandardWorkHours;
+import net.sf.mpxj.primavera.schema.CostAccountType;
 import net.sf.mpxj.primavera.schema.CurrencyType;
+import net.sf.mpxj.primavera.schema.ExpenseCategoryType;
 import net.sf.mpxj.primavera.schema.ObjectFactory;
 import net.sf.mpxj.primavera.schema.ProjectType;
 import net.sf.mpxj.primavera.schema.RelationshipType;
 import net.sf.mpxj.primavera.schema.ResourceAssignmentType;
+import net.sf.mpxj.primavera.schema.ResourceRateType;
 import net.sf.mpxj.primavera.schema.ResourceType;
 import net.sf.mpxj.primavera.schema.UDFAssignmentType;
 import net.sf.mpxj.primavera.schema.UDFTypeType;
@@ -149,6 +162,31 @@ public final class PrimaveraPMFileWriter extends AbstractProjectWriter
    }
 
    /**
+    * Set the resource field which will be used to populate the Resource ID attribute
+    * in the PMXML file. If you are
+    * reading in a project from Primavera, typically the original Resource ID will
+    * be in the Text1 field, so calling this method with ResourceField.TEXT1 will write
+    * the original Resource ID values in the PMXML file.
+    *
+    * @param field ResourceField instance
+    */
+   public void setResourceIdField(ResourceField field)
+   {
+      m_resourceIDField = field;
+   }
+
+   /**
+    * Retrieve the resource field which will be used to populate the Resource ID attribute
+    * in the PMXML file.
+    *
+    * @return ResourceField instance
+    */
+   public ResourceField getResourceIdField()
+   {
+      return m_resourceIDField;
+   }
+
+   /**
     * {@inheritDoc}
     */
    @Override public void write(ProjectFile projectFile, OutputStream stream) throws IOException
@@ -202,11 +240,15 @@ public final class PrimaveraPMFileWriter extends AbstractProjectWriter
 
          writeCurrency();
          writeUserFieldDefinitions();
+         writeExpenseCategories();
+         writeCostAccounts();
          writeProjectProperties();
          writeCalendars();
          writeResources();
          writeTasks();
          writeAssignments();
+         writeExpenseItems();
+         writeResourceRates();
 
          marshaller.marshal(m_apibo, handler);
       }
@@ -229,6 +271,7 @@ public final class PrimaveraPMFileWriter extends AbstractProjectWriter
          m_project = null;
          m_wbsSequence = 0;
          m_relationshipObjectID = 0;
+         m_rateObjectID = 0;
          m_sortedCustomFieldsList = null;
       }
    }
@@ -352,6 +395,46 @@ public final class PrimaveraPMFileWriter extends AbstractProjectWriter
    }
 
    /**
+    * Write expense categories.
+    */
+   private void writeExpenseCategories()
+   {
+      List<ExpenseCategoryType> expenseCategories = m_apibo.getExpenseCategory();
+      for (ExpenseCategory category : m_projectFile.getExpenseCategories())
+      {
+         ExpenseCategoryType ect = m_factory.createExpenseCategoryType();
+         ect.setObjectId(category.getUniqueID());
+         ect.setName(category.getName());
+         ect.setSequenceNumber(category.getSequence());
+         expenseCategories.add(ect);
+      }
+   }
+
+   /**
+    * Write cost accounts.
+    */
+   private void writeCostAccounts()
+   {
+      List<CostAccountType> costAccounts = m_apibo.getCostAccount();
+      for (CostAccount account : m_projectFile.getCostAccounts())
+      {
+         CostAccountType cat = m_factory.createCostAccountType();
+         cat.setObjectId(account.getUniqueID());
+         cat.setId(account.getID());
+         cat.setName(account.getName());
+         cat.setDescription(account.getDescription());
+         cat.setSequenceNumber(account.getSequence());
+
+         if (account.getParent() != null)
+         {
+            cat.setParentObjectId(account.getParent().getUniqueID());
+         }
+
+         costAccounts.add(cat);
+      }
+   }
+
+   /**
     * This method writes project properties data to a PM XML file.
     */
    private void writeProjectProperties()
@@ -448,6 +531,11 @@ public final class PrimaveraPMFileWriter extends AbstractProjectWriter
       xml.setObjectId(mpxj.getUniqueID());
       xml.setType(type);
 
+      xml.setHoursPerDay(Double.valueOf(mpxj.getMinutesPerDay() / 60.0));
+      xml.setHoursPerWeek(Double.valueOf(mpxj.getMinutesPerWeek() / 60.0));
+      xml.setHoursPerMonth(Double.valueOf(mpxj.getMinutesPerMonth() / 60.0));
+      xml.setHoursPerYear(Double.valueOf(mpxj.getMinutesPerYear() / 60.0));
+
       StandardWorkWeek xmlStandardWorkWeek = m_factory.createCalendarTypeStandardWorkWeek();
       xml.setStandardWorkWeek(xmlStandardWorkWeek);
 
@@ -533,7 +621,7 @@ public final class PrimaveraPMFileWriter extends AbstractProjectWriter
       xml.setDefaultUnitsPerTime(Double.valueOf(1.0));
       xml.setEmailAddress(mpxj.getEmailAddress());
       xml.setGUID(DatatypeConverter.printUUID(mpxj.getGUID()));
-      xml.setId(RESOURCE_ID_PREFIX + mpxj.getUniqueID());
+      xml.setId(getResourceID(mpxj));
       xml.setIsActive(Boolean.TRUE);
       xml.setMaxUnitsPerTime(getPercentage(mpxj.getMaxUnits()));
       xml.setName(mpxj.getName());
@@ -636,6 +724,10 @@ public final class PrimaveraPMFileWriter extends AbstractProjectWriter
       Task parentTask = mpxj.getParentTask();
       Integer parentObjectID = parentTask == null ? null : parentTask.getUniqueID();
 
+      // Not required, but keeps Asta import happy if we ensure that planned start and finish are populated.
+      Date plannedStart = mpxj.getBaselineStart() == null ? mpxj.getStart() : mpxj.getBaselineStart();
+      Date plannedFinish = mpxj.getBaselineFinish() == null ? mpxj.getFinish() : mpxj.getBaselineFinish();
+
       xml.setActualStartDate(mpxj.getActualStart());
       xml.setActualFinishDate(mpxj.getActualFinish());
       xml.setAtCompletionDuration(getDuration(mpxj.getDuration()));
@@ -652,12 +744,14 @@ public final class PrimaveraPMFileWriter extends AbstractProjectWriter
       xml.setPrimaryConstraintType(CONSTRAINT_TYPE_MAP.get(mpxj.getConstraintType()));
       xml.setPrimaryConstraintDate(mpxj.getConstraintDate());
       xml.setPlannedDuration(getDuration(mpxj.getDuration()));
-      xml.setPlannedFinishDate(mpxj.getFinish());
-      xml.setPlannedStartDate(mpxj.getStart());
+      xml.setPlannedFinishDate(plannedFinish);
+      xml.setPlannedStartDate(plannedStart);
       xml.setProjectObjectId(PROJECT_OBJECT_ID);
       xml.setRemainingDuration(getDuration(mpxj.getRemainingDuration()));
+      xml.setRemainingLateStartDate(mpxj.getLateStart());
+      xml.setRemainingLateFinishDate(mpxj.getLateFinish());
+      xml.setRemainingEarlyStartDate(mpxj.getEarlyStart());
       xml.setRemainingEarlyFinishDate(mpxj.getEarlyFinish());
-      xml.setRemainingEarlyStartDate(mpxj.getResume());
       xml.setRemainingLaborCost(NumberHelper.DOUBLE_ZERO);
       xml.setRemainingLaborUnits(NumberHelper.DOUBLE_ZERO);
       xml.setRemainingNonLaborCost(NumberHelper.DOUBLE_ZERO);
@@ -780,6 +874,146 @@ public final class PrimaveraPMFileWriter extends AbstractProjectWriter
          xml.setSuccessorProjectObjectId(PROJECT_OBJECT_ID);
          xml.setType(RELATION_TYPE_MAP.get(mpxj.getType()));
       }
+   }
+
+   /**
+    * Write all expense items for project.
+    */
+   private void writeExpenseItems()
+   {
+      m_projectFile.getTasks().forEach(t -> writeExpenseItems(t));
+   }
+
+   /**
+    * Write expense items for a task.
+    *
+    * @param task Task instance
+    */
+   private void writeExpenseItems(Task task)
+   {
+      List<ExpenseItem> items = task.getExpenseItems();
+      if (items != null && !items.isEmpty())
+      {
+         List<ActivityExpenseType> expenses = m_project.getActivityExpense();
+
+         for (ExpenseItem item : items)
+         {
+            ActivityExpenseType expense = m_factory.createActivityExpenseType();
+            expenses.add(expense);
+
+            expense.setAccrualType(ACCRUE_TYPE_MAP.get(item.getAccrueType()));
+            //expense.setActivityId(value);
+            //expense.setActivityName(value);
+            expense.setActivityObjectId(task.getUniqueID());
+            expense.setActualCost(item.getActualCost());
+            expense.setActualUnits(item.getActualUnits());
+            expense.setAtCompletionCost(item.getAtCompletionCost());
+            expense.setAtCompletionUnits(item.getAtCompletionUnits());
+            expense.setAutoComputeActuals(Boolean.valueOf(item.getAutoComputeActuals()));
+            //expense.setCBSCode(value);
+            //expense.setCBSId(value);
+
+            if (item.getAccount() != null)
+            {
+               expense.setCostAccountObjectId(item.getAccount().getUniqueID());
+            }
+
+            //expense.setCreateDate(value);
+            //expense.setCreateUser(value);
+            expense.setDocumentNumber(item.getDocumentNumber());
+
+            if (item.getCategory() != null)
+            {
+               expense.setExpenseCategoryObjectId(item.getCategory().getUniqueID());
+            }
+
+            expense.setExpenseDescription(item.getDescription());
+
+            expense.setExpenseItem(item.getName());
+            //expense.setExpensePercentComplete(value);
+            //expense.setIsBaseline(value);
+            //expense.setIsTemplate(value);
+            //expense.setLastUpdateDate(value);
+            //expense.setLastUpdateUser(value);
+            expense.setObjectId(item.getUniqueID());
+            expense.setPlannedCost(item.getPlannedCost());
+            expense.setPlannedUnits(item.getPlannedUnits());
+            expense.setPricePerUnit(item.getPricePerUnit());
+            expense.setProjectId(PROJECT_ID);
+            expense.setProjectObjectId(PROJECT_OBJECT_ID);
+            expense.setRemainingCost(item.getRemainingCost());
+            expense.setRemainingUnits(item.getRemainingUnits());
+            expense.setUnitOfMeasure(item.getUnitOfMeasure());
+            expense.setVendor(item.getVendor());
+         }
+      }
+   }
+
+   /**
+    * Write rate information for each resource.
+    */
+   private void writeResourceRates()
+   {
+      m_projectFile.getResources().forEach(r -> writeResourceRates(r));
+   }
+
+   /**
+    * Write rate information for a single resource.
+    *
+    * @param resource Resource instance
+    */
+   private void writeResourceRates(Resource resource)
+   {
+      CostRateTable table = resource.getCostRateTable(0);
+      AvailabilityTable availabilityTable = resource.getAvailability();
+
+      if (table != null)
+      {
+         for (CostRateTableEntry entry : table)
+         {
+            if (costRateTableWriteRequired(entry))
+            {
+               Availability availability = availabilityTable.getEntryByDate(entry.getStartDate());
+               Double maxUnits = availability == null ? Double.valueOf(1) : Double.valueOf(availability.getUnits().doubleValue() / 100.0);
+
+               ResourceRateType rate = m_factory.createResourceRateType();
+               m_apibo.getResourceRate().add(rate);
+
+               //rate.setCreateDate(value);
+               //rate.setCreateUser(value);
+               rate.setEffectiveDate(entry.getStartDate());
+               //rate.setLastUpdateDate(value);
+               //rate.setLastUpdateUser(value);
+               rate.setMaxUnitsPerTime(maxUnits);
+               rate.setObjectId(Integer.valueOf(++m_rateObjectID));
+               rate.setPricePerUnit(Double.valueOf(entry.getStandardRate().getAmount()));
+               //rate.setPricePerUnit2(value);
+               //rate.setPricePerUnit3(value);
+               //rate.setPricePerUnit4(value);
+               //rate.setPricePerUnit5(value);
+               //rate.setResourceId(value);
+               //rate.setResourceName(value);
+               rate.setResourceObjectId(resource.getUniqueID());
+               //rate.setShiftPeriodObjectId(value);
+            }
+         }
+      }
+   }
+
+   /**
+    * This method determines whether the cost rate table should be written.
+    * A default cost rate table should not be written to the file.
+    *
+    * @param entry cost rate table entry
+    * @return boolean flag
+    */
+   private boolean costRateTableWriteRequired(CostRateTableEntry entry)
+   {
+      boolean fromDate = (DateHelper.compare(entry.getStartDate(), DateHelper.START_DATE_NA) > 0);
+      boolean toDate = (DateHelper.compare(entry.getEndDate(), DateHelper.END_DATE_NA) > 0);
+      boolean overtimeRate = (entry.getOvertimeRate() != null && entry.getOvertimeRate().getAmount() != 0);
+      boolean standardRate = (entry.getStandardRate() != null && entry.getStandardRate().getAmount() != 0);
+      return (fromDate || toDate || overtimeRate || standardRate);
    }
 
    /**
@@ -1050,6 +1284,7 @@ public final class PrimaveraPMFileWriter extends AbstractProjectWriter
 
    /**
     * Retrieve the Activity ID value for this task.
+    * 
     * @param task Task instance
     * @return Activity ID value
     */
@@ -1065,6 +1300,45 @@ public final class PrimaveraPMFileWriter extends AbstractProjectWriter
          }
       }
       return result;
+   }
+
+   /**
+    * Retrieve the Resource ID value for this task.
+    * 
+    * @param resource Resource instance
+    * @return Resource ID value
+    */
+   private String getResourceID(Resource resource)
+   {
+      String result = null;
+      if (m_resourceIDField == null)
+      {
+         result = getDefaultResourceID(resource);
+      }
+      else
+      {
+         Object value = resource.getCachedValue(m_resourceIDField);
+         if (value == null || value.toString().isEmpty())
+         {
+            result = getDefaultResourceID(resource);
+         }
+         else
+         {
+            result = value.toString();
+         }
+      }
+      return result;
+   }
+
+   /**
+    * Generate a default Resource ID for a resource.
+    * 
+    * @param resource Resource instance
+    * @return generated Resource ID
+    */
+   private String getDefaultResourceID(Resource resource)
+   {
+      return RESOURCE_ID_PREFIX + resource.getUniqueID();
    }
 
    /**
@@ -1088,6 +1362,12 @@ public final class PrimaveraPMFileWriter extends AbstractProjectWriter
       if (m_activityTypeField == null)
       {
          m_activityTypeField = (TaskField) customFields.getFieldByAlias(FieldTypeClass.TASK, "Activity Type");
+      }
+
+      // If the caller hasn't already supplied a value for this field
+      if (m_resourceIDField == null)
+      {
+         m_resourceIDField = (ResourceField) customFields.getFieldByAlias(FieldTypeClass.RESOURCE, "Resource ID");
       }
    }
 
@@ -1199,19 +1479,32 @@ public final class PrimaveraPMFileWriter extends AbstractProjectWriter
       DURATION_TYPE_MAP.put(TaskType.FIXED_WORK, "Fixed Duration and Units");
    }
 
-   private static final Map<ConstraintType, String> CONSTRAINT_TYPE_MAP = new HashMap<>();
-   static
+   /**
+    * Temporary, return to static block initialisation once deprecation is removed.
+    * TODO: use static block initialisation
+    * 
+    * @return populated map
+    */
+   @SuppressWarnings("deprecation") private static final Map<ConstraintType, String> createConstraintTypeMap()
    {
-      CONSTRAINT_TYPE_MAP.put(ConstraintType.MUST_START_ON, "Start On");
-      CONSTRAINT_TYPE_MAP.put(ConstraintType.START_NO_LATER_THAN, "Start On or Before");
-      CONSTRAINT_TYPE_MAP.put(ConstraintType.START_NO_EARLIER_THAN, "Start On or After");
-      CONSTRAINT_TYPE_MAP.put(ConstraintType.MUST_FINISH_ON, "Finish On");
-      CONSTRAINT_TYPE_MAP.put(ConstraintType.FINISH_NO_LATER_THAN, "Finish On or Before");
-      CONSTRAINT_TYPE_MAP.put(ConstraintType.FINISH_NO_EARLIER_THAN, "Finish On or After");
-      CONSTRAINT_TYPE_MAP.put(ConstraintType.AS_LATE_AS_POSSIBLE, "As Late As Possible");
-      CONSTRAINT_TYPE_MAP.put(ConstraintType.MANDATORY_START, "Mandatory Start");
-      CONSTRAINT_TYPE_MAP.put(ConstraintType.MANDATORY_FINISH, "Mandatory Finish");
+      Map<ConstraintType, String> map = new HashMap<>();
+
+      map.put(ConstraintType.START_ON, "Start On");
+      map.put(ConstraintType.START_NO_LATER_THAN, "Start On or Before");
+      map.put(ConstraintType.START_NO_EARLIER_THAN, "Start On or After");
+      map.put(ConstraintType.FINISH_ON, "Finish On");
+      map.put(ConstraintType.FINISH_NO_LATER_THAN, "Finish On or Before");
+      map.put(ConstraintType.FINISH_NO_EARLIER_THAN, "Finish On or After");
+      map.put(ConstraintType.AS_LATE_AS_POSSIBLE, "As Late As Possible");
+      map.put(ConstraintType.MUST_START_ON, "Mandatory Start");
+      map.put(ConstraintType.MUST_FINISH_ON, "Mandatory Finish");
+      map.put(ConstraintType.MANDATORY_START, "Mandatory Start");
+      map.put(ConstraintType.MANDATORY_FINISH, "Mandatory Finish");
+
+      return map;
    }
+
+   private static final Map<ConstraintType, String> CONSTRAINT_TYPE_MAP = createConstraintTypeMap();
 
    private static final Map<String, String> ACTIVITY_TYPE_MAP = new HashMap<>();
    static
@@ -1224,13 +1517,23 @@ public final class PrimaveraPMFileWriter extends AbstractProjectWriter
       ACTIVITY_TYPE_MAP.put("TT_WBS", "WBS Summary");
    }
 
+   private static final Map<AccrueType, String> ACCRUE_TYPE_MAP = new HashMap<>();
+   static
+   {
+      ACCRUE_TYPE_MAP.put(AccrueType.PRORATED, "Uniform Over Activity");
+      ACCRUE_TYPE_MAP.put(AccrueType.END, "End of Activity");
+      ACCRUE_TYPE_MAP.put(AccrueType.START, "Start of Activity");
+   }
+
    private ProjectFile m_projectFile;
    private ObjectFactory m_factory;
    private APIBusinessObjects m_apibo;
    private ProjectType m_project;
    private int m_wbsSequence;
    private int m_relationshipObjectID;
+   private int m_rateObjectID;
    private TaskField m_activityIDField;
+   private ResourceField m_resourceIDField;
    private TaskField m_activityTypeField;
    private List<CustomField> m_sortedCustomFieldsList;
 }

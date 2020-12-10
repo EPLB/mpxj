@@ -27,27 +27,22 @@ import java.io.InputStream;
 import java.text.DecimalFormat;
 import java.text.NumberFormat;
 import java.text.ParseException;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import javax.xml.bind.JAXBContext;
 import javax.xml.bind.JAXBException;
-import javax.xml.bind.Unmarshaller;
 import javax.xml.parsers.ParserConfigurationException;
-import javax.xml.parsers.SAXParser;
-import javax.xml.parsers.SAXParserFactory;
-import javax.xml.transform.sax.SAXSource;
 
-import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
-import org.xml.sax.XMLReader;
 
 import net.sf.mpxj.ConstraintType;
 import net.sf.mpxj.DateRange;
@@ -73,7 +68,7 @@ import net.sf.mpxj.TaskType;
 import net.sf.mpxj.TimeUnit;
 import net.sf.mpxj.common.DateHelper;
 import net.sf.mpxj.common.NumberHelper;
-import net.sf.mpxj.listener.ProjectListener;
+import net.sf.mpxj.common.UnmarshalHelper;
 import net.sf.mpxj.planner.schema.Allocation;
 import net.sf.mpxj.planner.schema.Allocations;
 import net.sf.mpxj.planner.schema.Calendars;
@@ -88,25 +83,13 @@ import net.sf.mpxj.planner.schema.Predecessors;
 import net.sf.mpxj.planner.schema.Project;
 import net.sf.mpxj.planner.schema.Resources;
 import net.sf.mpxj.planner.schema.Tasks;
-import net.sf.mpxj.reader.AbstractProjectReader;
+import net.sf.mpxj.reader.AbstractProjectStreamReader;
 
 /**
  * This class creates a new ProjectFile instance by reading a Planner file.
  */
-public final class PlannerReader extends AbstractProjectReader
+public final class PlannerReader extends AbstractProjectStreamReader
 {
-   /**
-    * {@inheritDoc}
-    */
-   @Override public void addProjectListener(ProjectListener listener)
-   {
-      if (m_projectListeners == null)
-      {
-         m_projectListeners = new LinkedList<>();
-      }
-      m_projectListeners.add(listener);
-   }
-
    /**
     * {@inheritDoc}
     */
@@ -114,6 +97,11 @@ public final class PlannerReader extends AbstractProjectReader
    {
       try
       {
+         if (CONTEXT == null)
+         {
+            throw CONTEXT_EXCEPTION;
+         }
+
          m_projectFile = new ProjectFile();
          m_eventManager = m_projectFile.getEventManager();
 
@@ -127,23 +115,9 @@ public final class PlannerReader extends AbstractProjectReader
          m_projectFile.getProjectProperties().setFileApplication("Planner");
          m_projectFile.getProjectProperties().setFileType("XML");
 
-         m_eventManager.addProjectListeners(m_projectListeners);
+         addListenersToProject(m_projectFile);
 
-         SAXParserFactory factory = SAXParserFactory.newInstance();
-         factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-         factory.setNamespaceAware(true);
-         SAXParser saxParser = factory.newSAXParser();
-         XMLReader xmlReader = saxParser.getXMLReader();
-         SAXSource doc = new SAXSource(xmlReader, new InputSource(stream));
-
-         if (CONTEXT == null)
-         {
-            throw CONTEXT_EXCEPTION;
-         }
-
-         Unmarshaller unmarshaller = CONTEXT.createUnmarshaller();
-
-         Project plannerProject = (Project) unmarshaller.unmarshal(doc);
+         Project plannerProject = (Project) UnmarshalHelper.unmarshal(CONTEXT, stream);
 
          readProjectProperties(plannerProject);
          readCalendars(plannerProject);
@@ -179,6 +153,14 @@ public final class PlannerReader extends AbstractProjectReader
          m_projectFile = null;
          m_defaultCalendar = null;
       }
+   }
+
+   /**
+    * {@inheritDoc}
+    */
+   @Override public List<ProjectFile> readAll(InputStream inputStream) throws MPXJException
+   {
+      return Arrays.asList(read(inputStream));
    }
 
    /**
@@ -487,7 +469,7 @@ public final class PlannerReader extends AbstractProjectReader
       mpxjResource.setName(plannerResource.getName());
       mpxjResource.setNotes(plannerResource.getNote());
       mpxjResource.setInitials(plannerResource.getShortName());
-      mpxjResource.setType(getInt(plannerResource.getType()) == 2 ? ResourceType.MATERIAL : ResourceType.WORK);
+      mpxjResource.setType(getResourceType(plannerResource.getType()));
       //plannerResource.getStdRate();
       //plannerResource.getOvtRate();
       //plannerResource.getUnits();
@@ -561,7 +543,7 @@ public final class PlannerReader extends AbstractProjectReader
       //
       // Read task attributes from Planner
       //
-      Integer percentComplete = getInteger(plannerTask.getPercentComplete());
+      Integer percentComplete = getPercentComplete(plannerTask.getPercentComplete());
       //plannerTask.getDuration(); calculate from end - start, not in file?
       //plannerTask.getEffort(); not set?
       mpxjTask.setFinish(getDateTime(plannerTask.getEnd()));
@@ -570,7 +552,7 @@ public final class PlannerReader extends AbstractProjectReader
       mpxjTask.setNotes(plannerTask.getNote());
       mpxjTask.setPercentageComplete(percentComplete);
       mpxjTask.setPercentageWorkComplete(percentComplete);
-      mpxjTask.setPriority(Priority.getInstance(getInt(plannerTask.getPriority()) / 10));
+      mpxjTask.setPriority(getPriority(plannerTask.getPriority()));
       mpxjTask.setType(getTaskType(plannerTask.getScheduling()));
       //plannerTask.getStart(); // Start day, time is always 00:00?
       mpxjTask.setMilestone(plannerTask.getType().equals("milestone"));
@@ -578,6 +560,13 @@ public final class PlannerReader extends AbstractProjectReader
       mpxjTask.setWork(getDuration(plannerTask.getWork()));
 
       mpxjTask.setStart(getDateTime(plannerTask.getWorkStart()));
+
+      // Additional non-standard attribute - useful for generating schedules to be read by MPXJ
+      String wbs = plannerTask.getWbs();
+      if (wbs != null && !wbs.isEmpty())
+      {
+         mpxjTask.setWBS(wbs);
+      }
 
       //
       // Read constraint
@@ -638,7 +627,9 @@ public final class PlannerReader extends AbstractProjectReader
             }
          }
       }
+
       mpxjTask.setEffortDriven(true);
+      mpxjTask.setCritical(false);
 
       m_eventManager.fireTaskReadEvent(mpxjTask);
 
@@ -700,80 +691,83 @@ public final class PlannerReader extends AbstractProjectReader
    private void readAssignments(Project plannerProject)
    {
       Allocations allocations = plannerProject.getAllocations();
-      List<Allocation> allocationList = allocations.getAllocation();
-      Set<Task> tasksWithAssignments = new HashSet<>();
-
-      for (Allocation allocation : allocationList)
+      if (allocations != null)
       {
-         Integer taskID = getInteger(allocation.getTaskId());
-         Integer resourceID = getInteger(allocation.getResourceId());
-         Integer units = getInteger(allocation.getUnits());
+         List<Allocation> allocationList = allocations.getAllocation();
+         Set<Task> tasksWithAssignments = new HashSet<>();
 
-         Task task = m_projectFile.getTaskByUniqueID(taskID);
-         Resource resource = m_projectFile.getResourceByUniqueID(resourceID);
-
-         if (task != null && resource != null)
+         for (Allocation allocation : allocationList)
          {
-            Duration work = task.getWork();
-            int percentComplete = NumberHelper.getInt(task.getPercentageComplete());
+            Integer taskID = getInteger(allocation.getTaskId());
+            Integer resourceID = getInteger(allocation.getResourceId());
+            Integer units = getResourceAssignmentUnits(allocation.getUnits());
 
-            ResourceAssignment assignment = task.addResourceAssignment(resource);
-            assignment.setUnits(units);
-            assignment.setWork(work);
+            Task task = m_projectFile.getTaskByUniqueID(taskID);
+            Resource resource = m_projectFile.getResourceByUniqueID(resourceID);
 
-            if (percentComplete != 0)
+            if (task != null && resource != null)
             {
-               Duration actualWork = Duration.getInstance((work.getDuration() * percentComplete) / 100, work.getUnits());
-               assignment.setActualWork(actualWork);
-               assignment.setRemainingWork(Duration.getInstance(work.getDuration() - actualWork.getDuration(), work.getUnits()));
-            }
-            else
-            {
-               assignment.setRemainingWork(work);
-            }
+               Duration work = task.getWork();
+               int percentComplete = NumberHelper.getInt(task.getPercentageComplete());
 
-            assignment.setStart(task.getStart());
-            assignment.setFinish(task.getFinish());
-
-            tasksWithAssignments.add(task);
-
-            m_eventManager.fireAssignmentReadEvent(assignment);
-         }
-      }
-
-      //
-      // Adjust work per assignment for tasks with multiple assignments
-      //
-      for (Task task : tasksWithAssignments)
-      {
-         List<ResourceAssignment> assignments = task.getResourceAssignments();
-         if (assignments.size() > 1)
-         {
-            double maxUnits = 0;
-            for (ResourceAssignment assignment : assignments)
-            {
-               maxUnits += assignment.getUnits().doubleValue();
-            }
-
-            for (ResourceAssignment assignment : assignments)
-            {
-               Duration work = assignment.getWork();
-               double factor = assignment.getUnits().doubleValue() / maxUnits;
-
-               work = Duration.getInstance(work.getDuration() * factor, work.getUnits());
+               ResourceAssignment assignment = task.addResourceAssignment(resource);
+               assignment.setUnits(units);
                assignment.setWork(work);
-               Duration actualWork = assignment.getActualWork();
-               if (actualWork != null)
+
+               if (percentComplete != 0)
                {
-                  actualWork = Duration.getInstance(actualWork.getDuration() * factor, actualWork.getUnits());
+                  Duration actualWork = Duration.getInstance((work.getDuration() * percentComplete) / 100, work.getUnits());
                   assignment.setActualWork(actualWork);
+                  assignment.setRemainingWork(Duration.getInstance(work.getDuration() - actualWork.getDuration(), work.getUnits()));
+               }
+               else
+               {
+                  assignment.setRemainingWork(work);
                }
 
-               Duration remainingWork = assignment.getRemainingWork();
-               if (remainingWork != null)
+               assignment.setStart(task.getStart());
+               assignment.setFinish(task.getFinish());
+
+               tasksWithAssignments.add(task);
+
+               m_eventManager.fireAssignmentReadEvent(assignment);
+            }
+         }
+
+         //
+         // Adjust work per assignment for tasks with multiple assignments
+         //
+         for (Task task : tasksWithAssignments)
+         {
+            List<ResourceAssignment> assignments = task.getResourceAssignments();
+            if (assignments.size() > 1)
+            {
+               double maxUnits = 0;
+               for (ResourceAssignment assignment : assignments)
                {
-                  remainingWork = Duration.getInstance(remainingWork.getDuration() * factor, remainingWork.getUnits());
-                  assignment.setRemainingWork(remainingWork);
+                  maxUnits += assignment.getUnits().doubleValue();
+               }
+
+               for (ResourceAssignment assignment : assignments)
+               {
+                  Duration work = assignment.getWork();
+                  double factor = assignment.getUnits().doubleValue() / maxUnits;
+
+                  work = Duration.getInstance(work.getDuration() * factor, work.getUnits());
+                  assignment.setWork(work);
+                  Duration actualWork = assignment.getActualWork();
+                  if (actualWork != null)
+                  {
+                     actualWork = Duration.getInstance(actualWork.getDuration() * factor, actualWork.getUnits());
+                     assignment.setActualWork(actualWork);
+                  }
+
+                  Duration remainingWork = assignment.getRemainingWork();
+                  if (remainingWork != null)
+                  {
+                     remainingWork = Duration.getInstance(remainingWork.getDuration() * factor, remainingWork.getUnits());
+                     assignment.setRemainingWork(remainingWork);
+                  }
                }
             }
          }
@@ -790,6 +784,11 @@ public final class PlannerReader extends AbstractProjectReader
     */
    private Date getDateTime(String value) throws MPXJException
    {
+      if (value == null)
+      {
+         return null;
+      }
+
       try
       {
          Number year = m_fourDigitFormat.parse(value.substring(0, 4));
@@ -975,13 +974,57 @@ public final class PlannerReader extends AbstractProjectReader
       return (result);
    }
 
+   /**
+    * Retrieve task priority, default to medium if not present.
+    *
+    * @param value string representation of task priority
+    * @return Priority instance
+    */
+   private Priority getPriority(String value)
+   {
+      int priority = value == null ? Priority.MEDIUM : getInt(value) / 10;
+      return Priority.getInstance(priority);
+   }
+
+   /**
+    * Retrieve task percent complete. Default to zero if not present.
+    *
+    * @param value string representation of percent complete.
+    * @return percent complete value
+    */
+   private Integer getPercentComplete(String value)
+   {
+      return value == null ? Integer.valueOf(0) : getInteger(value);
+   }
+
+   /**
+    * Retrieve resource type, default to work if not present.
+    *
+    * @param value string representation of task priority
+    * @return ResourceType instance
+    */
+   private ResourceType getResourceType(String value)
+   {
+      return value == null ? ResourceType.WORK : (getInt(value) == 2 ? ResourceType.MATERIAL : ResourceType.WORK);
+   }
+
+   /**
+    * Retrieve resource assignment units, default to 100% if not present.
+    *
+    * @param value string representation of resource assignment units
+    * @return resource assignment units
+    */
+   private Integer getResourceAssignmentUnits(String value)
+   {
+      return value == null ? Integer.valueOf(100) : getInteger(value);
+   }
+
    private ProjectFile m_projectFile;
    private EventManager m_eventManager;
    private ProjectCalendar m_defaultCalendar;
    private NumberFormat m_twoDigitFormat = new DecimalFormat("00");
    private NumberFormat m_fourDigitFormat = new DecimalFormat("0000");
-   private List<DateRange> m_defaultWorkingHours = new LinkedList<>();
-   private List<ProjectListener> m_projectListeners;
+   private List<DateRange> m_defaultWorkingHours = new ArrayList<>();
 
    private static Map<String, RelationType> RELATIONSHIP_TYPES = new HashMap<>();
    static

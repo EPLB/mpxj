@@ -31,6 +31,7 @@ import net.sf.mpxj.DataType;
 import net.sf.mpxj.Duration;
 import net.sf.mpxj.FieldType;
 import net.sf.mpxj.FieldTypeClass;
+import net.sf.mpxj.ProjectField;
 import net.sf.mpxj.ResourceField;
 import net.sf.mpxj.TaskField;
 
@@ -48,31 +49,43 @@ public final class FieldTypeHelper
    public static int getFieldID(FieldType type)
    {
       int result;
-      switch (type.getFieldTypeClass())
+      if (type == null)
       {
-         case TASK:
+         result = -1;
+      }
+      else
+      {
+         switch (type.getFieldTypeClass())
          {
-            result = MPPTaskField.TASK_FIELD_BASE | MPPTaskField.getID((TaskField) type);
-            break;
-         }
+            case TASK:
+            {
+               result = MPPTaskField.TASK_FIELD_BASE | MPPTaskField.getID((TaskField) type);
+               break;
+            }
 
-         case RESOURCE:
-         {
-            result = MPPResourceField.RESOURCE_FIELD_BASE | MPPResourceField.getID((ResourceField) type);
-            break;
-         }
+            case RESOURCE:
+            {
+               result = MPPResourceField.RESOURCE_FIELD_BASE | MPPResourceField.getID((ResourceField) type);
+               break;
+            }
 
-         case ASSIGNMENT:
-         {
-            result = MPPAssignmentField.ASSIGNMENT_FIELD_BASE | MPPAssignmentField.getID((AssignmentField) type);
-            break;
-         }
+            case ASSIGNMENT:
+            {
+               result = MPPAssignmentField.ASSIGNMENT_FIELD_BASE | MPPAssignmentField.getID((AssignmentField) type);
+               break;
+            }
 
-         default:
-         {
-            result = -1;
-         }
+            case PROJECT:
+            {
+               result = MPPProjectField.PROJECT_FIELD_BASE | MPPProjectField.getID((ProjectField) type);
+               break;
+            }
 
+            default:
+            {
+               result = -1;
+            }
+         }
       }
       return result;
    }
@@ -128,6 +141,16 @@ public final class FieldTypeHelper
             if (result == null)
             {
                result = getPlaceholder(ConstraintField.class, index);
+            }
+            break;
+         }
+
+         case MPPProjectField.PROJECT_FIELD_BASE:
+         {
+            result = MPPProjectField.getInstance(index);
+            if (result == null)
+            {
+               result = getPlaceholder(ProjectField.class, index);
             }
             break;
          }

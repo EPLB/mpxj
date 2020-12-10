@@ -27,8 +27,8 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.util.Arrays;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
@@ -36,26 +36,13 @@ import net.sf.mpxj.CustomFieldContainer;
 import net.sf.mpxj.MPXJException;
 import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.TaskField;
-import net.sf.mpxj.listener.ProjectListener;
-import net.sf.mpxj.reader.AbstractProjectReader;
+import net.sf.mpxj.reader.AbstractProjectStreamReader;
 
 /**
  * Read the contents of an SDEF file.
  */
-public final class SDEFReader extends AbstractProjectReader
+public final class SDEFReader extends AbstractProjectStreamReader
 {
-   /**
-    * {@inheritDoc}
-    */
-   @Override public void addProjectListener(ProjectListener listener)
-   {
-      if (m_projectListeners == null)
-      {
-         m_projectListeners = new LinkedList<>();
-      }
-      m_projectListeners.add(listener);
-   }
-
    /**
     * {@inheritDoc}
     */
@@ -65,22 +52,22 @@ public final class SDEFReader extends AbstractProjectReader
       ProjectFile project = context.getProject();
 
       CustomFieldContainer fields = project.getCustomFields();
-      fields.getCustomField(TaskField.TEXT1).setAlias("Activity ID");
-      fields.getCustomField(TaskField.TEXT2).setAlias("Hammock Code");
-      fields.getCustomField(TaskField.NUMBER1).setAlias("Workers Per Day");
-      fields.getCustomField(TaskField.TEXT3).setAlias("Responsibility Code");
-      fields.getCustomField(TaskField.TEXT4).setAlias("Work Area Code");
-      fields.getCustomField(TaskField.TEXT5).setAlias("Mod of Claim No");
-      fields.getCustomField(TaskField.TEXT6).setAlias("Bide Item");
-      fields.getCustomField(TaskField.TEXT7).setAlias("Phase of Work");
-      fields.getCustomField(TaskField.TEXT8).setAlias("Category of Work");
-      fields.getCustomField(TaskField.TEXT9).setAlias("Feature of Work");
-      fields.getCustomField(TaskField.COST1).setAlias("Stored Material");
+      fields.getCustomField(TaskField.TEXT1).setAlias("Activity ID").setUserDefined(false);
+      fields.getCustomField(TaskField.TEXT2).setAlias("Hammock Code").setUserDefined(false);
+      fields.getCustomField(TaskField.NUMBER1).setAlias("Workers Per Day").setUserDefined(false);
+      fields.getCustomField(TaskField.TEXT3).setAlias("Responsibility Code").setUserDefined(false);
+      fields.getCustomField(TaskField.TEXT4).setAlias("Work Area Code").setUserDefined(false);
+      fields.getCustomField(TaskField.TEXT5).setAlias("Mod or Claim No").setUserDefined(false);
+      fields.getCustomField(TaskField.TEXT6).setAlias("Bid Item").setUserDefined(false);
+      fields.getCustomField(TaskField.TEXT7).setAlias("Phase of Work").setUserDefined(false);
+      fields.getCustomField(TaskField.TEXT8).setAlias("Category of Work").setUserDefined(false);
+      fields.getCustomField(TaskField.TEXT9).setAlias("Feature of Work").setUserDefined(false);
+      fields.getCustomField(TaskField.COST1).setAlias("Stored Material").setUserDefined(false);
 
       project.getProjectProperties().setFileApplication("SDEF");
       project.getProjectProperties().setFileType("SDEF");
 
-      context.getEventManager().addProjectListeners(m_projectListeners);
+      addListenersToProject(project);
 
       BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
 
@@ -98,6 +85,14 @@ public final class SDEFReader extends AbstractProjectReader
       }
 
       return project;
+   }
+
+   /**
+    * {@inheritDoc}
+    */
+   @Override public List<ProjectFile> readAll(InputStream inputStream) throws MPXJException
+   {
+      return Arrays.asList(read(inputStream));
    }
 
    /**
@@ -138,8 +133,6 @@ public final class SDEFReader extends AbstractProjectReader
 
       return true;
    }
-
-   private List<ProjectListener> m_projectListeners;
 
    private static final Map<String, Class<? extends SDEFRecord>> RECORD_MAP = new HashMap<>();
    static

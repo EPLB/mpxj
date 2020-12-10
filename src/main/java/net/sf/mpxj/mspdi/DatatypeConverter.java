@@ -1151,7 +1151,18 @@ public final class DatatypeConverter
     */
    public static final BigDecimal printCurrency(Number value)
    {
-      return (value == null || value.doubleValue() == 0 ? null : new BigDecimal(value.doubleValue() * 100));
+      return value == null || value.doubleValue() == 0 ? null : printCurrencyMandatory(value);
+   }
+
+   /**
+    * Print currency.
+    *
+    * @param value currency value
+    * @return currency value
+    */
+   public static final BigDecimal printCurrencyMandatory(Number value)
+   {
+      return value == null || value.doubleValue() == 0 ? new BigDecimal(0) : new BigDecimal(value.doubleValue() * 100);
    }
 
    /**
@@ -1665,12 +1676,18 @@ public final class DatatypeConverter
     */
    public static final BigDecimal printRate(Rate rate)
    {
-      BigDecimal result = null;
-      if (rate != null && rate.getAmount() != 0)
-      {
-         result = new BigDecimal(rate.getAmount());
-      }
-      return result;
+      return rate == null || rate.getAmount() == 0 ? null : printRateMandatory(rate);
+   }
+
+   /**
+    * Print rate.
+    *
+    * @param rate Rate instance
+    * @return rate value
+    */
+   public static final BigDecimal printRateMandatory(Rate rate)
+   {
+      return rate == null || rate.getAmount() == 0 ? new BigDecimal(0) : new BigDecimal(rate.getAmount());
    }
 
    /**
@@ -1730,7 +1747,7 @@ public final class DatatypeConverter
     * @param value ConstraintType instance
     * @return constraint type value
     */
-   public static final BigInteger printConstraintType(ConstraintType value)
+   @SuppressWarnings("deprecation") public static final BigInteger printConstraintType(ConstraintType value)
    {
       if (value == null)
       {
@@ -1740,12 +1757,14 @@ public final class DatatypeConverter
       switch (value)
       {
          case MANDATORY_START:
+         case START_ON:
          {
             value = ConstraintType.MUST_START_ON;
             break;
          }
 
          case MANDATORY_FINISH:
+         case FINISH_ON:
          {
             value = ConstraintType.MUST_FINISH_ON;
             break;

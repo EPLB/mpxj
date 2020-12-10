@@ -24,8 +24,8 @@
 
 package net.sf.mpxj;
 
+import java.util.ArrayList;
 import java.util.Date;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.UUID;
 
@@ -1340,7 +1340,7 @@ public final class Resource extends ProjectEntity implements Comparable<Resource
          throw new MPXJException(MPXJException.MAXIMUM_RECORDS);
       }
 
-      ProjectCalendar calendar = new ProjectCalendar(getParentFile());
+      ProjectCalendar calendar = getParentFile().addCalendar();
       setResourceCalendar(calendar);
       return calendar;
    }
@@ -2125,9 +2125,9 @@ public final class Resource extends ProjectEntity implements Comparable<Resource
     * @param index field index
     * @return field value
     */
-   public String getEnterpriseCustomField(int index)
+   public byte[] getEnterpriseCustomField(int index)
    {
-      return ((String) getCachedValue(selectField(ResourceFieldLists.ENTERPRISE_CUSTOM_FIELD, index)));
+      return ((byte[]) getCachedValue(selectField(ResourceFieldLists.ENTERPRISE_CUSTOM_FIELD, index)));
    }
 
    /**
@@ -2136,7 +2136,7 @@ public final class Resource extends ProjectEntity implements Comparable<Resource
     * @param index field index
     * @param value field value
     */
-   public void setEnterpriseCustomField(int index, String value)
+   public void setEnterpriseCustomField(int index, byte[] value)
    {
       set(selectField(ResourceFieldLists.ENTERPRISE_CUSTOM_FIELD, index), value);
    }
@@ -2250,7 +2250,7 @@ public final class Resource extends ProjectEntity implements Comparable<Resource
     */
    public CostRateTable getCostRateTable(int index)
    {
-      return m_costRateTables[index];
+      return index < 0 || index >= CostRateTable.MAX_TABLES ? null : m_costRateTables[index];
    }
 
    /**
@@ -2452,7 +2452,7 @@ public final class Resource extends ProjectEntity implements Comparable<Resource
    {
       if (m_listeners == null)
       {
-         m_listeners = new LinkedList<>();
+         m_listeners = new ArrayList<>();
       }
       m_listeners.add(listener);
    }
@@ -2550,13 +2550,13 @@ public final class Resource extends ProjectEntity implements Comparable<Resource
    /**
     * List of all assignments for this resource.
     */
-   private List<ResourceAssignment> m_assignments = new LinkedList<>();
+   private List<ResourceAssignment> m_assignments = new ArrayList<>();
 
    private boolean m_eventsEnabled = true;
    private boolean m_null;
    private String m_activeDirectoryGUID;
 
-   private CostRateTable[] m_costRateTables = new CostRateTable[5];
-   private AvailabilityTable m_availability = new AvailabilityTable();
+   private final CostRateTable[] m_costRateTables = new CostRateTable[CostRateTable.MAX_TABLES];
+   private final AvailabilityTable m_availability = new AvailabilityTable();
    private List<FieldListener> m_listeners;
 }

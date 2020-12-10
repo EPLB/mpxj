@@ -27,15 +27,15 @@ import java.io.BufferedInputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.text.ParseException;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Date;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 
 import net.sf.mpxj.DateRange;
 import net.sf.mpxj.Day;
-import net.sf.mpxj.DayType;
 import net.sf.mpxj.Duration;
 import net.sf.mpxj.EventManager;
 import net.sf.mpxj.FileVersion;
@@ -63,26 +63,13 @@ import net.sf.mpxj.common.InputStreamTokenizer;
 import net.sf.mpxj.common.NumberHelper;
 import net.sf.mpxj.common.ReaderTokenizer;
 import net.sf.mpxj.common.Tokenizer;
-import net.sf.mpxj.listener.ProjectListener;
-import net.sf.mpxj.reader.AbstractProjectReader;
+import net.sf.mpxj.reader.AbstractProjectStreamReader;
 
 /**
  * This class creates a new ProjectFile instance by reading an MPX file.
  */
-public final class MPXReader extends AbstractProjectReader
+public final class MPXReader extends AbstractProjectStreamReader
 {
-   /**
-    * {@inheritDoc}
-    */
-   @Override public void addProjectListener(ProjectListener listener)
-   {
-      if (m_projectListeners == null)
-      {
-         m_projectListeners = new LinkedList<>();
-      }
-      m_projectListeners.add(listener);
-   }
-
    /**
     * {@inheritDoc}
     */
@@ -124,7 +111,7 @@ public final class MPXReader extends AbstractProjectReader
          m_projectConfig.setAutoOutlineNumber(false);
          m_projectConfig.setAutoWBS(false);
 
-         m_eventManager.addProjectListeners(m_projectListeners);
+         addListenersToProject(m_projectFile);
 
          LocaleUtility.setLocale(m_projectFile.getProjectProperties(), m_locale);
          m_delimiter = (char) data[3];
@@ -137,7 +124,7 @@ public final class MPXReader extends AbstractProjectReader
          m_resourceModel.setLocale(m_locale);
          m_baseOutlineLevel = -1;
          m_formats = new MPXJFormats(m_locale, LocaleData.getString(m_locale, LocaleData.NA), m_projectFile);
-         m_deferredRelationships = new LinkedList<>();
+         m_deferredRelationships = new ArrayList<>();
 
          bis.reset();
 
@@ -220,6 +207,14 @@ public final class MPXReader extends AbstractProjectReader
          m_formats = null;
          m_deferredRelationships = null;
       }
+   }
+
+   /**
+    * {@inheritDoc}
+    */
+   @Override public List<ProjectFile> readAll(InputStream inputStream) throws MPXJException
+   {
+      return Arrays.asList(read(inputStream));
    }
 
    /**
@@ -725,13 +720,13 @@ public final class MPXReader extends AbstractProjectReader
          calendar.setParent(m_projectFile.getCalendarByName(record.getString(0)));
       }
 
-      calendar.setWorkingDay(Day.SUNDAY, DayType.getInstance(record.getInteger(1)));
-      calendar.setWorkingDay(Day.MONDAY, DayType.getInstance(record.getInteger(2)));
-      calendar.setWorkingDay(Day.TUESDAY, DayType.getInstance(record.getInteger(3)));
-      calendar.setWorkingDay(Day.WEDNESDAY, DayType.getInstance(record.getInteger(4)));
-      calendar.setWorkingDay(Day.THURSDAY, DayType.getInstance(record.getInteger(5)));
-      calendar.setWorkingDay(Day.FRIDAY, DayType.getInstance(record.getInteger(6)));
-      calendar.setWorkingDay(Day.SATURDAY, DayType.getInstance(record.getInteger(7)));
+      calendar.setWorkingDay(Day.SUNDAY, record.getDayType(1));
+      calendar.setWorkingDay(Day.MONDAY, record.getDayType(2));
+      calendar.setWorkingDay(Day.TUESDAY, record.getDayType(3));
+      calendar.setWorkingDay(Day.WEDNESDAY, record.getDayType(4));
+      calendar.setWorkingDay(Day.THURSDAY, record.getDayType(5));
+      calendar.setWorkingDay(Day.FRIDAY, record.getDayType(6));
+      calendar.setWorkingDay(Day.SATURDAY, record.getDayType(7));
 
       m_eventManager.fireCalendarReadEvent(calendar);
    }
@@ -1069,12 +1064,33 @@ public final class MPXReader extends AbstractProjectReader
          TaskField taskField = MPXTaskField.getMpxjField(mpxFieldID);
          if (taskField == null)
          {
-            System.out.println("Null Task Field " + mpxFieldID);
+            // Ignore any fields we don't understand
+            //System.out.println("Null Task Field " + mpxFieldID);
             continue;
          }
 
          switch (taskField)
          {
+            case NOTES:
+            {
+               // Although the notes attribute may be present on the task record MS Project ignores it, so we will too
+               break;
+            }
+
+            case SUMMARY:
+            {
+               // We ignore the summary attribute from the file, and default to false here.
+               // We'll set this flag correctly later when we update the structure.
+               task.setSummary(false);
+               break;
+            }
+
+            case SUCCESSORS:
+            {
+               // Normally MPX files only use predecessors - ignore the successors attribute
+               break;
+            }
+
             case PREDECESSORS:
             case UNIQUE_ID_PREDECESSORS:
             {
@@ -1200,7 +1216,6 @@ public final class MPXReader extends AbstractProjectReader
             case MARKED:
             case MILESTONE:
             case ROLLUP:
-            case SUMMARY:
             case UPDATE_NEEDED:
             {
                task.set(taskField, ((field.equalsIgnoreCase(falseText) == true) ? Boolean.FALSE : Boolean.TRUE));
@@ -1319,6 +1334,14 @@ public final class MPXReader extends AbstractProjectReader
       if (task.getFinish() == null && task.getEarlyFinish() != null)
       {
          task.setFinish(task.getEarlyFinish());
+      }
+
+      //
+      // If a task has a non-zero duration, it's not a milestone, even if the milestone flag is set
+      //
+      if (task.getMilestone() && task.getDuration() != null && task.getDuration().getDuration() != 0)
+      {
+         task.setMilestone(false);
       }
    }
 
@@ -1630,7 +1653,6 @@ public final class MPXReader extends AbstractProjectReader
    private char m_delimiter;
    private MPXJFormats m_formats;
    private List<DeferredRelationship> m_deferredRelationships;
-   private List<ProjectListener> m_projectListeners;
 
    /**
     * This member data is used to hold the outline level number of the

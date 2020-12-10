@@ -23,8 +23,8 @@
 
 package net.sf.mpxj;
 
+import java.util.ArrayList;
 import java.util.Date;
-import java.util.LinkedList;
 import java.util.List;
 
 import net.sf.mpxj.common.NumberHelper;
@@ -63,7 +63,7 @@ public final class ProjectFile implements ChildTaskContainer
    {
       m_tasks.remove(task);
    }
-   
+
    /**
     * This method is called to ensure that all unique ID values
     * held by MPXJ are within the range supported by MS Project.
@@ -491,6 +491,26 @@ public final class ProjectFile implements ChildTaskContainer
    }
 
    /**
+    * Retrieves the expense categories available for this schedule.
+    *
+    * @return expense categories
+    */
+   public ExpenseCategoryContainer getExpenseCategories()
+   {
+      return m_expenseCategories;
+   }
+
+   /**
+    * Retrieves the cost accounts available for this schedule.
+    *
+    * @return cost accounts
+    */
+   public CostAccountContainer getCostAccounts()
+   {
+      return m_costAccounts;
+   }
+
+   /**
     * Retrieves the default calendar for this project based on the calendar name
     * given in the project properties. If a calendar of this name cannot be found, then
     * the first calendar listed for the project will be returned. If the
@@ -553,7 +573,7 @@ public final class ProjectFile implements ChildTaskContainer
    private final ProjectProperties m_properties = new ProjectProperties(this);
    private final ResourceContainer m_resources = new ResourceContainer(this);
    private final TaskContainer m_tasks = new TaskContainer(this);
-   private final List<Task> m_childTasks = new LinkedList<>();
+   private final List<Task> m_childTasks = new ArrayList<>();
    private final ResourceAssignmentContainer m_assignments = new ResourceAssignmentContainer(this);
    private final ProjectCalendarContainer m_calendars = new ProjectCalendarContainer(this);
    private final TableContainer m_tables = new TableContainer();
@@ -565,4 +585,6 @@ public final class ProjectFile implements ChildTaskContainer
    private final CustomFieldContainer m_customFields = new CustomFieldContainer();
    private final ActivityCodeContainer m_activityCodes = new ActivityCodeContainer();
    private final DataLinkContainer m_dataLinks = new DataLinkContainer();
+   private final ExpenseCategoryContainer m_expenseCategories = new ExpenseCategoryContainer(this);
+   private final CostAccountContainer m_costAccounts = new CostAccountContainer(this);
 }

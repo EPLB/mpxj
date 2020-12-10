@@ -24,11 +24,9 @@
 package net.sf.mpxj.fasttrack;
 
 import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -45,11 +43,8 @@ import net.sf.mpxj.RelationType;
 import net.sf.mpxj.Resource;
 import net.sf.mpxj.ResourceAssignment;
 import net.sf.mpxj.Task;
-import net.sf.mpxj.common.FileHelper;
-import net.sf.mpxj.common.InputStreamHelper;
 import net.sf.mpxj.common.NumberHelper;
-import net.sf.mpxj.listener.ProjectListener;
-import net.sf.mpxj.reader.ProjectReader;
+import net.sf.mpxj.reader.AbstractProjectFileReader;
 
 // TODO:
 // 1. Handle multiple bars per activity
@@ -64,50 +59,8 @@ import net.sf.mpxj.reader.ProjectReader;
 /**
  * Reads FastTrack FTS files.
  */
-public final class FastTrackReader implements ProjectReader
+public final class FastTrackReader extends AbstractProjectFileReader
 {
-   /**
-    * {@inheritDoc}
-    */
-   @Override public void addProjectListener(ProjectListener listener)
-   {
-      if (m_projectListeners == null)
-      {
-         m_projectListeners = new LinkedList<>();
-      }
-      m_projectListeners.add(listener);
-   }
-
-   /**
-    * {@inheritDoc}
-    */
-   @Override public ProjectFile read(String fileName) throws MPXJException
-   {
-      return read(new File(fileName));
-   }
-
-   /**
-    * {@inheritDoc}
-    */
-   @Override public ProjectFile read(InputStream inputStream) throws MPXJException
-   {
-      File file = null;
-
-      try
-      {
-         file = InputStreamHelper.writeStreamToTempFile(inputStream, ".fts");
-         return read(file);
-      }
-      catch (IOException ex)
-      {
-         throw new MPXJException(MPXJException.INVALID_FILE, ex);
-      }
-      finally
-      {
-         FileHelper.deleteQuietly(file);
-      }
-   }
-
    /**
     * {@inheritDoc}
     */
@@ -137,6 +90,14 @@ public final class FastTrackReader implements ProjectReader
    }
 
    /**
+    * {@inheritDoc}
+    */
+   @Override public List<ProjectFile> readAll(File file) throws MPXJException
+   {
+      return Arrays.asList(read(file));
+   }
+
+   /**
     * Read FTS file data from the configured source and return a populated ProjectFile instance.
     *
     * @return ProjectFile instance
@@ -157,7 +118,7 @@ public final class FastTrackReader implements ProjectReader
       m_project.getProjectProperties().setFileApplication("FastTrack");
       m_project.getProjectProperties().setFileType("FTS");
 
-      m_eventManager.addProjectListeners(m_projectListeners);
+      addListenersToProject(m_project);
 
       // processProject();
       // processCalendars();
@@ -346,6 +307,9 @@ public final class FastTrackReader implements ProjectReader
          task.setWBS(row.getString(ActivityField.WBS));
          task.setGUID(row.getUUID(ActivityField._ACTIVITY_GUID));
          task.setOutlineLevel(getOutlineLevel(task));
+
+         task.setNotes(row.getString(ActivityField.NOTES));
+
          m_eventManager.fireTaskReadEvent(task);
       }
 
@@ -569,11 +533,7 @@ public final class FastTrackReader implements ProjectReader
             matcher.matches();
 
             Integer id = Integer.valueOf(matcher.group(1));
-            RelationType type = RELATION_TYPE_MAP.get(matcher.group(3));
-            if (type == null)
-            {
-               type = RelationType.FINISH_START;
-            }
+            RelationType type = RELATION_TYPE_MAP.getOrDefault(matcher.group(3), RelationType.FINISH_START);
 
             String sign = matcher.group(4);
             double lag = NumberHelper.getDouble(matcher.group(5));
@@ -667,7 +627,6 @@ public final class FastTrackReader implements ProjectReader
    private FastTrackData m_data;
    private ProjectFile m_project;
    private EventManager m_eventManager;
-   private List<ProjectListener> m_projectListeners;
 
    private static final Pattern WBS_SPLIT_REGEX = Pattern.compile("(\\.|\\-|\\+|\\/|\\,|\\:|\\;|\\~|\\\\|\\| )");
    private static final Pattern RELATION_REGEX = Pattern.compile("(\\d+)(:\\d+)?(FS|SF|SS|FF)*(\\-|\\+)*(\\d+\\.\\d+)*");

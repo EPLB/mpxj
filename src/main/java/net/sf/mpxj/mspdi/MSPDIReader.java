@@ -28,11 +28,13 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.math.BigInteger;
 import java.nio.charset.Charset;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Calendar;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -40,18 +42,10 @@ import java.util.UUID;
 
 import javax.xml.bind.JAXBContext;
 import javax.xml.bind.JAXBException;
-import javax.xml.bind.Unmarshaller;
-import javax.xml.bind.UnmarshallerHandler;
-import javax.xml.bind.ValidationEvent;
-import javax.xml.bind.ValidationEventHandler;
 import javax.xml.parsers.ParserConfigurationException;
-import javax.xml.parsers.SAXParser;
-import javax.xml.parsers.SAXParserFactory;
 
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
-import org.xml.sax.XMLFilter;
-import org.xml.sax.XMLReader;
 
 import net.sf.mpxj.AssignmentField;
 import net.sf.mpxj.Availability;
@@ -104,7 +98,7 @@ import net.sf.mpxj.common.NumberHelper;
 import net.sf.mpxj.common.Pair;
 import net.sf.mpxj.common.SplitTaskFactory;
 import net.sf.mpxj.common.TimephasedWorkNormaliser;
-import net.sf.mpxj.listener.ProjectListener;
+import net.sf.mpxj.common.UnmarshalHelper;
 import net.sf.mpxj.mpp.CustomFieldValueItem;
 import net.sf.mpxj.mspdi.schema.Project;
 import net.sf.mpxj.mspdi.schema.Project.Calendars.Calendar.WorkWeeks;
@@ -115,12 +109,12 @@ import net.sf.mpxj.mspdi.schema.Project.Resources.Resource.AvailabilityPeriods;
 import net.sf.mpxj.mspdi.schema.Project.Resources.Resource.AvailabilityPeriods.AvailabilityPeriod;
 import net.sf.mpxj.mspdi.schema.Project.Resources.Resource.Rates;
 import net.sf.mpxj.mspdi.schema.TimephasedDataType;
-import net.sf.mpxj.reader.AbstractProjectReader;
+import net.sf.mpxj.reader.AbstractProjectStreamReader;
 
 /**
  * This class creates a new ProjectFile instance by reading an MSPDI file.
  */
-public final class MSPDIReader extends AbstractProjectReader
+public final class MSPDIReader extends AbstractProjectStreamReader
 {
    /**
     * Sets the character encoding used when reading an MSPDI file.
@@ -138,7 +132,7 @@ public final class MSPDIReader extends AbstractProjectReader
     *
     * @param charset Charset used when reading the file
     */
-   public void setCharset(Charset charset)
+   @Override public void setCharset(Charset charset)
    {
       m_charset = charset;
    }
@@ -161,24 +155,19 @@ public final class MSPDIReader extends AbstractProjectReader
    /**
     * {@inheritDoc}
     */
-   @Override public void addProjectListener(ProjectListener listener)
-   {
-      if (m_projectListeners == null)
-      {
-         m_projectListeners = new LinkedList<>();
-      }
-      m_projectListeners.add(listener);
-   }
-
-   /**
-    * {@inheritDoc}
-    */
    @Override public ProjectFile read(InputStream stream) throws MPXJException
    {
       try
       {
+         if (CONTEXT == null)
+         {
+            throw CONTEXT_EXCEPTION;
+         }
+
          m_projectFile = new ProjectFile();
          m_eventManager = m_projectFile.getEventManager();
+         m_lookupTableMap = new HashMap<>();
+         m_customFieldValueItems = new HashMap<>();
 
          ProjectConfig config = m_projectFile.getProjectConfig();
          config.setAutoTaskID(false);
@@ -191,53 +180,21 @@ public final class MSPDIReader extends AbstractProjectReader
          config.setAutoCalendarUniqueID(false);
          config.setAutoAssignmentUniqueID(false);
 
-         m_eventManager.addProjectListeners(m_projectListeners);
-
-         SAXParserFactory factory = SAXParserFactory.newInstance();
-         factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-         factory.setNamespaceAware(true);
-         SAXParser saxParser = factory.newSAXParser();
-         XMLReader xmlReader = saxParser.getXMLReader();
-
-         if (CONTEXT == null)
-         {
-            throw CONTEXT_EXCEPTION;
-         }
+         addListenersToProject(m_projectFile);
 
          DatatypeConverter.setParentFile(m_projectFile);
-         Unmarshaller unmarshaller = CONTEXT.createUnmarshaller();
 
-         //
-         // If we are matching the behaviour of MS project, then we need to
-         // ignore validation warnings.
-         //
-         if (m_compatibleInput == true)
-         {
-            unmarshaller.setEventHandler(new ValidationEventHandler()
-            {
-               @Override public boolean handleEvent(ValidationEvent event)
-               {
-                  return (true);
-               }
-            });
-         }
-
-         XMLFilter filter = new NamespaceFilter();
-         filter.setParent(xmlReader);
-         UnmarshallerHandler unmarshallerHandler = unmarshaller.getUnmarshallerHandler();
-         filter.setContentHandler(unmarshallerHandler);
-         filter.parse(new InputSource(new InputStreamReader(stream, getCharset())));
-         Project project = (Project) unmarshallerHandler.getResult();
+         Project project = (Project) UnmarshalHelper.unmarshal(CONTEXT, new InputSource(new InputStreamReader(stream, getCharset())), new NamespaceFilter(), !m_compatibleInput);
 
          HashMap<BigInteger, ProjectCalendar> calendarMap = new HashMap<>();
 
          readProjectProperties(project);
-         readProjectExtendedAttributes(project);
+         readExtendedAttributeDefinitions(project);
+         readOutlineCodeDefinitions(project);
          readCalendars(project, calendarMap);
          readResources(project, calendarMap);
          readTasks(project);
          readAssignments(project);
-         readOutlineCodes(project);
 
          //
          // Ensure that the unique ID counters are correct
@@ -279,8 +236,17 @@ public final class MSPDIReader extends AbstractProjectReader
       finally
       {
          m_projectFile = null;
-         m_lookupTableMap.clear();
+         m_lookupTableMap = null;
+         m_customFieldValueItems = null;
       }
+   }
+
+   /**
+    * {@inheritDoc}
+    */
+   @Override public List<ProjectFile> readAll(InputStream inputStream) throws MPXJException
+   {
+      return Arrays.asList(read(inputStream));
    }
 
    /**
@@ -340,6 +306,7 @@ public final class MSPDIReader extends AbstractProjectReader
       properties.setNewTasksEffortDriven(BooleanHelper.getBoolean(project.isNewTasksEffortDriven()));
       properties.setNewTasksEstimated(BooleanHelper.getBoolean(project.isNewTasksEstimated()));
       properties.setNewTaskStartIsProjectStart(NumberHelper.getInt(project.getNewTaskStartDate()) == 0);
+      properties.setNewTasksAreManual(BooleanHelper.getBoolean(project.isNewTasksAreManual()));
       properties.setProjectExternallyEdited(BooleanHelper.getBoolean(project.isProjectExternallyEdited()));
       properties.setProjectTitle(project.getTitle());
       properties.setRemoveFileProperties(BooleanHelper.getBoolean(project.isRemoveFileProperties()));
@@ -395,7 +362,7 @@ public final class MSPDIReader extends AbstractProjectReader
       Project.Calendars calendars = project.getCalendars();
       if (calendars != null)
       {
-         LinkedList<Pair<ProjectCalendar, BigInteger>> baseCalendars = new LinkedList<>();
+         List<Pair<ProjectCalendar, BigInteger>> baseCalendars = new ArrayList<>();
          for (Project.Calendars.Calendar cal : calendars.getCalendar())
          {
             readCalendar(cal, map, baseCalendars);
@@ -834,14 +801,14 @@ public final class MSPDIReader extends AbstractProjectReader
     *
     * @param project Root node of the MSPDI file
     */
-   private void readProjectExtendedAttributes(Project project)
+   private void readExtendedAttributeDefinitions(Project project)
    {
       Project.ExtendedAttributes attributes = project.getExtendedAttributes();
       if (attributes != null)
       {
          for (Project.ExtendedAttributes.ExtendedAttribute ea : attributes.getExtendedAttribute())
          {
-            readFieldAlias(ea);
+            readExtendedAttributeDefinition(ea);
          }
       }
    }
@@ -851,7 +818,7 @@ public final class MSPDIReader extends AbstractProjectReader
     *
     * @param attribute extended attribute
     */
-   private void readFieldAlias(Project.ExtendedAttributes.ExtendedAttribute attribute)
+   private void readExtendedAttributeDefinition(Project.ExtendedAttributes.ExtendedAttribute attribute)
    {
       FieldType field = FieldTypeHelper.getInstance(Integer.parseInt(attribute.getFieldID()));
       m_lookupTableMap.put(attribute.getLtuid(), field);
@@ -964,6 +931,7 @@ public final class MSPDIReader extends AbstractProjectReader
       }
 
       readResourceExtendedAttributes(xml, mpx);
+      readResourceOutlineCodes(xml, mpx);
 
       readResourceBaselines(xml, mpx);
 
@@ -1025,6 +993,34 @@ public final class MSPDIReader extends AbstractProjectReader
    }
 
    /**
+    * This method processes any outline codes associated with a resource.
+    *
+    * @param xml MSPDI resource instance
+    * @param mpx MPX resource instance
+    */
+   private void readResourceOutlineCodes(Project.Resources.Resource xml, Resource mpx)
+   {
+      for (Project.Resources.Resource.OutlineCode attrib : xml.getOutlineCode())
+      {
+         if (attrib.getFieldID() == null)
+         {
+            continue;
+         }
+
+         ResourceField mpxFieldID = MPPResourceField.getInstance(Integer.parseInt(attrib.getFieldID()) & 0x0000FFFF);
+         CustomField customField = m_projectFile.getCustomFields().getCustomField(mpxFieldID);
+         if (customField != null)
+         {
+            CustomFieldValueItem item = getValueItem(mpxFieldID, attrib.getValueID());
+            if (item != null)
+            {
+               mpx.set(mpxFieldID, item.getValue());
+            }
+         }
+      }
+   }
+
+   /**
     * Reads the cost rate tables from the file.
     *
     * @param resource parent resource
@@ -1034,29 +1030,17 @@ public final class MSPDIReader extends AbstractProjectReader
    {
       if (rates == null)
       {
-         CostRateTable table = new CostRateTable();
-         table.add(CostRateTableEntry.DEFAULT_ENTRY);
-         resource.setCostRateTable(0, table);
-
-         table = new CostRateTable();
-         table.add(CostRateTableEntry.DEFAULT_ENTRY);
-         resource.setCostRateTable(1, table);
-
-         table = new CostRateTable();
-         table.add(CostRateTableEntry.DEFAULT_ENTRY);
-         resource.setCostRateTable(2, table);
-
-         table = new CostRateTable();
-         table.add(CostRateTableEntry.DEFAULT_ENTRY);
-         resource.setCostRateTable(3, table);
-
-         table = new CostRateTable();
-         table.add(CostRateTableEntry.DEFAULT_ENTRY);
-         resource.setCostRateTable(4, table);
+         for (int index = 0; index < CostRateTable.MAX_TABLES; index++)
+         {
+            CostRateTable table = new CostRateTable();
+            table.add(CostRateTableEntry.DEFAULT_ENTRY);
+            resource.setCostRateTable(index, table);
+         }
       }
       else
       {
          Set<CostRateTable> tables = new HashSet<>();
+         Calendar cal = DateHelper.popCalendar();
 
          for (net.sf.mpxj.mspdi.schema.Project.Resources.Resource.Rates.Rate rate : rates.getRate())
          {
@@ -1065,9 +1049,32 @@ public final class MSPDIReader extends AbstractProjectReader
             Rate overtimeRate = DatatypeConverter.parseRate(rate.getOvertimeRate());
             TimeUnit overtimeRateFormat = DatatypeConverter.parseTimeUnit(rate.getOvertimeRateFormat());
             Double costPerUse = DatatypeConverter.parseCurrency(rate.getCostPerUse());
+            Date startDate = rate.getRatesFrom();
             Date endDate = rate.getRatesTo();
 
-            CostRateTableEntry entry = new CostRateTableEntry(standardRate, standardRateFormat, overtimeRate, overtimeRateFormat, costPerUse, endDate);
+            if (startDate.getTime() < DateHelper.START_DATE_NA.getTime())
+            {
+               startDate = DateHelper.START_DATE_NA;
+            }
+
+            if (endDate.getTime() > DateHelper.END_DATE_NA.getTime())
+            {
+               endDate = DateHelper.END_DATE_NA;
+            }
+
+            //
+            // See the note in CostRateTableFactory for more details of this heuristic.
+            //
+            cal.setTime(endDate);
+            int minutes = cal.get(Calendar.MINUTE);
+
+            if ((minutes % 5) == 0)
+            {
+               cal.add(Calendar.MINUTE, -1);
+               endDate = cal.getTime();
+            }
+
+            CostRateTableEntry entry = new CostRateTableEntry(standardRate, standardRateFormat, overtimeRate, overtimeRateFormat, costPerUse, startDate, endDate);
 
             int tableIndex = rate.getRateTable().intValue();
             CostRateTable table = resource.getCostRateTable(tableIndex);
@@ -1080,10 +1087,8 @@ public final class MSPDIReader extends AbstractProjectReader
             tables.add(table);
          }
 
-         for (CostRateTable table : tables)
-         {
-            Collections.sort(table);
-         }
+         DateHelper.pushCalendar(cal);
+         tables.forEach(t -> Collections.sort(t));
       }
    }
 
@@ -1104,6 +1109,17 @@ public final class MSPDIReader extends AbstractProjectReader
             Date start = period.getAvailableFrom();
             Date end = period.getAvailableTo();
             Number units = DatatypeConverter.parseUnits(period.getAvailableUnits());
+
+            if (start.getTime() < DateHelper.START_DATE_NA.getTime())
+            {
+               start = DateHelper.START_DATE_NA;
+            }
+
+            if (end.getTime() > DateHelper.END_DATE_NA.getTime())
+            {
+               end = DateHelper.END_DATE_NA;
+            }
+
             Availability availability = new Availability(start, end, units);
             table.add(availability);
          }
@@ -1312,7 +1328,8 @@ public final class MSPDIReader extends AbstractProjectReader
          mpx.setSubprojectName(xml.getSubprojectName());
          mpx.setSubprojectReadOnly(BooleanHelper.getBoolean(xml.isIsSubprojectReadOnly()));
          //mpx.setSuccessors();
-         mpx.setSummary(BooleanHelper.getBoolean(xml.isSummary()));
+         // Rely on the presence of child tasks to determine if this is a summary task rather than using this attribute
+         //mpx.setSummary(BooleanHelper.getBoolean(xml.isSummary()));
          //mpx.setSV();
          //mpx.setText1();
          //mpx.setText2();
@@ -1341,6 +1358,7 @@ public final class MSPDIReader extends AbstractProjectReader
          mpx.setCritical(BooleanHelper.getBoolean(xml.isCritical()));
 
          readTaskExtendedAttributes(xml, mpx);
+         readTaskOutlineCodes(xml, mpx);
 
          readTaskBaselines(xml, mpx, durationFormat);
 
@@ -1361,6 +1379,8 @@ public final class MSPDIReader extends AbstractProjectReader
          //
          if (NumberHelper.getInt(mpx.getUniqueID()) == 0)
          {
+            // ensure that the project summary task is always marked as a summary task
+            mpx.setSummary(true);
             updateProjectProperties(mpx);
          }
       }
@@ -1465,6 +1485,68 @@ public final class MSPDIReader extends AbstractProjectReader
          TimeUnit durationFormat = DatatypeConverter.parseDurationTimeUnits(attrib.getDurationFormat(), null);
          DatatypeConverter.parseExtendedAttribute(m_projectFile, mpx, attrib.getValue(), mpxFieldID, durationFormat);
       }
+   }
+
+   /**
+    * This method processes any outline codes associated with a task.
+    *
+    * @param xml MSPDI task instance
+    * @param mpx MPX task instance
+    */
+   private void readTaskOutlineCodes(Project.Tasks.Task xml, Task mpx)
+   {
+      for (Project.Tasks.Task.OutlineCode attrib : xml.getOutlineCode())
+      {
+         if (attrib.getFieldID() == null)
+         {
+            continue;
+         }
+
+         TaskField mpxFieldID = MPPTaskField.getInstance(Integer.parseInt(attrib.getFieldID()) & 0x0000FFFF);
+         CustomField customField = m_projectFile.getCustomFields().getCustomField(mpxFieldID);
+         if (customField != null)
+         {
+            CustomFieldValueItem item = getValueItem(mpxFieldID, attrib.getValueID());
+            if (item != null)
+            {
+               mpx.set(mpxFieldID, item.getValue());
+            }
+         }
+      }
+   }
+
+   /**
+    * Given a value ID, retrieve the equivalent lookup table entry.
+    *
+    * @param fieldType field type
+    * @param valueID value ID
+    * @return lookup table entry
+    */
+   private CustomFieldValueItem getValueItem(FieldType fieldType, BigInteger valueID)
+   {
+      CustomFieldValueItem result = null;
+
+      CustomField field = m_projectFile.getCustomFields().getCustomField(fieldType);
+      List<CustomFieldValueItem> items = field.getLookupTable();
+      if (!items.isEmpty())
+      {
+         result = m_customFieldValueItems.getOrDefault(fieldType, getCustomFieldValueItemMap(items)).get(valueID);
+      }
+
+      return result;
+   }
+
+   /**
+    * Populate a cache of lookup table entries.
+    *
+    * @param items list of lookup table entries
+    * @return cache of lookup table entries
+    */
+   private HashMap<BigInteger, CustomFieldValueItem> getCustomFieldValueItemMap(List<CustomFieldValueItem> items)
+   {
+      HashMap<BigInteger, CustomFieldValueItem> result = new HashMap<>();
+      items.forEach(item -> result.put(BigInteger.valueOf(item.getUniqueID().intValue()), item));
+      return result;
    }
 
    /**
@@ -1583,14 +1665,14 @@ public final class MSPDIReader extends AbstractProjectReader
     *
     * @param project Root node of the MSPDI file
     */
-   private void readOutlineCodes(Project project)
+   private void readOutlineCodeDefinitions(Project project)
    {
       Project.OutlineCodes outlineCodes = project.getOutlineCodes();
       if (outlineCodes != null)
       {
          for (Project.OutlineCodes.OutlineCode outlineCode : outlineCodes.getOutlineCode())
          {
-            readOutlineCode(outlineCode);
+            readOutlineCodeDefinition(outlineCode);
          }
       }
    }
@@ -1600,7 +1682,7 @@ public final class MSPDIReader extends AbstractProjectReader
     *
     * @param outlineCode outline code data from the MSPDI file
     */
-   private void readOutlineCode(Project.OutlineCodes.OutlineCode outlineCode)
+   private void readOutlineCodeDefinition(Project.OutlineCodes.OutlineCode outlineCode)
    {
       FieldType fieldType;
       String fieldID = outlineCode.getFieldID();
@@ -1718,8 +1800,8 @@ public final class MSPDIReader extends AbstractProjectReader
                calendar = task.getEffectiveCalendar();
             }
 
-            LinkedList<TimephasedWork> timephasedComplete = readTimephasedAssignment(calendar, assignment, 2);
-            LinkedList<TimephasedWork> timephasedPlanned = readTimephasedAssignment(calendar, assignment, 1);
+            List<TimephasedWork> timephasedComplete = readTimephasedAssignment(calendar, assignment, 2);
+            List<TimephasedWork> timephasedPlanned = readTimephasedAssignment(calendar, assignment, 1);
             boolean raw = true;
 
             if (isSplit(calendar, timephasedComplete) || isSplit(calendar, timephasedPlanned))
@@ -1888,9 +1970,9 @@ public final class MSPDIReader extends AbstractProjectReader
     * @param type flag indicating if this is planned or complete work
     * @return list of timephased resource assignment instances
     */
-   private LinkedList<TimephasedWork> readTimephasedAssignment(ProjectCalendar calendar, Project.Assignments.Assignment assignment, int type)
+   private List<TimephasedWork> readTimephasedAssignment(ProjectCalendar calendar, Project.Assignments.Assignment assignment, int type)
    {
-      LinkedList<TimephasedWork> result = new LinkedList<>();
+      List<TimephasedWork> result = new ArrayList<>();
 
       for (TimephasedDataType item : assignment.getTimephasedData())
       {
@@ -1993,8 +2075,8 @@ public final class MSPDIReader extends AbstractProjectReader
    private Charset m_charset;
    private ProjectFile m_projectFile;
    private EventManager m_eventManager;
-   private List<ProjectListener> m_projectListeners;
-   private Map<UUID, FieldType> m_lookupTableMap = new HashMap<>();
+   private Map<UUID, FieldType> m_lookupTableMap;
+   private Map<FieldType, Map<BigInteger, CustomFieldValueItem>> m_customFieldValueItems;
 
    private static final RecurrenceType[] RECURRENCE_TYPES =
    {
