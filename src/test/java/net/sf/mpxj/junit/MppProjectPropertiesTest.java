@@ -23,7 +23,6 @@
 
 package net.sf.mpxj.junit;
 
-import static net.sf.mpxj.junit.MpxjAssert.*;
 import static org.junit.Assert.*;
 
 import java.text.DateFormat;
@@ -34,7 +33,7 @@ import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.ProjectProperties;
 import net.sf.mpxj.ScheduleFrom;
 import net.sf.mpxj.TimeUnit;
-import net.sf.mpxj.mpd.MPDDatabaseReader;
+import net.sf.mpxj.mpd.MPDFileReader;
 import net.sf.mpxj.mpp.MPPReader;
 
 import org.junit.Test;
@@ -46,8 +45,6 @@ public class MppProjectPropertiesTest
 {
    /**
     * Test project properties read from an MPP9 file.
-    *
-    * @throws Exception
     */
    @Test public void testMpp9() throws Exception
    {
@@ -57,8 +54,6 @@ public class MppProjectPropertiesTest
 
    /**
     * Test project properties read from an MPP9 file saved by Project 2007.
-    *
-    * @throws Exception
     */
    @Test public void testMpp9From12() throws Exception
    {
@@ -68,8 +63,6 @@ public class MppProjectPropertiesTest
 
    /**
     * Test project properties read from an MPP9 file saved by Project 2010.
-    *
-    * @throws Exception
     */
    @Test public void testMpp9From14() throws Exception
    {
@@ -79,8 +72,6 @@ public class MppProjectPropertiesTest
 
    /**
     * Test project properties read from an MPP12 file.
-    *
-    * @throws Exception
     */
    @Test public void testMpp12() throws Exception
    {
@@ -90,8 +81,6 @@ public class MppProjectPropertiesTest
 
    /**
     * Test project properties read from an MPP12 file saved by Project 2010.
-    *
-    * @throws Exception
     */
    @Test public void testMpp12From14() throws Exception
    {
@@ -101,8 +90,6 @@ public class MppProjectPropertiesTest
 
    /**
     * Test project properties read from an MPP14 file.
-    *
-    * @throws Exception
     */
    @Test public void testMpp14() throws Exception
    {
@@ -112,13 +99,10 @@ public class MppProjectPropertiesTest
 
    /**
     * Test project properties read from an MPD9 file.
-    *
-    * @throws Exception
     */
    @Test public void testMpd9() throws Exception
    {
-      assumeJvm();
-      ProjectFile mpp = new MPDDatabaseReader().read(MpxjTestData.filePath("mpp9header.mpd"));
+      ProjectFile mpp = new MPDFileReader().read(MpxjTestData.filePath("mpp9header.mpd"));
       testProperties(mpp, false);
    }
 
@@ -144,7 +128,7 @@ public class MppProjectPropertiesTest
       //
       ProjectProperties ph = mpp.getProjectProperties();
       assertEquals(ScheduleFrom.FINISH, ph.getScheduleFrom());
-      assertEquals("24 Hours", ph.getDefaultCalendarName());
+      assertEquals("24 Hours", ph.getDefaultCalendar().getName());
       assertEquals("08:35", tf.format(ph.getDefaultStartTime()));
       assertEquals("17:35", tf.format(ph.getDefaultEndTime()));
       assertEquals("01/08/2006", df.format(ph.getStatusDate()));

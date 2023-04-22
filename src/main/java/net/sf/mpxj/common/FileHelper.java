@@ -25,6 +25,7 @@ package net.sf.mpxj.common;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 
 /**
  * Common helper methods for working with files.
@@ -67,6 +68,8 @@ public final class FileHelper
                }
             }
          }
+
+         // noinspection ResultOfMethodCallIgnored
          file.delete();
       }
    }
@@ -96,6 +99,7 @@ public final class FileHelper
    {
       if (file != null)
       {
+         // noinspection ResultOfMethodCallIgnored
          file.mkdirs();
       }
    }
@@ -107,7 +111,7 @@ public final class FileHelper
     */
    public static final File createTempDir() throws IOException
    {
-      File dir = File.createTempFile("mpxj", "tmp");
+      File dir = Files.createTempFile("mpxj", "tmp").toFile();
       delete(dir);
       mkdirs(dir);
       return dir;

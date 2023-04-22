@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.stream.Stream;
 
 import org.apache.poi.poifs.filesystem.DirectoryEntry;
 import org.apache.poi.poifs.filesystem.DocumentEntry;
@@ -38,8 +39,8 @@ import net.sf.mpxj.Day;
 import net.sf.mpxj.DayType;
 import net.sf.mpxj.EventManager;
 import net.sf.mpxj.ProjectCalendar;
+import net.sf.mpxj.ProjectCalendarDays;
 import net.sf.mpxj.ProjectCalendarHours;
-import net.sf.mpxj.ProjectCalendarWeek;
 import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.common.Pair;
 
@@ -68,7 +69,6 @@ abstract class AbstractCalendarFactory implements CalendarFactory
     * @param projectProps project properties
     * @param inputStreamFactory input stream factory
     * @param resourceMap map of resources to calendars
-    * @throws IOException
     */
    @Override public void processCalendarData(DirectoryEntry projectDir, Props projectProps, DocumentInputStreamFactory inputStreamFactory, HashMap<Integer, ProjectCalendar> resourceMap) throws IOException
    {
@@ -118,12 +118,12 @@ abstract class AbstractCalendarFactory implements CalendarFactory
                Integer calendarID = Integer.valueOf(MPPUtility.getInt(fixedData, offset + getCalendarIDOffset()));
                int baseCalendarID = MPPUtility.getInt(fixedData, offset + getBaseIDOffset());
 
-               if (calendarID.intValue() > 0 && calendarMap.containsKey(calendarID) == false)
+               if (calendarID.intValue() > 0 && !calendarMap.containsKey(calendarID))
                {
                   byte[] varData = calVarData.getByteArray(calendarID, getCalendarDataVarDataType());
                   ProjectCalendar cal;
 
-                  if (baseCalendarID == 0 || baseCalendarID == -1 || baseCalendarID == calendarID.intValue())
+                  if (baseCalendarID <= 0 || baseCalendarID == calendarID.intValue())
                   {
                      if (varData != null || defaultCalendarData != null)
                      {
@@ -139,6 +139,16 @@ abstract class AbstractCalendarFactory implements CalendarFactory
                      }
 
                      cal.setName(calVarData.getUnicodeString(calendarID, getCalendarNameVarDataType()));
+
+                     // In theory, base calendars should not have a resource ID attached to them.
+                     // In practice, I've seen a few sample files where this is the case.
+                     // As long as the resource ID isn't already linked to a calendar, we'll
+                     // use the resource ID.
+                     Integer resourceID = Integer.valueOf(MPPUtility.getInt(fixedData, offset + getResourceIDOffset()));
+                     if (resourceID.intValue() > 0 && !resourceMap.containsKey(resourceID))
+                     {
+                        resourceMap.put(resourceID, cal);
+                     }
                   }
                   else
                   {
@@ -158,9 +168,16 @@ abstract class AbstractCalendarFactory implements CalendarFactory
 
                   cal.setUniqueID(calendarID);
 
-                  if (varData != null)
+                  if (varData == null)
                   {
-                     processCalendarHours(varData, defaultCalendar, cal, baseCalendarID == -1);
+                     if (baseCalendarID <= 0)
+                     {
+                        Stream.of(Day.values()).forEach(cal::addCalendarHours);
+                     }
+                  }
+                  else
+                  {
+                     processCalendarHours(varData, defaultCalendar, cal, baseCalendarID <= 0);
                      processCalendarExceptions(varData, cal);
                   }
 
@@ -174,6 +191,12 @@ abstract class AbstractCalendarFactory implements CalendarFactory
       }
 
       updateBaseCalendarNames(baseCalendars, calendarMap);
+      ProjectCalendar projectDefaultCalendar = m_file.getCalendars().getByName(projectProps.getUnicodeString(Props.DEFAULT_CALENDAR_NAME));
+      if (projectDefaultCalendar == null)
+      {
+         projectDefaultCalendar = m_file.getCalendars().findOrCreateDefaultCalendar();
+      }
+      m_file.getProjectProperties().setDefaultCalendar(projectDefaultCalendar);
    }
 
    /**
@@ -216,14 +239,14 @@ abstract class AbstractCalendarFactory implements CalendarFactory
          {
             if (isBaseCalendar)
             {
+               hours = cal.addCalendarHours(day);
                if (defaultCalendar == null)
                {
                   cal.setWorkingDay(day, DEFAULT_WORKING_WEEK[index]);
                   if (cal.isWorkingDay(day))
                   {
-                     hours = cal.addCalendarHours(Day.getInstance(index + 1));
-                     hours.addRange(ProjectCalendarWeek.DEFAULT_WORKING_MORNING);
-                     hours.addRange(ProjectCalendarWeek.DEFAULT_WORKING_AFTERNOON);
+                     hours.add(ProjectCalendarDays.DEFAULT_WORKING_MORNING);
+                     hours.add(ProjectCalendarDays.DEFAULT_WORKING_AFTERNOON);
                   }
                }
                else
@@ -232,17 +255,13 @@ abstract class AbstractCalendarFactory implements CalendarFactory
                   cal.setWorkingDay(day, workingDay);
                   if (workingDay)
                   {
-                     hours = cal.addCalendarHours(Day.getInstance(index + 1));
-                     for (DateRange range : defaultCalendar.getHours(day))
-                     {
-                        hours.addRange(range);
-                     }
+                     hours.addAll(defaultCalendar.getHours(day));
                   }
                }
             }
             else
             {
-               cal.setWorkingDay(day, DayType.DEFAULT);
+               cal.setCalendarDayType(day, DayType.DEFAULT);
             }
          }
          else
@@ -264,17 +283,17 @@ abstract class AbstractCalendarFactory implements CalendarFactory
 
             if (dateRanges.isEmpty())
             {
+               if (isBaseCalendar)
+               {
+                  cal.addCalendarHours(Day.getInstance(index + 1));
+               }
                cal.setWorkingDay(day, false);
             }
             else
             {
                cal.setWorkingDay(day, true);
                hours = cal.addCalendarHours(Day.getInstance(index + 1));
-
-               for (DateRange range : dateRanges)
-               {
-                  hours.addRange(range);
-               }
+               hours.addAll(dateRanges);
             }
          }
       }

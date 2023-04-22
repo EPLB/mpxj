@@ -27,22 +27,29 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.Consumer;
 
+import net.sf.mpxj.primavera.PrimaveraXERFileWriter;
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.Before;
 
 import net.sf.mpxj.ChildTaskContainer;
 import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.Task;
 import net.sf.mpxj.common.FileHelper;
+import net.sf.mpxj.common.JvmHelper;
+import net.sf.mpxj.common.MarshallerHelper;
 import net.sf.mpxj.json.JsonWriter;
 import net.sf.mpxj.mpx.MPXReader;
 import net.sf.mpxj.mpx.MPXWriter;
@@ -53,6 +60,7 @@ import net.sf.mpxj.primavera.PrimaveraDatabaseFileReader;
 import net.sf.mpxj.primavera.PrimaveraPMFileWriter;
 import net.sf.mpxj.primavera.PrimaveraXERFileReader;
 import net.sf.mpxj.reader.UniversalProjectReader;
+import net.sf.mpxj.sdef.SDEFWriter;
 import net.sf.mpxj.writer.ProjectWriter;
 
 /**
@@ -78,100 +86,80 @@ public class CustomerDataTest
 
    /**
     * Test customer data.
-    *
-    * @throws Exception
     */
-   @Test public void testCustomerData1() throws Exception
+   @Test public void testCustomerData1()
    {
       testCustomerData(1, 10);
    }
 
    /**
     * Test customer data.
-    *
-    * @throws Exception
     */
-   @Test public void testCustomerData2() throws Exception
+   @Test public void testCustomerData2()
    {
       testCustomerData(2, 10);
    }
 
    /**
     * Test customer data.
-    *
-    * @throws Exception
     */
-   @Test public void testCustomerData3() throws Exception
+   @Test public void testCustomerData3()
    {
       testCustomerData(3, 10);
    }
 
    /**
     * Test customer data.
-    *
-    * @throws Exception
     */
-   @Test public void testCustomerData4() throws Exception
+   @Test public void testCustomerData4()
    {
       testCustomerData(4, 10);
    }
 
    /**
     * Test customer data.
-    *
-    * @throws Exception
     */
-   @Test public void testCustomerData5() throws Exception
+   @Test public void testCustomerData5()
    {
       testCustomerData(5, 10);
    }
 
    /**
     * Test customer data.
-    *
-    * @throws Exception
     */
-   @Test public void testCustomerData6() throws Exception
+   @Test public void testCustomerData6()
    {
       testCustomerData(6, 10);
    }
 
    /**
     * Test customer data.
-    *
-    * @throws Exception
     */
-   @Test public void testCustomerData7() throws Exception
+   @Test public void testCustomerData7()
    {
       testCustomerData(7, 10);
    }
 
    /**
     * Test customer data.
-    *
-    * @throws Exception
     */
-   @Test public void testCustomerData8() throws Exception
+   @Test public void testCustomerData8()
    {
       testCustomerData(8, 10);
    }
 
    /**
     * Test customer data.
-    *
-    * @throws Exception
     */
-   @Test public void testCustomerData9() throws Exception
+   @Test public void testCustomerData9()
    {
       testCustomerData(9, 10);
    }
 
    /**
     * Test customer data.
-    *
-    * @throws Exception
     */
-   @Test public void testCustomerData10() throws Exception
+   @Test public void testCustomerData10()
    {
       testCustomerData(10, 10);
    }
@@ -186,7 +174,12 @@ public class CustomerDataTest
          return;
       }
 
-      File file = new File(m_primaveraFile);
+      // Accessing the database directly from (new) Google Drive is too slow.
+      // Make a temporary local copy instead.
+      File file = Files.createTempFile("primavera", "db").toFile();
+      file.deleteOnExit();
+      Files.copy(new File(m_primaveraFile).toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING);
+
       Map<Integer, String> projects = new PrimaveraDatabaseFileReader().listProjects(file);
       long failures = projects.entrySet().stream().map(entry -> testPrimaveraProject(file, entry.getKey().intValue(), entry.getValue())).filter(x -> !x.booleanValue()).count();
 
@@ -198,6 +191,96 @@ public class CustomerDataTest
       }
 
       assertEquals("Failed to read " + failures + " Primavera database projects", 0, failures);
+   }
+
+   /**
+    * Populate field report from JUnit test data.
+    */
+   @Test public void testFieldCoverage()
+   {
+      List<File> files = new ArrayList<>();
+      listFiles(files, new File(MpxjTestData.DATA_DIR));
+      for (File file : files)
+      {
+         ProjectFile project;
+         try
+         {
+            project = m_universalReader.read(file);
+         }
+
+         catch (Exception ex)
+         {
+            // we're reading our JUnit test data which we've
+            // already validated... we're just improving field report coverage.
+            // This will throw expected errors (password protected etc)
+            // which we'll ignore.
+            project = null;
+         }
+
+         if (project != null && useFieldReporter())
+         {
+            FIELD_REPORTER.process(project);
+         }
+      }
+   }
+
+   /**
+    * Enable our custom character escape handler if we're running on a JVM.
+    */
+   @BeforeClass public static void enableCustomEscapeHandling()
+   {
+      if (!JvmHelper.isIkvm())
+      {
+         MarshallerHelper.enableCustomEscapeHandling(true);
+      }
+   }
+
+   /**
+    * Disable our custom character escape handler if we're running on a JVM.
+    */
+   @AfterClass public static void disableCustomEscapeHandling()
+   {
+      if (!JvmHelper.isIkvm())
+      {
+         MarshallerHelper.enableCustomEscapeHandling(false);
+      }
+   }
+
+   /**
+    * Clear the field reporter ready to begin collecting data.
+    */
+   @BeforeClass public static void initializeFieldReport()
+   {
+      if (useFieldReporter())
+      {
+         TEST_COUNT = 0;
+         FIELD_REPORTER.clear();
+      }
+   }
+
+   /**
+    * Report on the data collected by the field reporter.
+    */
+   @AfterClass public static void generateFieldReport() throws Exception
+   {
+      if (useFieldReporter() && TEST_COUNT == 12)
+      {
+         FIELD_REPORTER.report("mkdocs/docs/field-guide.md");
+         FIELD_REPORTER.reportMpp("mkdocs/docs/mpp-field-guide.md");
+      }
+   }
+
+   /**
+    * Increment the counter for the number of tests run.
+    */
+   @Before public void incrementTestCount()
+   {
+      ++TEST_COUNT;
+   }
+
+   private static boolean useFieldReporter()
+   {
+      return !JvmHelper.isIkvm();
    }
 
    /**
@@ -217,15 +300,30 @@ public class CustomerDataTest
          PrimaveraDatabaseFileReader reader = new PrimaveraDatabaseFileReader();
          reader.setProjectID(projectID);
          ProjectFile project = reader.read(file);
+
+         Integer baselineProjectID = project.getProjectProperties().getBaselineProjectUniqueID();
+         if (baselineProjectID != null)
+         {
+            PrimaveraDatabaseFileReader baselineReader = new PrimaveraDatabaseFileReader();
+            baselineReader.setProjectID(baselineProjectID.intValue());
+            project.setBaseline(baselineReader.read(file));
+         }
+
          if (!testBaseline(projectName, project, m_primaveraBaselineDir))
          {
             System.err.println("Failed to validate Primavera database project baseline " + projectName);
             result = Boolean.FALSE;
          }
+
+         if (useFieldReporter())
+         {
+            FIELD_REPORTER.process(project);
+         }
       }
       catch (Exception e)
       {
          System.err.println("Failed to read Primavera database project: " + projectName);
+         e.printStackTrace();
          result = Boolean.FALSE;
       }
 
@@ -263,9 +361,8 @@ public class CustomerDataTest
     *
     * @param index current chunk
     * @param max maximum number of chunks
-    * @throws Exception
     */
-   private void testCustomerData(int index, int max) throws Exception
+   private void testCustomerData(int index, int max)
    {
       if (m_privateDirectory != null)
       {
@@ -296,10 +393,9 @@ public class CustomerDataTest
     */
    private void listFiles(List<File> list, File parent)
    {
-      String runtime = System.getProperty("java.runtime.name");
-      boolean isIKVM = runtime != null && runtime.indexOf("IKVM") != -1;
       File[] fileList = parent.listFiles();
       assertNotNull(fileList);
+      Arrays.sort(fileList);
 
       for (File file : fileList)
       {
@@ -310,10 +406,11 @@ public class CustomerDataTest
          else
          {
             String name = file.getName().toLowerCase();
-            if (isIKVM && (name.endsWith(".mpd") || name.endsWith(".mdb")))
+            if (name.endsWith(".ds_store"))
             {
                continue;
             }
+
             list.add(file);
          }
       }
@@ -337,7 +434,7 @@ public class CustomerDataTest
             continue;
          }
 
-         ProjectFile mpxj = null;
+         ProjectFile mpxj;
          //System.out.println(name);
 
          try
@@ -349,8 +446,6 @@ public class CustomerDataTest
                ++failures;
                continue;
             }
-
-            testPopulatedFields(mpxj);
 
             if (!testHierarchy(mpxj))
             {
@@ -366,7 +461,12 @@ public class CustomerDataTest
                continue;
             }
 
-            testWriters(mpxj);
+            //testWriters(mpxj);
+
+            if (useFieldReporter())
+            {
+               FIELD_REPORTER.process(mpxj);
+            }
          }
 
          catch (Exception ex)
@@ -396,18 +496,18 @@ public class CustomerDataTest
     */
    private ProjectFile testReader(String name, File file) throws Exception
    {
-      ProjectFile mpxj = null;
+      ProjectFile mpxj;
 
-      if (name.endsWith(".MPX") == true)
+      if (name.endsWith(".MPX"))
       {
          m_mpxReader.setLocale(Locale.ENGLISH);
 
-         if (name.indexOf(".DE.") != -1)
+         if (name.contains(".DE."))
          {
             m_mpxReader.setLocale(Locale.GERMAN);
          }
 
-         if (name.indexOf(".SV.") != -1)
+         if (name.contains(".SV."))
          {
             m_mpxReader.setLocale(new Locale("sv"));
          }
@@ -427,23 +527,11 @@ public class CustomerDataTest
          if (name.endsWith(".XER") && !name.endsWith(".ENCODING.XER"))
          {
             m_xerReader.setLinkCrossProjectRelations(true);
-            m_xerReader.readAll(new FileInputStream(file));
+            m_xerReader.readAll(Files.newInputStream(file.toPath()));
          }
       }
 
       return mpxj;
-   }
-
-   /**
-    * Ensure that the populated fields methods work for all data.
-    * 
-    * @param file schedule file to test
-    */
-   private void testPopulatedFields(ProjectFile file)
-   {
-      file.getTasks().getPopulatedFields();
-      file.getResources().getPopulatedFields();
-      file.getResourceAssignments().getPopulatedFields();
    }
 
    /**
@@ -490,12 +578,26 @@ public class CustomerDataTest
          return true;
       }
 
-      boolean mspdi = testBaseline(name, project, baselineDirectory, "mspdi", MSPDIWriter.class);
-      boolean pmxml = testBaseline(name, project, baselineDirectory, "pmxml", PrimaveraPMFileWriter.class);
-      boolean json = testBaseline(name, project, baselineDirectory, "json", JsonWriter.class);
-      boolean planner = testBaseline(name, project, baselineDirectory, "planner", PlannerWriter.class);
+      Consumer<ProjectWriter> jsonConfig = (w) -> {
+         ((JsonWriter) w).setPretty(true);
+         ((JsonWriter) w).setIncludeLayoutData(true);
+      };
+      Consumer<ProjectWriter> pmxmlConfig = (w) -> ((PrimaveraPMFileWriter) w).setWriteBaselines(true);
+      Consumer<ProjectWriter> mpxConfig = (w) -> ((MPXWriter) w).setUseLocaleDefaults(false);
+      Consumer<ProjectWriter> mspdiConfig = (w) -> {
+         ((MSPDIWriter) w).setWriteTimephasedData(true);
+         ((MSPDIWriter) w).setSplitTimephasedAsDays(false);
+      };
 
-      return mspdi && pmxml && json && planner;
+      boolean mspdi = testBaseline(name, project, baselineDirectory, "mspdi", ".xml", MSPDIWriter.class, mspdiConfig);
+      boolean pmxml = testBaseline(name, project, baselineDirectory, "pmxml", ".xml", PrimaveraPMFileWriter.class, pmxmlConfig);
+      boolean json = testBaseline(name, project, baselineDirectory, "json", ".json", JsonWriter.class, jsonConfig);
+      boolean planner = testBaseline(name, project, baselineDirectory, "planner", ".xml", PlannerWriter.class, null);
+      boolean sdef = testBaseline(name, project, baselineDirectory, "sdef", ".sdef", SDEFWriter.class, null);
+      boolean xer = testBaseline(name, project, baselineDirectory, "xer", ".xer", PrimaveraXERFileWriter.class, null);
+      boolean mpx = testBaseline(name, project, baselineDirectory, "mpx", ".mpx", MPXWriter.class, mpxConfig);
+
+      return mspdi && pmxml && json && planner && sdef && xer && mpx;
    }
 
    /**
@@ -504,28 +606,23 @@ public class CustomerDataTest
     * @param name name of the project under test
     * @param project ProjectFile instance
     * @param baselineDir baseline directory location
-    * @param subDir sub directory name
+    * @param subDir subdirectory name
+    * @param suffix file suffix
     * @param writerClass file writer class
+    * @param config optional writer configuration
     * @return true if the baseline test is successful
     */
-   @SuppressWarnings("unused") private boolean testBaseline(String name, ProjectFile project, File baselineDir, String subDir, Class<? extends ProjectWriter> writerClass) throws Exception
+   private boolean testBaseline(String name, ProjectFile project, File baselineDir, String subDir, String suffix, Class<? extends ProjectWriter> writerClass, Consumer<ProjectWriter> config) throws Exception
    {
       File baselineDirectory = new File(baselineDir, subDir);
 
       boolean success = true;
 
       ProjectWriter writer = writerClass.newInstance();
-      String suffix;
 
-      // Not ideal, but...
-      if (writer instanceof JsonWriter)
+      if (config != null)
       {
-         ((JsonWriter) writer).setPretty(true);
-         suffix = ".json";
-      }
-      else
-      {
-         suffix = ".xml";
+         config.accept(writer);
       }
 
       File baselineFile = new File(baselineDirectory, name + suffix);
@@ -534,11 +631,11 @@ public class CustomerDataTest
 
       if (baselineFile.exists())
       {
-         File out = File.createTempFile("junit", suffix);
+         File out = Files.createTempFile("junit", suffix).toFile();
          writer.write(project, out);
          success = FileUtility.equals(baselineFile, out);
 
-         if (success || !DEBUG_FAILURES)
+         if (success)
          {
             FileHelper.deleteQuietly(out);
          }
@@ -566,10 +663,12 @@ public class CustomerDataTest
     */
    private void debugFailure(File baseline, String writerType, File test) throws IOException
    {
+      String copyCommand = OS_IS_WINDOWS ? "copy /y" : "cp";
+
       System.out.println();
       System.out.println("Baseline: " + baseline.getPath());
       System.out.println("Test: " + test.getPath());
-      System.out.println("copy /y \"" + test.getPath() + "\" \"" + baseline.getPath() + "\"");
+      System.out.println(copyCommand + " \"" + test.getPath() + "\" \"" + baseline.getPath() + "\"");
 
       if (DIFF_BASELINE_DIR == null)
       {
@@ -590,23 +689,6 @@ public class CustomerDataTest
    }
 
    /**
-    * Ensure that we can export the file under test through our writers, without error.
-    *
-    * @param project ProjectFile instance
-    */
-   private void testWriters(ProjectFile project) throws Exception
-   {
-      for (Class<? extends ProjectWriter> c : WRITER_CLASSES)
-      {
-         File outputFile = File.createTempFile("writer_test", ".dat");
-         outputFile.deleteOnExit();
-         ProjectWriter p = c.newInstance();
-         p.write(project, outputFile);
-         FileHelper.deleteQuietly(outputFile);
-      }
-   }
-
-   /**
     * As part of the regression test process, I save customer's MPP files
     * as MSPDI files using a version of MS Project. This method allows these
     * two versions to be compared in order to ensure that MPXJ is
@@ -614,12 +696,11 @@ public class CustomerDataTest
     *
     * @param name file name
     * @param mpp MPP file data structure
-    * @throws Exception
     */
    private void validateMpp(String name, ProjectFile mpp) throws Exception
    {
       File xmlFile = new File(name + ".xml");
-      if (xmlFile.exists() == true)
+      if (xmlFile.exists())
       {
          ProjectFile xml = new MSPDIReader().read(xmlFile);
          MppXmlCompare compare = new MppXmlCompare();
@@ -632,36 +713,14 @@ public class CustomerDataTest
    private final String m_primaveraFile;
    private final File m_primaveraBaselineDir;
 
-   private UniversalProjectReader m_universalReader;
-   private MPXReader m_mpxReader;
-   private PrimaveraXERFileReader m_xerReader;
+   private final UniversalProjectReader m_universalReader;
+   private final MPXReader m_mpxReader;
+   private final PrimaveraXERFileReader m_xerReader;
    private static File DIFF_BASELINE_DIR;
    private static File DIFF_TEST_DIR;
 
-   private static final List<Class<? extends ProjectWriter>> WRITER_CLASSES = new ArrayList<>();
-
+   private static int TEST_COUNT;
+   private static final boolean OS_IS_WINDOWS = System.getProperty("os.name").toLowerCase().contains("windows");
+   private static final FieldReporter FIELD_REPORTER = new FieldReporter();
    private static final Date BASELINE_CURRENT_DATE = new Date(1544100702438L);
-
-   private static final boolean DEBUG_FAILURES = false;
-
-   static
-   {
-      // Exercised by baseline test
-      //WRITER_CLASSES.add(JsonWriter.class);
-
-      // Exercised by baseline test
-      //WRITER_CLASSES.add(MSPDIWriter.class);
-
-      // Exercised by baseline test
-      //WRITER_CLASSES.add(PlannerWriter.class);
-
-      // Exercise by baseline test
-      //WRITER_CLASSES.add(PrimaveraPMFileWriter.class);
-
-      // Not reliable enough results to include
-      // WRITER_CLASSES.add(SDEFWriter.class);
-
-      // Write MPX last as applying locale settings will change some project values
-      WRITER_CLASSES.add(MPXWriter.class);
-   }
 }

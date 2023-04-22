@@ -23,6 +23,10 @@
 
 package net.sf.mpxj.common;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
 import net.sf.mpxj.ResourceField;
 
 /**
@@ -70,6 +74,20 @@ public final class ResourceFieldLists
       ResourceField.DURATION8,
       ResourceField.DURATION9,
       ResourceField.DURATION10
+   };
+
+   public static final ResourceField[] CUSTOM_DURATION_UNITS =
+   {
+      ResourceField.DURATION1_UNITS,
+      ResourceField.DURATION2_UNITS,
+      ResourceField.DURATION3_UNITS,
+      ResourceField.DURATION4_UNITS,
+      ResourceField.DURATION5_UNITS,
+      ResourceField.DURATION6_UNITS,
+      ResourceField.DURATION7_UNITS,
+      ResourceField.DURATION8_UNITS,
+      ResourceField.DURATION9_UNITS,
+      ResourceField.DURATION10_UNITS
    };
 
    public static final ResourceField[] CUSTOM_FINISH =
@@ -182,7 +200,7 @@ public final class ResourceFieldLists
       ResourceField.TEXT30
    };
 
-   public static final ResourceField[] ENTERPRISE_COST =
+   public static final ResourceField[] ENTERPRISE_CUSTOM_COST =
    {
       ResourceField.ENTERPRISE_COST1,
       ResourceField.ENTERPRISE_COST2,
@@ -196,7 +214,7 @@ public final class ResourceFieldLists
       ResourceField.ENTERPRISE_COST10
    };
 
-   public static final ResourceField[] ENTERPRISE_DATE =
+   public static final ResourceField[] ENTERPRISE_CUSTOM_DATE =
    {
       ResourceField.ENTERPRISE_DATE1,
       ResourceField.ENTERPRISE_DATE2,
@@ -230,7 +248,7 @@ public final class ResourceFieldLists
       ResourceField.ENTERPRISE_DATE30
    };
 
-   public static final ResourceField[] ENTERPRISE_DURATION =
+   public static final ResourceField[] ENTERPRISE_CUSTOM_DURATION =
    {
       ResourceField.ENTERPRISE_DURATION1,
       ResourceField.ENTERPRISE_DURATION2,
@@ -244,7 +262,7 @@ public final class ResourceFieldLists
       ResourceField.ENTERPRISE_DURATION10
    };
 
-   public static final ResourceField[] ENTERPRISE_FLAG =
+   public static final ResourceField[] ENTERPRISE_CUSTOM_FLAG =
    {
       ResourceField.ENTERPRISE_FLAG1,
       ResourceField.ENTERPRISE_FLAG2,
@@ -268,7 +286,7 @@ public final class ResourceFieldLists
       ResourceField.ENTERPRISE_FLAG20
    };
 
-   public static final ResourceField[] ENTERPRISE_NUMBER =
+   public static final ResourceField[] ENTERPRISE_CUSTOM_NUMBER =
    {
       ResourceField.ENTERPRISE_NUMBER1,
       ResourceField.ENTERPRISE_NUMBER2,
@@ -312,7 +330,7 @@ public final class ResourceFieldLists
       ResourceField.ENTERPRISE_NUMBER40
    };
 
-   public static final ResourceField[] ENTERPRISE_TEXT =
+   public static final ResourceField[] ENTERPRISE_CUSTOM_TEXT =
    {
       ResourceField.ENTERPRISE_TEXT1,
       ResourceField.ENTERPRISE_TEXT2,
@@ -354,60 +372,6 @@ public final class ResourceFieldLists
       ResourceField.ENTERPRISE_TEXT38,
       ResourceField.ENTERPRISE_TEXT39,
       ResourceField.ENTERPRISE_TEXT40
-   };
-
-   public static final ResourceField[] ENTERPRISE_CUSTOM_FIELD =
-   {
-      ResourceField.ENTERPRISE_CUSTOM_FIELD1,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD2,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD3,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD4,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD5,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD6,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD7,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD8,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD9,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD10,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD11,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD12,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD13,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD14,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD15,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD16,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD17,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD18,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD19,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD20,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD21,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD22,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD23,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD24,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD25,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD26,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD27,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD28,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD29,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD30,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD31,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD32,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD33,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD34,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD35,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD36,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD37,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD38,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD39,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD40,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD41,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD42,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD43,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD44,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD45,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD46,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD47,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD48,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD49,
-      ResourceField.ENTERPRISE_CUSTOM_FIELD50
    };
 
    public static final ResourceField[] BASELINE_COSTS =
@@ -452,4 +416,65 @@ public final class ResourceFieldLists
       ResourceField.OUTLINE_CODE10
    };
 
+   public static final ResourceField[] CUSTOM_OUTLINE_CODE_INDEX =
+   {
+      ResourceField.OUTLINE_CODE1_INDEX,
+      ResourceField.OUTLINE_CODE2_INDEX,
+      ResourceField.OUTLINE_CODE3_INDEX,
+      ResourceField.OUTLINE_CODE4_INDEX,
+      ResourceField.OUTLINE_CODE5_INDEX,
+      ResourceField.OUTLINE_CODE6_INDEX,
+      ResourceField.OUTLINE_CODE7_INDEX,
+      ResourceField.OUTLINE_CODE8_INDEX,
+      ResourceField.OUTLINE_CODE9_INDEX,
+      ResourceField.OUTLINE_CODE10_INDEX
+   };
+
+   public static final ResourceField[] BASELINE_BUDGET_COSTS =
+   {
+      ResourceField.BASELINE1_BUDGET_COST,
+      ResourceField.BASELINE2_BUDGET_COST,
+      ResourceField.BASELINE3_BUDGET_COST,
+      ResourceField.BASELINE4_BUDGET_COST,
+      ResourceField.BASELINE5_BUDGET_COST,
+      ResourceField.BASELINE6_BUDGET_COST,
+      ResourceField.BASELINE7_BUDGET_COST,
+      ResourceField.BASELINE8_BUDGET_COST,
+      ResourceField.BASELINE9_BUDGET_COST,
+      ResourceField.BASELINE10_BUDGET_COST
+   };
+
+   public static final ResourceField[] BASELINE_BUDGET_WORKS =
+   {
+      ResourceField.BASELINE1_BUDGET_WORK,
+      ResourceField.BASELINE2_BUDGET_WORK,
+      ResourceField.BASELINE3_BUDGET_WORK,
+      ResourceField.BASELINE4_BUDGET_WORK,
+      ResourceField.BASELINE5_BUDGET_WORK,
+      ResourceField.BASELINE6_BUDGET_WORK,
+      ResourceField.BASELINE7_BUDGET_WORK,
+      ResourceField.BASELINE8_BUDGET_WORK,
+      ResourceField.BASELINE9_BUDGET_WORK,
+      ResourceField.BASELINE10_BUDGET_WORK
+   };
+
+   public static final List<ResourceField> CUSTOM_FIELDS = new ArrayList<>();
+   static
+   {
+      CUSTOM_FIELDS.addAll(Arrays.asList(ResourceFieldLists.CUSTOM_TEXT));
+      CUSTOM_FIELDS.addAll(Arrays.asList(ResourceFieldLists.CUSTOM_DATE));
+      CUSTOM_FIELDS.addAll(Arrays.asList(ResourceFieldLists.CUSTOM_START));
+      CUSTOM_FIELDS.addAll(Arrays.asList(ResourceFieldLists.CUSTOM_FINISH));
+      CUSTOM_FIELDS.addAll(Arrays.asList(ResourceFieldLists.CUSTOM_COST));
+      CUSTOM_FIELDS.addAll(Arrays.asList(ResourceFieldLists.CUSTOM_FLAG));
+      CUSTOM_FIELDS.addAll(Arrays.asList(ResourceFieldLists.CUSTOM_NUMBER));
+      CUSTOM_FIELDS.addAll(Arrays.asList(ResourceFieldLists.CUSTOM_DURATION));
+      CUSTOM_FIELDS.addAll(Arrays.asList(ResourceFieldLists.CUSTOM_OUTLINE_CODE));
+      CUSTOM_FIELDS.addAll(Arrays.asList(ResourceFieldLists.ENTERPRISE_CUSTOM_TEXT));
+      CUSTOM_FIELDS.addAll(Arrays.asList(ResourceFieldLists.ENTERPRISE_CUSTOM_DATE));
+      CUSTOM_FIELDS.addAll(Arrays.asList(ResourceFieldLists.ENTERPRISE_CUSTOM_COST));
+      CUSTOM_FIELDS.addAll(Arrays.asList(ResourceFieldLists.ENTERPRISE_CUSTOM_FLAG));
+      CUSTOM_FIELDS.addAll(Arrays.asList(ResourceFieldLists.ENTERPRISE_CUSTOM_NUMBER));
+      CUSTOM_FIELDS.addAll(Arrays.asList(ResourceFieldLists.ENTERPRISE_CUSTOM_DURATION));
+   }
 }

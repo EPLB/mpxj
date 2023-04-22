@@ -26,14 +26,14 @@ package net.sf.mpxj.mpx;
 
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Locale;
 
+import net.sf.mpxj.FieldType;
 import net.sf.mpxj.MPXJException;
 import net.sf.mpxj.ProjectFile;
-import net.sf.mpxj.Relation;
 import net.sf.mpxj.Task;
 import net.sf.mpxj.TaskField;
+import net.sf.mpxj.mpp.UserDefinedFieldMap;
 
 /**
  * This class represents the task table definition record in an MPX file.
@@ -48,10 +48,12 @@ final class TaskModel
     *
     * @param file the parent file to which this record belongs.
     * @param locale target locale
+    * @param userDefinedFieldMap user defined field map
     */
-   TaskModel(ProjectFile file, Locale locale)
+   TaskModel(ProjectFile file, Locale locale, UserDefinedFieldMap userDefinedFieldMap)
    {
       m_parentFile = file;
+      m_userDefinedFieldMap = userDefinedFieldMap;
       setLocale(locale);
    }
 
@@ -82,7 +84,7 @@ final class TaskModel
     * This method is used to retrieve a linked list of field identifiers
     * indicating the fields present in a task record.
     *
-    * @return list of field names
+    * @return array of field identifiers
     */
    public int[] getModel()
    {
@@ -102,7 +104,7 @@ final class TaskModel
 
       for (int i = 0; i < length; i++)
       {
-         if (isText == true)
+         if (isText)
          {
             add(getTaskCode(record.getString(i)));
          }
@@ -124,7 +126,7 @@ final class TaskModel
    {
       if (field < m_flags.length)
       {
-         if (m_flags[field] == false)
+         if (!m_flags[field])
          {
             m_flags[field] = true;
             m_fields[m_count] = field;
@@ -159,7 +161,7 @@ final class TaskModel
       }
 
       //
-      // Ensure the the model fields always appear in the same order
+      // Ensure the model fields always appear in the same order
       //
       Arrays.sort(m_fields);
       System.arraycopy(m_fields, m_fields.length - m_count, m_fields, 0, m_count);
@@ -172,35 +174,24 @@ final class TaskModel
     * @param field target field
     * @return true if the field contains data
     */
-   @SuppressWarnings("unchecked") private boolean isFieldPopulated(Task task, TaskField field)
+   private boolean isFieldPopulated(Task task, FieldType field)
    {
       boolean result = false;
       if (field != null)
       {
-         Object value = task.getCachedValue(field);
-         switch (field)
+         field = m_userDefinedFieldMap == null ? field : m_userDefinedFieldMap.getSource(field);
+         Object value = task.get(field);
+
+         // We never write these fields to the task record.
+         // We only write a predecessor entry rather than the successors entry
+         // We write notes as a separate record
+         if (field == TaskField.NOTES || field == TaskField.SUCCESSORS)
          {
-            // We never write these fields to the task record.
-            // We only write a predecessor entry rather than the successors entry
-            // We write notes as a separate record
-            case NOTES:
-            case SUCCESSORS:
-            {
-               result = false;
-               break;
-            }
-
-            case PREDECESSORS:
-            {
-               result = value != null && !((List<Relation>) value).isEmpty();
-               break;
-            }
-
-            default:
-            {
-               result = value != null;
-               break;
-            }
+            result = false;
+         }
+         else
+         {
+            result = ModelUtility.isFieldPopulated(field, value);
          }
       }
       return result;
@@ -240,7 +231,7 @@ final class TaskModel
       textual.append(MPXConstants.EOL);
       numeric.append(MPXConstants.EOL);
 
-      textual.append(numeric.toString());
+      textual.append(numeric);
 
       return (textual.toString());
    }
@@ -281,18 +272,18 @@ final class TaskModel
       return (result.intValue());
    }
 
-   private ProjectFile m_parentFile;
+   private final ProjectFile m_parentFile;
 
    /**
     * Array of flags indicating whether each field has already been
     * added to the model.
     */
-   private boolean[] m_flags = new boolean[MPXTaskField.MAX_FIELDS];
+   private final boolean[] m_flags = new boolean[MPXTaskField.MAX_FIELDS];
 
    /**
     * Array of field numbers in order of their appearance.
     */
-   private int[] m_fields = new int[MPXTaskField.MAX_FIELDS + 1];
+   private final int[] m_fields = new int[MPXTaskField.MAX_FIELDS + 1];
 
    /**
     * Count of the number of fields present.
@@ -307,5 +298,6 @@ final class TaskModel
    /**
     * Map used to store task field numbers.
     */
-   private HashMap<String, Integer> m_taskNumbers = new HashMap<>();
+   private final HashMap<String, Integer> m_taskNumbers = new HashMap<>();
+   private final UserDefinedFieldMap m_userDefinedFieldMap;
 }

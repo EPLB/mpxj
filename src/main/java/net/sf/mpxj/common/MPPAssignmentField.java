@@ -24,10 +24,13 @@
 package net.sf.mpxj.common;
 
 import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Set;
 
 import net.sf.mpxj.AssignmentField;
+import net.sf.mpxj.DataType;
+import net.sf.mpxj.FieldType;
+import net.sf.mpxj.FieldTypeClass;
+import net.sf.mpxj.ProjectFile;
+import net.sf.mpxj.UserDefinedField;
 
 /**
  * Utility class used to map between the integer values held in MS Project
@@ -40,28 +43,30 @@ public final class MPPAssignmentField
     * Retrieve an instance of the AssignmentField class based on the data read from an
     * MS Project file.
     *
+    * @param project parent project
     * @param value value from an MS Project file
     * @return AssignmentField instance
     */
-   public static AssignmentField getInstance(int value)
+   public static FieldType getInstance(ProjectFile project, int value)
    {
-      AssignmentField result = null;
+      // The 0x4000 prefix appears to be specific to resource assignments - but don't appear to carry useful information
+      if ((value & 0x8000) != 0)
+      {
+         return project.getUserDefinedFields().getOrCreateAssignmentField(Integer.valueOf(value), (k) -> {
+            int id = (k.intValue() & 0xFFF) + 1;
+            String internalName = "ENTERPRISE_CUSTOM_FIELD" + id;
+            String externalName = "Enterprise Custom Field " + id;
+            return new UserDefinedField(k, internalName, externalName, FieldTypeClass.ASSIGNMENT, false, DataType.CUSTOM);
+         });
+      }
 
+      FieldType result = null;
       if (value >= 0 && value < FIELD_ARRAY.length)
       {
          result = FIELD_ARRAY[value];
       }
-      else
-      {
-         if ((value & 0x8000) != 0)
-         {
-            int baseValue = AssignmentField.ENTERPRISE_CUSTOM_FIELD1.getValue();
-            int id = baseValue + (value & 0xFFF);
-            result = AssignmentField.getInstance(id);
-         }
-      }
 
-      return (result);
+      return result;
    }
 
    /**
@@ -70,15 +75,12 @@ public final class MPPAssignmentField
     * @param value field instance
     * @return field ID
     */
-   public static int getID(AssignmentField value)
+   public static int getID(FieldType value)
    {
       int result;
-
-      if (ENTERPRISE_CUSTOM_FIELDS.contains(value))
+      if (value instanceof UserDefinedField)
       {
-         int baseValue = AssignmentField.ENTERPRISE_CUSTOM_FIELD1.getValue();
-         int id = value.getValue() - baseValue;
-         result = 0x8000 + id;
+         result = value.getValue();
       }
       else
       {
@@ -96,64 +98,33 @@ public final class MPPAssignmentField
       FIELD_ARRAY[0] = AssignmentField.UNIQUE_ID;
       FIELD_ARRAY[1] = AssignmentField.TASK_UNIQUE_ID;
       FIELD_ARRAY[2] = AssignmentField.RESOURCE_UNIQUE_ID;
-      FIELD_ARRAY[20] = AssignmentField.START;
-      FIELD_ARRAY[21] = AssignmentField.FINISH;
-      FIELD_ARRAY[7] = AssignmentField.ASSIGNMENT_UNITS;
-      FIELD_ARRAY[49] = AssignmentField.TIMEPHASED_WORK;
-      FIELD_ARRAY[50] = AssignmentField.TIMEPHASED_ACTUAL_WORK;
-      FIELD_ARRAY[51] = AssignmentField.TIMEPHASED_ACTUAL_OVERTIME_WORK;
-      FIELD_ARRAY[52] = AssignmentField.TIMEPHASED_BASELINE_WORK;
-      FIELD_ARRAY[53] = AssignmentField.TIMEPHASED_BASELINE_COST;
-      FIELD_ARRAY[291] = AssignmentField.TIMEPHASED_BASELINE1_WORK;
-      FIELD_ARRAY[292] = AssignmentField.TIMEPHASED_BASELINE1_COST;
-      FIELD_ARRAY[300] = AssignmentField.TIMEPHASED_BASELINE2_WORK;
-      FIELD_ARRAY[301] = AssignmentField.TIMEPHASED_BASELINE2_COST;
-      FIELD_ARRAY[309] = AssignmentField.TIMEPHASED_BASELINE3_WORK;
-      FIELD_ARRAY[310] = AssignmentField.TIMEPHASED_BASELINE3_COST;
-      FIELD_ARRAY[318] = AssignmentField.TIMEPHASED_BASELINE4_WORK;
-      FIELD_ARRAY[319] = AssignmentField.TIMEPHASED_BASELINE4_COST;
-      FIELD_ARRAY[327] = AssignmentField.TIMEPHASED_BASELINE5_WORK;
-      FIELD_ARRAY[328] = AssignmentField.TIMEPHASED_BASELINE5_COST;
-      FIELD_ARRAY[336] = AssignmentField.TIMEPHASED_BASELINE6_WORK;
-      FIELD_ARRAY[337] = AssignmentField.TIMEPHASED_BASELINE6_COST;
-      FIELD_ARRAY[345] = AssignmentField.TIMEPHASED_BASELINE7_WORK;
-      FIELD_ARRAY[346] = AssignmentField.TIMEPHASED_BASELINE7_COST;
-      FIELD_ARRAY[354] = AssignmentField.TIMEPHASED_BASELINE8_WORK;
-      FIELD_ARRAY[355] = AssignmentField.TIMEPHASED_BASELINE8_COST;
-      FIELD_ARRAY[363] = AssignmentField.TIMEPHASED_BASELINE9_WORK;
-      FIELD_ARRAY[364] = AssignmentField.TIMEPHASED_BASELINE9_COST;
-      FIELD_ARRAY[372] = AssignmentField.TIMEPHASED_BASELINE10_WORK;
-      FIELD_ARRAY[373] = AssignmentField.TIMEPHASED_BASELINE10_COST;
-      FIELD_ARRAY[12] = AssignmentField.REMAINING_WORK;
-      FIELD_ARRAY[270] = AssignmentField.VARIABLE_RATE_UNITS;
-      FIELD_ARRAY[28] = AssignmentField.ACTUAL_COST;
-      FIELD_ARRAY[10] = AssignmentField.ACTUAL_WORK;
-      FIELD_ARRAY[26] = AssignmentField.COST;
-      FIELD_ARRAY[25] = AssignmentField.ASSIGNMENT_DELAY;
-      FIELD_ARRAY[145] = AssignmentField.LEVELING_DELAY;
-      FIELD_ARRAY[55] = AssignmentField.LEVELING_DELAY_UNITS;
-      FIELD_ARRAY[8] = AssignmentField.WORK;
-      FIELD_ARRAY[32] = AssignmentField.BASELINE_COST;
-      FIELD_ARRAY[147] = AssignmentField.BASELINE_FINISH;
-      FIELD_ARRAY[146] = AssignmentField.BASELINE_START;
-      FIELD_ARRAY[16] = AssignmentField.BASELINE_WORK;
-
       FIELD_ARRAY[3] = AssignmentField.TASK_ID;
       FIELD_ARRAY[4] = AssignmentField.RESOURCE_ID;
       FIELD_ARRAY[5] = AssignmentField.TASK_NAME;
       FIELD_ARRAY[6] = AssignmentField.RESOURCE_NAME;
+      FIELD_ARRAY[7] = AssignmentField.ASSIGNMENT_UNITS;
+      FIELD_ARRAY[8] = AssignmentField.WORK;
       FIELD_ARRAY[9] = AssignmentField.OVERTIME_WORK;
+      FIELD_ARRAY[10] = AssignmentField.ACTUAL_WORK;
       FIELD_ARRAY[11] = AssignmentField.REGULAR_WORK;
+      FIELD_ARRAY[12] = AssignmentField.REMAINING_WORK;
       FIELD_ARRAY[13] = AssignmentField.ACTUAL_OVERTIME_WORK;
       FIELD_ARRAY[14] = AssignmentField.REMAINING_OVERTIME_WORK;
+      FIELD_ARRAY[16] = AssignmentField.BASELINE_WORK;
       FIELD_ARRAY[19] = AssignmentField.PEAK;
+      FIELD_ARRAY[20] = AssignmentField.START;
+      FIELD_ARRAY[21] = AssignmentField.FINISH;
       FIELD_ARRAY[22] = AssignmentField.ACTUAL_START;
       FIELD_ARRAY[23] = AssignmentField.ACTUAL_FINISH;
       FIELD_ARRAY[24] = AssignmentField.RESUME;
+      FIELD_ARRAY[25] = AssignmentField.ASSIGNMENT_DELAY;
+      FIELD_ARRAY[26] = AssignmentField.COST;
       FIELD_ARRAY[27] = AssignmentField.OVERTIME_COST;
+      FIELD_ARRAY[28] = AssignmentField.ACTUAL_COST;
       FIELD_ARRAY[29] = AssignmentField.REMAINING_COST;
       FIELD_ARRAY[30] = AssignmentField.ACTUAL_OVERTIME_COST;
       FIELD_ARRAY[31] = AssignmentField.REMAINING_OVERTIME_COST;
+      FIELD_ARRAY[32] = AssignmentField.BASELINE_COST;
       FIELD_ARRAY[34] = AssignmentField.BCWS;
       FIELD_ARRAY[35] = AssignmentField.BCWP;
       FIELD_ARRAY[36] = AssignmentField.ACWP;
@@ -162,6 +133,12 @@ public final class MPPAssignmentField
       FIELD_ARRAY[39] = AssignmentField.WORK_CONTOUR;
       FIELD_ARRAY[43] = AssignmentField.PERCENT_WORK_COMPLETE;
       FIELD_ARRAY[44] = AssignmentField.PROJECT;
+      FIELD_ARRAY[49] = AssignmentField.TIMEPHASED_WORK;
+      FIELD_ARRAY[50] = AssignmentField.TIMEPHASED_ACTUAL_WORK;
+      FIELD_ARRAY[51] = AssignmentField.TIMEPHASED_ACTUAL_OVERTIME_WORK;
+      FIELD_ARRAY[52] = AssignmentField.TIMEPHASED_BASELINE_WORK;
+      FIELD_ARRAY[53] = AssignmentField.TIMEPHASED_BASELINE_COST;
+      FIELD_ARRAY[55] = AssignmentField.LEVELING_DELAY_UNITS;
       FIELD_ARRAY[71] = AssignmentField.NOTES;
       FIELD_ARRAY[72] = AssignmentField.CONFIRMED;
       FIELD_ARRAY[73] = AssignmentField.RESPONSE_PENDING;
@@ -196,6 +173,9 @@ public final class MPPAssignmentField
       FIELD_ARRAY[113] = AssignmentField.DURATION1;
       FIELD_ARRAY[114] = AssignmentField.DURATION2;
       FIELD_ARRAY[115] = AssignmentField.DURATION3;
+      FIELD_ARRAY[116] = AssignmentField.DURATION1_UNITS;
+      FIELD_ARRAY[117] = AssignmentField.DURATION2_UNITS;
+      FIELD_ARRAY[118] = AssignmentField.DURATION3_UNITS;
       FIELD_ARRAY[119] = AssignmentField.COST1;
       FIELD_ARRAY[120] = AssignmentField.COST2;
       FIELD_ARRAY[121] = AssignmentField.COST3;
@@ -212,6 +192,9 @@ public final class MPPAssignmentField
       FIELD_ARRAY[132] = AssignmentField.LINKED_FIELDS;
       FIELD_ARRAY[135] = AssignmentField.OVERALLOCATED;
       FIELD_ARRAY[142] = AssignmentField.TASK_SUMMARY_NAME;
+      FIELD_ARRAY[145] = AssignmentField.LEVELING_DELAY;
+      FIELD_ARRAY[146] = AssignmentField.BASELINE_START;
+      FIELD_ARRAY[147] = AssignmentField.BASELINE_FINISH;
       FIELD_ARRAY[150] = AssignmentField.HYPERLINK_DATA;
       FIELD_ARRAY[152] = AssignmentField.HYPERLINK;
       FIELD_ARRAY[153] = AssignmentField.HYPERLINK_ADDRESS;
@@ -296,12 +279,20 @@ public final class MPPAssignmentField
       FIELD_ARRAY[235] = AssignmentField.TEXT28;
       FIELD_ARRAY[236] = AssignmentField.TEXT29;
       FIELD_ARRAY[237] = AssignmentField.TEXT30;
+      FIELD_ARRAY[238] = AssignmentField.DURATION4_UNITS;
+      FIELD_ARRAY[239] = AssignmentField.DURATION5_UNITS;
+      FIELD_ARRAY[240] = AssignmentField.DURATION6_UNITS;
+      FIELD_ARRAY[241] = AssignmentField.DURATION7_UNITS;
+      FIELD_ARRAY[242] = AssignmentField.DURATION8_UNITS;
+      FIELD_ARRAY[243] = AssignmentField.DURATION9_UNITS;
+      FIELD_ARRAY[244] = AssignmentField.DURATION10_UNITS;
       FIELD_ARRAY[246] = AssignmentField.INDEX;
       FIELD_ARRAY[247] = AssignmentField.CV;
       FIELD_ARRAY[248] = AssignmentField.WORK_VARIANCE;
       FIELD_ARRAY[262] = AssignmentField.START_VARIANCE;
       FIELD_ARRAY[263] = AssignmentField.FINISH_VARIANCE;
       FIELD_ARRAY[264] = AssignmentField.STOP;
+      FIELD_ARRAY[270] = AssignmentField.VARIABLE_RATE_UNITS;
       FIELD_ARRAY[271] = AssignmentField.VAC;
       FIELD_ARRAY[275] = AssignmentField.FIXED_MATERIAL_ASSIGNMENT;
       FIELD_ARRAY[276] = AssignmentField.RESOURCE_TYPE;
@@ -309,42 +300,62 @@ public final class MPPAssignmentField
       FIELD_ARRAY[286] = AssignmentField.WBS;
       FIELD_ARRAY[289] = AssignmentField.BASELINE1_WORK;
       FIELD_ARRAY[290] = AssignmentField.BASELINE1_COST;
+      FIELD_ARRAY[291] = AssignmentField.TIMEPHASED_BASELINE1_WORK;
+      FIELD_ARRAY[292] = AssignmentField.TIMEPHASED_BASELINE1_COST;
       FIELD_ARRAY[295] = AssignmentField.BASELINE1_START;
       FIELD_ARRAY[296] = AssignmentField.BASELINE1_FINISH;
       FIELD_ARRAY[298] = AssignmentField.BASELINE2_WORK;
       FIELD_ARRAY[299] = AssignmentField.BASELINE2_COST;
+      FIELD_ARRAY[300] = AssignmentField.TIMEPHASED_BASELINE2_WORK;
+      FIELD_ARRAY[301] = AssignmentField.TIMEPHASED_BASELINE2_COST;
       FIELD_ARRAY[304] = AssignmentField.BASELINE2_START;
       FIELD_ARRAY[305] = AssignmentField.BASELINE2_FINISH;
       FIELD_ARRAY[307] = AssignmentField.BASELINE3_WORK;
       FIELD_ARRAY[308] = AssignmentField.BASELINE3_COST;
+      FIELD_ARRAY[309] = AssignmentField.TIMEPHASED_BASELINE3_WORK;
+      FIELD_ARRAY[310] = AssignmentField.TIMEPHASED_BASELINE3_COST;
       FIELD_ARRAY[313] = AssignmentField.BASELINE3_START;
       FIELD_ARRAY[314] = AssignmentField.BASELINE3_FINISH;
       FIELD_ARRAY[316] = AssignmentField.BASELINE4_WORK;
       FIELD_ARRAY[317] = AssignmentField.BASELINE4_COST;
+      FIELD_ARRAY[318] = AssignmentField.TIMEPHASED_BASELINE4_WORK;
+      FIELD_ARRAY[319] = AssignmentField.TIMEPHASED_BASELINE4_COST;
       FIELD_ARRAY[322] = AssignmentField.BASELINE4_START;
       FIELD_ARRAY[323] = AssignmentField.BASELINE4_FINISH;
       FIELD_ARRAY[325] = AssignmentField.BASELINE5_WORK;
       FIELD_ARRAY[326] = AssignmentField.BASELINE5_COST;
+      FIELD_ARRAY[327] = AssignmentField.TIMEPHASED_BASELINE5_WORK;
+      FIELD_ARRAY[328] = AssignmentField.TIMEPHASED_BASELINE5_COST;
       FIELD_ARRAY[331] = AssignmentField.BASELINE5_START;
       FIELD_ARRAY[332] = AssignmentField.BASELINE5_FINISH;
       FIELD_ARRAY[334] = AssignmentField.BASELINE6_WORK;
       FIELD_ARRAY[335] = AssignmentField.BASELINE6_COST;
+      FIELD_ARRAY[336] = AssignmentField.TIMEPHASED_BASELINE6_WORK;
+      FIELD_ARRAY[337] = AssignmentField.TIMEPHASED_BASELINE6_COST;
       FIELD_ARRAY[340] = AssignmentField.BASELINE6_START;
       FIELD_ARRAY[341] = AssignmentField.BASELINE6_FINISH;
       FIELD_ARRAY[343] = AssignmentField.BASELINE7_WORK;
       FIELD_ARRAY[344] = AssignmentField.BASELINE7_COST;
+      FIELD_ARRAY[345] = AssignmentField.TIMEPHASED_BASELINE7_WORK;
+      FIELD_ARRAY[346] = AssignmentField.TIMEPHASED_BASELINE7_COST;
       FIELD_ARRAY[349] = AssignmentField.BASELINE7_START;
       FIELD_ARRAY[350] = AssignmentField.BASELINE7_FINISH;
       FIELD_ARRAY[352] = AssignmentField.BASELINE8_WORK;
       FIELD_ARRAY[353] = AssignmentField.BASELINE8_COST;
+      FIELD_ARRAY[354] = AssignmentField.TIMEPHASED_BASELINE8_WORK;
+      FIELD_ARRAY[355] = AssignmentField.TIMEPHASED_BASELINE8_COST;
       FIELD_ARRAY[358] = AssignmentField.BASELINE8_START;
       FIELD_ARRAY[359] = AssignmentField.BASELINE8_FINISH;
       FIELD_ARRAY[361] = AssignmentField.BASELINE9_WORK;
       FIELD_ARRAY[362] = AssignmentField.BASELINE9_COST;
+      FIELD_ARRAY[363] = AssignmentField.TIMEPHASED_BASELINE9_WORK;
+      FIELD_ARRAY[364] = AssignmentField.TIMEPHASED_BASELINE9_COST;
       FIELD_ARRAY[367] = AssignmentField.BASELINE9_START;
       FIELD_ARRAY[368] = AssignmentField.BASELINE9_FINISH;
       FIELD_ARRAY[370] = AssignmentField.BASELINE10_WORK;
       FIELD_ARRAY[371] = AssignmentField.BASELINE10_COST;
+      FIELD_ARRAY[372] = AssignmentField.TIMEPHASED_BASELINE10_WORK;
+      FIELD_ARRAY[373] = AssignmentField.TIMEPHASED_BASELINE10_COST;
       FIELD_ARRAY[376] = AssignmentField.BASELINE10_START;
       FIELD_ARRAY[377] = AssignmentField.BASELINE10_FINISH;
       FIELD_ARRAY[379] = AssignmentField.TASK_OUTLINE_NUMBER;
@@ -572,16 +583,6 @@ public final class MPPAssignmentField
       FIELD_ARRAY[710] = AssignmentField.BASELINE9_BUDGET_COST;
       FIELD_ARRAY[713] = AssignmentField.BASELINE10_BUDGET_WORK;
       FIELD_ARRAY[714] = AssignmentField.BASELINE10_BUDGET_COST;
-      FIELD_ARRAY[116] = AssignmentField.DURATION1_UNITS;
-      FIELD_ARRAY[117] = AssignmentField.DURATION2_UNITS;
-      FIELD_ARRAY[118] = AssignmentField.DURATION3_UNITS;
-      FIELD_ARRAY[238] = AssignmentField.DURATION4_UNITS;
-      FIELD_ARRAY[239] = AssignmentField.DURATION5_UNITS;
-      FIELD_ARRAY[240] = AssignmentField.DURATION6_UNITS;
-      FIELD_ARRAY[241] = AssignmentField.DURATION7_UNITS;
-      FIELD_ARRAY[242] = AssignmentField.DURATION8_UNITS;
-      FIELD_ARRAY[243] = AssignmentField.DURATION9_UNITS;
-      FIELD_ARRAY[244] = AssignmentField.DURATION10_UNITS;
    }
 
    private static final int[] ID_ARRAY = new int[AssignmentField.MAX_VALUE];
@@ -600,6 +601,4 @@ public final class MPPAssignmentField
    }
 
    public static final int ASSIGNMENT_FIELD_BASE = 0x0F400000;
-
-   public static final Set<AssignmentField> ENTERPRISE_CUSTOM_FIELDS = new HashSet<>(Arrays.asList(AssignmentFieldLists.ENTERPRISE_CUSTOM_FIELD));
 }

@@ -24,13 +24,14 @@
 package net.sf.mpxj.primavera.suretrak;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.Map;
 
 import net.sf.mpxj.common.AutoCloseableHelper;
+import net.sf.mpxj.common.InputStreamHelper;
 import net.sf.mpxj.primavera.common.ColumnDefinition;
 import net.sf.mpxj.primavera.common.Table;
 import net.sf.mpxj.primavera.common.TableDefinition;
@@ -62,7 +63,7 @@ class TableReader
       InputStream is = null;
       try
       {
-         is = new FileInputStream(file);
+         is = Files.newInputStream(file.toPath());
          read(is, table);
       }
 
@@ -80,13 +81,8 @@ class TableReader
     */
    private void read(InputStream is, Table table) throws IOException
    {
-      byte[] headerBytes = new byte[6];
-      is.read(headerBytes);
-
-      byte[] recordCountBytes = new byte[2];
-      is.read(recordCountBytes);
-      //int recordCount = getShort(recordCountBytes, 0);
-      //System.out.println("Header: " + new String(headerBytes) + " Record count:" + recordCount);
+      InputStreamHelper.skip(is, 6); // header
+      InputStreamHelper.skip(is, 2); // record count
 
       byte[] buffer = new byte[m_definition.getRecordSize()];
       while (true)

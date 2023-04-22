@@ -113,7 +113,7 @@ public class MpxjCreate
       //
       // Add a holiday to the calendar to demonstrate calendar exceptions
       //
-      calendar.addCalendarException(df.parse("13/03/2006"), df.parse("13/03/2006"));
+      calendar.addCalendarException(df.parse("13/03/2006"));
 
       //
       // Retrieve the project properties and set the start date. Note Microsoft
@@ -135,7 +135,7 @@ public class MpxjCreate
       // Let's create an alias for TEXT1
       //
       CustomFieldContainer customFields = file.getCustomFields();
-      CustomField field = customFields.getCustomField(TaskField.TEXT1);
+      CustomField field = customFields.add(TaskField.TEXT1);
       field.setAlias("My Custom Field");
 
       //

@@ -25,13 +25,18 @@ package net.sf.mpxj.sample;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import net.sf.mpxj.AssignmentField;
+import net.sf.mpxj.ChildResourceContainer;
+import net.sf.mpxj.ChildTaskContainer;
 import net.sf.mpxj.DateRange;
 import net.sf.mpxj.Duration;
+import net.sf.mpxj.FieldType;
 import net.sf.mpxj.ProjectCalendar;
 import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.ProjectProperties;
@@ -88,6 +93,10 @@ public class MpxjQuery
    private static void query(String filename) throws Exception
    {
       ProjectFile mpx = new UniversalProjectReader().read(filename);
+      if (mpx == null)
+      {
+         throw new Exception("Unable to read file");
+      }
 
       listProjectProperties(mpx);
 
@@ -101,7 +110,9 @@ public class MpxjQuery
 
       listAssignmentsByResource(mpx);
 
-      listHierarchy(mpx);
+      listTaskHierarchy(mpx, "");
+
+      listResourceHierarchy(mpx, "");
 
       listTaskNotes(mpx);
 
@@ -114,6 +125,8 @@ public class MpxjQuery
       listCalendars(mpx);
 
       listPopulatedFields(mpx);
+
+      listTasksPercentComplete(mpx);
    }
 
    /**
@@ -195,34 +208,60 @@ public class MpxjQuery
    }
 
    /**
-    * This method lists all tasks defined in the file in a hierarchical
-    * format, reflecting the parent-child relationships between them.
+    * List different percent complete types for the tasks.
     *
-    * @param file MPX file
+    * @param file project file
     */
-   private static void listHierarchy(ProjectFile file)
+   private static void listTasksPercentComplete(ProjectFile file)
    {
-      for (Task task : file.getChildTasks())
+      System.out.println("ID\tUniqueID\tActivity ID\tName\t%Complete Type\tDuration % Complete\tWork % Complete\tPhysical % Complete");
+      for (Task task : file.getTasks())
       {
-         System.out.println("Task: " + task.getName() + "\t" + task.getStart() + "\t" + task.getFinish());
-         listHierarchy(task, " ");
+         List<Object> values = Arrays.asList(task.getID(), task.getUniqueID(), task.getActivityID(), task.getName(), task.getPercentCompleteType(), task.getPercentageComplete(), task.getPercentageWorkComplete(), task.getPhysicalPercentComplete());
+         System.out.println(values.stream().map(String::valueOf).collect(Collectors.joining("\t")));
       }
-
       System.out.println();
    }
 
    /**
-    * Helper method called recursively to list child tasks.
+    * This method lists all tasks defined in the file in a hierarchical
+    * format, reflecting the parent-child relationships between them.
     *
-    * @param task task whose children are to be displayed
-    * @param indent whitespace used to indent hierarchy levels
+    * @param container child task container
+    * @param indent current hierarchy level indent
     */
-   private static void listHierarchy(Task task, String indent)
+   private static void listTaskHierarchy(ChildTaskContainer container, String indent)
    {
-      for (Task child : task.getChildTasks())
+      for (Task task : container.getChildTasks())
       {
-         System.out.println(indent + "Task: " + child.getName() + "\t" + child.getStart() + "\t" + child.getFinish());
-         listHierarchy(child, indent + " ");
+         System.out.println(indent + "Task: " + task.getName() + "\t" + task.getStart() + "\t" + task.getFinish());
+         listTaskHierarchy(task, indent + " ");
+      }
+
+      if (indent.length() == 0)
+      {
+         System.out.println();
+      }
+   }
+
+   /**
+    * This method lists all resources defined in the file in a hierarchical
+    * format, reflecting the parent-child relationships between them.
+    *
+    * @param container child resource container
+    * @param indent current hierarchy level indent
+    */
+   private static void listResourceHierarchy(ChildResourceContainer container, String indent)
+   {
+      for (Resource resource : container.getChildResources())
+      {
+         System.out.println(indent + "Resource: " + resource.getName());
+         listResourceHierarchy(resource, indent + " ");
+      }
+
+      if (indent.length() == 0)
+      {
+         System.out.println();
       }
    }
 
@@ -427,7 +466,7 @@ public class MpxjQuery
     */
    private static void dumpRelationList(List<Relation> relations)
    {
-      if (relations != null && relations.isEmpty() == false)
+      if (relations != null && !relations.isEmpty())
       {
          if (relations.size() > 1)
          {
@@ -492,14 +531,14 @@ public class MpxjQuery
 
    /**
     * List details of all fields with non-default value.
-    * 
+    *
     * @param file ProjectFile instance
     */
    private static void listPopulatedFields(ProjectFile file)
    {
-      Set<TaskField> tasks = file.getTasks().getPopulatedFields();
-      Set<ResourceField> resources = file.getResources().getPopulatedFields();
-      Set<AssignmentField> assignments = file.getResourceAssignments().getPopulatedFields();
+      Set<FieldType> tasks = file.getTasks().getPopulatedFields();
+      Set<FieldType> resources = file.getResources().getPopulatedFields();
+      Set<FieldType> assignments = file.getResourceAssignments().getPopulatedFields();
 
       System.out.println("Populated task fields: " + tasks.size() + "/" + TaskField.values().length);
       System.out.println("Populated resource fields: " + resources.size() + "/" + ResourceField.values().length);
@@ -507,15 +546,15 @@ public class MpxjQuery
       System.out.println();
 
       System.out.println("Populated task fields:");
-      tasks.forEach(x -> System.out.println(x));
+      tasks.forEach(System.out::println);
       System.out.println();
 
       System.out.println("Populated resource fields:");
-      resources.forEach(x -> System.out.println(x));
+      resources.forEach(System.out::println);
       System.out.println();
 
       System.out.println("Populated assignment fields:");
-      assignments.forEach(x -> System.out.println(x));
+      assignments.forEach(System.out::println);
       System.out.println();
    }
 }

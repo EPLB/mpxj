@@ -57,7 +57,8 @@ public class RecurringData
     */
    public void setStartDate(Date val)
    {
-      m_startDate = val;
+      m_startDate = DateHelper.getDayStartDate(val);
+      clearDatesCache();
    }
 
    /**
@@ -77,7 +78,8 @@ public class RecurringData
     */
    public void setFinishDate(Date val)
    {
-      m_finishDate = val;
+      m_finishDate = DateHelper.getDayEndDate(val);
+      clearDatesCache();
    }
 
    /**
@@ -98,6 +100,7 @@ public class RecurringData
    public void setOccurrences(Integer occurrences)
    {
       m_occurrences = occurrences;
+      clearDatesCache();
    }
 
    /**
@@ -118,6 +121,7 @@ public class RecurringData
    public void setRecurrenceType(RecurrenceType type)
    {
       m_recurrenceType = type;
+      clearDatesCache();
    }
 
    /**
@@ -138,6 +142,7 @@ public class RecurringData
    public void setUseEndDate(boolean useEndDate)
    {
       m_useEndDate = useEndDate;
+      clearDatesCache();
    }
 
    /**
@@ -158,6 +163,7 @@ public class RecurringData
    public void setWorkingDaysOnly(boolean workingDaysOnly)
    {
       m_workingDaysOnly = workingDaysOnly;
+      clearDatesCache();
    }
 
    /**
@@ -187,6 +193,7 @@ public class RecurringData
       {
          m_days.remove(day);
       }
+      clearDatesCache();
    }
 
    /**
@@ -205,6 +212,7 @@ public class RecurringData
          {
             setWeeklyDay(day, ((value & masks[day.getValue()]) != 0));
          }
+         clearDatesCache();
       }
    }
 
@@ -226,6 +234,7 @@ public class RecurringData
    public void setRelative(boolean relative)
    {
       m_relative = relative;
+      clearDatesCache();
    }
 
    /**
@@ -246,6 +255,7 @@ public class RecurringData
    public void setFrequency(Integer frequency)
    {
       m_frequency = frequency;
+      clearDatesCache();
    }
 
    /**
@@ -272,6 +282,7 @@ public class RecurringData
    {
       m_days.clear();
       m_days.add(day);
+      clearDatesCache();
    }
 
    /**
@@ -292,6 +303,7 @@ public class RecurringData
    public void setDayNumber(Integer day)
    {
       m_dayNumber = day;
+      clearDatesCache();
    }
 
    /**
@@ -312,6 +324,7 @@ public class RecurringData
    public void setMonthNumber(Integer month)
    {
       m_monthNumber = month;
+      clearDatesCache();
    }
 
    /**
@@ -321,6 +334,55 @@ public class RecurringData
     */
    public Date[] getDates()
    {
+      populateDates();
+      return m_dates;
+   }
+
+   /**
+    * Returns true if the configuration is valid,
+    * i.e. it returns one or more start dates.
+    *
+    * @return true if the configuration is valid
+    */
+   public boolean isValid()
+   {
+      populateDates();
+      return m_dates.length > 0;
+   }
+
+   /**
+    * Retrieve the first calculated date on which an exception
+    * will actually occur. The user-supplied start date may
+    * not align with the dates generated for the exception.
+    *
+    * @return first calculated exception date
+    */
+   public Date getCalculatedFirstDate()
+   {
+      populateDates();
+      return m_dates[0];
+   }
+
+   /**
+    * Retrieve the last calculated date on which an exception
+    * will actually occur.  The user-supplied finish date may
+    * not align with the dates generated for the exception.
+    *
+    * @return last calculated exception date
+    */
+   public Date getCalculatedLastDate()
+   {
+      populateDates();
+      return m_dates[m_dates.length - 1];
+   }
+
+   private void populateDates()
+   {
+      if (m_dates != null)
+      {
+         return;
+      }
+
       int frequency = NumberHelper.getInt(m_frequency);
       if (frequency < 1)
       {
@@ -359,7 +421,7 @@ public class RecurringData
 
       DateHelper.pushCalendar(calendar);
 
-      return dates.toArray(new Date[dates.size()]);
+      m_dates = dates.toArray(new Date[0]);
    }
 
    /**
@@ -416,11 +478,21 @@ public class RecurringData
     */
    private void getWeeklyDates(Calendar calendar, int frequency, List<Date> dates)
    {
+      //
+      // We need to work from the start of the week that contains the start date
+      // and ignore any matches we get that are before the start date.
+      //
       int currentDay = calendar.get(Calendar.DAY_OF_WEEK);
+      if (currentDay > Calendar.SUNDAY)
+      {
+         calendar.add(Calendar.DAY_OF_YEAR, Calendar.SUNDAY - currentDay);
+         currentDay = Calendar.SUNDAY;
+      }
 
       while (moreDates(calendar, dates))
       {
          int offset = 0;
+
          for (int dayIndex = 0; dayIndex < 7; dayIndex++)
          {
             if (getWeeklyDay(Day.getInstance(currentDay)))
@@ -434,7 +506,11 @@ public class RecurringData
                {
                   break;
                }
-               dates.add(calendar.getTime());
+
+               if (calendar.getTimeInMillis() >= m_startDate.getTime())
+               {
+                  dates.add(calendar.getTime());
+               }
             }
 
             ++offset;
@@ -497,7 +573,7 @@ public class RecurringData
             setCalendarToOrdinalRelativeDay(calendar, dayNumber);
          }
 
-         if (calendar.getTimeInMillis() > startDate)
+         if (calendar.getTimeInMillis() >= startDate)
          {
             dates.add(calendar.getTime());
             if (!moreDates(calendar, dates))
@@ -584,7 +660,7 @@ public class RecurringData
             setCalendarToOrdinalRelativeDay(calendar, dayNumber);
          }
 
-         if (calendar.getTimeInMillis() > startDate)
+         if (calendar.getTimeInMillis() >= startDate)
          {
             dates.add(calendar.getTime());
             if (!moreDates(calendar, dates))
@@ -708,6 +784,7 @@ public class RecurringData
          m_dayNumber = Integer.valueOf(cal.get(Calendar.DAY_OF_MONTH));
          m_monthNumber = Integer.valueOf(cal.get(Calendar.MONTH) + 1);
          DateHelper.pushCalendar(cal);
+         clearDatesCache();
       }
    }
 
@@ -732,15 +809,17 @@ public class RecurringData
       return result;
    }
 
-   /**
-    * {@inheritDoc}
-    */
+   private void clearDatesCache()
+   {
+      m_dates = null;
+   }
+
    @Override public String toString()
    {
       DateFormatSymbols dfs = new DateFormatSymbols();
       ByteArrayOutputStream os = new ByteArrayOutputStream();
       PrintWriter pw = new PrintWriter(os);
-      pw.print("[RecurringData");
+      pw.print("[RecurringData ");
       pw.print(m_recurrenceType);
 
       switch (m_recurrenceType)
@@ -769,7 +848,7 @@ public class RecurringData
                   sb.append(dfs.getWeekdays()[day.getValue()]);
                }
             }
-            pw.print(sb.toString());
+            pw.print(sb);
             break;
          }
 
@@ -814,9 +893,20 @@ public class RecurringData
          }
       }
 
-      pw.print(" From " + m_startDate);
-      pw.print(" For " + m_occurrences + " occurrences");
-      pw.print(" To " + m_finishDate);
+      if (m_startDate != null)
+      {
+         pw.print(" From " + m_startDate);
+      }
+
+      if (m_occurrences != null)
+      {
+         pw.print(" For " + m_occurrences + " occurrences");
+      }
+
+      if (m_finishDate != null)
+      {
+         pw.print(" To " + m_finishDate);
+      }
 
       pw.println("]");
       pw.flush();
@@ -860,5 +950,6 @@ public class RecurringData
    private Integer m_frequency;
    private Integer m_dayNumber;
    private Integer m_monthNumber;
-   private EnumSet<Day> m_days = EnumSet.noneOf(Day.class);
+   private Date[] m_dates;
+   private final EnumSet<Day> m_days = EnumSet.noneOf(Day.class);
 }

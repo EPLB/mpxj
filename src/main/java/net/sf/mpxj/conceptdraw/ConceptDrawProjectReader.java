@@ -26,9 +26,7 @@ package net.sf.mpxj.conceptdraw;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,6 +36,10 @@ import javax.xml.bind.JAXBContext;
 import javax.xml.bind.JAXBException;
 import javax.xml.parsers.ParserConfigurationException;
 
+import net.sf.mpxj.CostRateTable;
+import net.sf.mpxj.CostRateTableEntry;
+import net.sf.mpxj.common.DateHelper;
+import net.sf.mpxj.common.NumberHelper;
 import org.xml.sax.SAXException;
 
 import net.sf.mpxj.DateRange;
@@ -73,9 +75,6 @@ import net.sf.mpxj.reader.AbstractProjectStreamReader;
  */
 public final class ConceptDrawProjectReader extends AbstractProjectStreamReader
 {
-   /**
-    * {@inheritDoc}
-    */
    @Override public ProjectFile read(InputStream stream) throws MPXJException
    {
       try
@@ -93,6 +92,7 @@ public final class ConceptDrawProjectReader extends AbstractProjectStreamReader
          ProjectConfig config = m_projectFile.getProjectConfig();
          config.setAutoResourceUniqueID(false);
          config.setAutoResourceID(false);
+         config.setAutoRelationUniqueID(false);
 
          m_projectFile.getProjectProperties().setFileApplication("ConceptDraw PROJECT");
          m_projectFile.getProjectProperties().setFileType("CDP");
@@ -115,22 +115,7 @@ public final class ConceptDrawProjectReader extends AbstractProjectStreamReader
          return m_projectFile;
       }
 
-      catch (ParserConfigurationException ex)
-      {
-         throw new MPXJException("Failed to parse file", ex);
-      }
-
-      catch (JAXBException ex)
-      {
-         throw new MPXJException("Failed to parse file", ex);
-      }
-
-      catch (SAXException ex)
-      {
-         throw new MPXJException("Failed to parse file", ex);
-      }
-
-      catch (IOException ex)
+      catch (ParserConfigurationException | IOException | SAXException | JAXBException ex)
       {
          throw new MPXJException("Failed to parse file", ex);
       }
@@ -144,12 +129,9 @@ public final class ConceptDrawProjectReader extends AbstractProjectStreamReader
       }
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public List<ProjectFile> readAll(InputStream inputStream) throws MPXJException
    {
-      return Arrays.asList(read(inputStream));
+      return Collections.singletonList(read(inputStream));
    }
 
    /**
@@ -230,12 +212,13 @@ public final class ConceptDrawProjectReader extends AbstractProjectStreamReader
     */
    private void readWeekDay(ProjectCalendar mpxjCalendar, WeekDay day)
    {
+      mpxjCalendar.setWorkingDay(day.getDay(), day.isIsDayWorking());
+      ProjectCalendarHours hours = mpxjCalendar.addCalendarHours(day.getDay());
       if (day.isIsDayWorking())
       {
-         ProjectCalendarHours hours = mpxjCalendar.addCalendarHours(day.getDay());
          for (Document.Calendars.Calendar.WeekDays.WeekDay.TimePeriods.TimePeriod period : day.getTimePeriods().getTimePeriod())
          {
-            hours.addRange(new DateRange(period.getFrom(), period.getTo()));
+            hours.add(new DateRange(period.getFrom(), period.getTo()));
          }
       }
    }
@@ -248,12 +231,12 @@ public final class ConceptDrawProjectReader extends AbstractProjectStreamReader
     */
    private void readExceptionDay(ProjectCalendar mpxjCalendar, ExceptedDay day)
    {
-      ProjectCalendarException mpxjException = mpxjCalendar.addCalendarException(day.getDate(), day.getDate());
+      ProjectCalendarException mpxjException = mpxjCalendar.addCalendarException(day.getDate());
       if (day.isIsDayWorking())
       {
          for (Document.Calendars.Calendar.ExceptedDays.ExceptedDay.TimePeriods.TimePeriod period : day.getTimePeriods().getTimePeriod())
          {
-            mpxjException.addRange(new DateRange(period.getFrom(), period.getTo()));
+            mpxjException.add(new DateRange(period.getFrom(), period.getTo()));
          }
       }
    }
@@ -280,8 +263,7 @@ public final class ConceptDrawProjectReader extends AbstractProjectStreamReader
    {
       Resource mpxjResource = m_projectFile.addResource();
       mpxjResource.setName(resource.getName());
-      mpxjResource.setResourceCalendar(m_calendarMap.get(resource.getCalendarID()));
-      mpxjResource.setStandardRate(new Rate(resource.getCost(), resource.getCostTimeUnit()));
+      mpxjResource.setCalendar(m_calendarMap.get(resource.getCalendarID()));
       mpxjResource.setEmailAddress(resource.getEMail());
       mpxjResource.setGroup(resource.getGroup());
       //resource.getHyperlinks()
@@ -291,6 +273,11 @@ public final class ConceptDrawProjectReader extends AbstractProjectStreamReader
       mpxjResource.setID(Integer.valueOf(resource.getOutlineNumber()));
       //resource.getStyleProject()
       mpxjResource.setType(resource.getSubType() == null ? resource.getType() : resource.getSubType());
+
+      CostRateTable table = new CostRateTable();
+      table.add(new CostRateTableEntry(DateHelper.START_DATE_NA, DateHelper.END_DATE_NA, NumberHelper.DOUBLE_ZERO, new Rate(resource.getCost(), resource.getCostTimeUnit())));
+      mpxjResource.setCostRateTable(0, table);
+
       m_eventManager.fireResourceReadEvent(mpxjResource);
    }
 
@@ -301,20 +288,6 @@ public final class ConceptDrawProjectReader extends AbstractProjectStreamReader
     */
    private void readTasks(Document cdp)
    {
-      //
-      // Sort the projects into the correct order
-      //
-      List<Project> projects = new ArrayList<>(cdp.getProjects().getProject());
-      final AlphanumComparator comparator = new AlphanumComparator();
-
-      Collections.sort(projects, new Comparator<Project>()
-      {
-         @Override public int compare(Project o1, Project o2)
-         {
-            return comparator.compare(o1.getOutlineNumber(), o2.getOutlineNumber());
-         }
-      });
-
       for (Project project : cdp.getProjects().getProject())
       {
          readProject(project);
@@ -358,13 +331,7 @@ public final class ConceptDrawProjectReader extends AbstractProjectStreamReader
       List<Document.Projects.Project.Task> tasks = new ArrayList<>(project.getTask());
       final AlphanumComparator comparator = new AlphanumComparator();
 
-      Collections.sort(tasks, new Comparator<Document.Projects.Project.Task>()
-      {
-         @Override public int compare(Document.Projects.Project.Task o1, Document.Projects.Project.Task o2)
-         {
-            return comparator.compare(o1.getOutlineNumber(), o2.getOutlineNumber());
-         }
-      });
+      tasks.sort((o1, o2) -> comparator.compare(o1.getOutlineNumber(), o2.getOutlineNumber()));
 
       Map<String, Task> map = new HashMap<>();
       map.put("", mpxjTask);

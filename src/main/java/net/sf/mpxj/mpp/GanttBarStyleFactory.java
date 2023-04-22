@@ -1,5 +1,5 @@
 /*
- * file:       GanttarStyleFactory.java
+ * file:       GantBarStyleFactory.java
  * author:     Jon Iles
  * copyright:  (c) Packwood Software 2010
  * date:       19/04/2010
@@ -23,6 +23,8 @@
 
 package net.sf.mpxj.mpp;
 
+import net.sf.mpxj.ProjectFile;
+
 /**
  * Interface used to read Gantt bar styles from MPP files.
  */
@@ -31,16 +33,18 @@ public interface GanttBarStyleFactory
    /**
     * Reads the default set of Gantt bar styles.
     *
+    * @param file parent file
     * @param props props structure containing the Gantt chart style data
     * @return array of styles
     */
-   public GanttBarStyle[] processDefaultStyles(Props props);
+   public GanttBarStyle[] processDefaultStyles(ProjectFile file, Props props);
 
    /**
     * Reads the set of exception bar styles from MPP files.
     *
+    * @param file parent file
     * @param props props structure containing the Gantt chart style data
     * @return array of styles
     */
-   public GanttBarStyleException[] processExceptionStyles(Props props);
+   public GanttBarStyleException[] processExceptionStyles(ProjectFile file, Props props);
 }

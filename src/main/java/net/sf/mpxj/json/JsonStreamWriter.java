@@ -32,6 +32,8 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayDeque;
 import java.util.Date;
 import java.util.Deque;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Writes JSON data to an output stream.
@@ -99,6 +101,22 @@ public class JsonStreamWriter
    }
 
    /**
+    * Write a named list attribute containing simple values.
+    *
+    * @param name attribute name
+    * @param values list of attribute values
+    */
+   public void writeList(String name, List<Object> values) throws IOException
+   {
+      writeComma();
+      writeNewLineIndent();
+      writeName(name);
+      m_writer.write(" [");
+      m_writer.write(values.stream().map(Object::toString).collect(Collectors.joining(",")));
+      m_writer.write("]");
+   }
+
+   /**
     * Begin writing a named list attribute.
     *
     * @param name attribute name
@@ -107,8 +125,13 @@ public class JsonStreamWriter
    {
       writeComma();
       writeNewLineIndent();
-      writeName(name);
-      writeNewLineIndent();
+
+      if (name != null)
+      {
+         writeName(name);
+         writeNewLineIndent();
+      }
+
       m_writer.write("[");
       increaseIndent();
    }
@@ -187,14 +210,36 @@ public class JsonStreamWriter
    }
 
    /**
-    * Write a Date attribute.
+    * Write a Date attribute as a timestamp.
     *
     * @param name attribute name
     * @param value attribute value
     */
    public void writeNameValuePair(String name, Date value) throws IOException
    {
-      internalWriteNameValuePair(name, m_format.format(value));
+      internalWriteNameValuePair(name, m_timestampFormat.format(value));
+   }
+
+   /**
+    * Write a date attribute.
+    *
+    * @param name attribute name
+    * @param value attribute value
+    */
+   public void writeNameValuePairAsDate(String name, Date value) throws IOException
+   {
+      internalWriteNameValuePair(name, m_dateFormat.format(value));
+   }
+
+   /**
+    * Write a time attribute.
+    *
+    * @param name attribute name
+    * @param value attribute value
+    */
+   public void writeNameValuePairAsTime(String name, Date value) throws IOException
+   {
+      internalWriteNameValuePair(name, m_timeFormat.format(value));
    }
 
    /**
@@ -241,12 +286,6 @@ public class JsonStreamWriter
             case '\\':
             {
                m_buffer.append("\\\\");
-               break;
-            }
-
-            case '/':
-            {
-               m_buffer.append("\\/");
                break;
             }
 
@@ -368,7 +407,9 @@ public class JsonStreamWriter
    private final Deque<Boolean> m_firstNameValuePair = new ArrayDeque<>();
    private boolean m_pretty;
    private String m_indent = "";
-   private DateFormat m_format = new SimpleDateFormat("\"yyyy-MM-dd'T'HH:mm:ss.S\"");
+   private final DateFormat m_timestampFormat = new SimpleDateFormat("\"yyyy-MM-dd'T'HH:mm:ss.S\"");
+   private final DateFormat m_dateFormat = new SimpleDateFormat("\"yyyy-MM-dd\"");
+   private final DateFormat m_timeFormat = new SimpleDateFormat("\"HH:mm\"");
 
    private static final String INDENT = "  ";
 }

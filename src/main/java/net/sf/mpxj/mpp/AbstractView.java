@@ -24,7 +24,6 @@
 package net.sf.mpxj.mpp;
 
 import net.sf.mpxj.ProjectFile;
-import net.sf.mpxj.ProjectProperties;
 import net.sf.mpxj.Table;
 import net.sf.mpxj.TableContainer;
 import net.sf.mpxj.View;
@@ -42,32 +41,23 @@ public abstract class AbstractView implements View
     */
    public AbstractView(ProjectFile parent)
    {
-      m_properties = parent.getProjectProperties();
+      m_file = parent;
       m_tables = parent.getTables();
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public Integer getID()
    {
-      return (m_id);
+      return m_id;
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public String getName()
    {
-      return (m_name);
+      return m_name;
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public ViewType getType()
    {
-      return (m_type);
+      return m_type;
    }
 
    /**
@@ -75,9 +65,9 @@ public abstract class AbstractView implements View
     *
     * @return table name
     */
-   public String getTableName()
+   @Override public String getTableName()
    {
-      return (m_tableName);
+      return m_tableName;
    }
 
    /**
@@ -86,9 +76,9 @@ public abstract class AbstractView implements View
     *
     * @return table instance
     */
-   public Table getTable()
+   @Override public Table getTable()
    {
-      return (m_tables.getTaskTableByName(m_tableName));
+      return m_tables.getTaskTableByName(m_tableName);
    }
 
    /**
@@ -99,11 +89,11 @@ public abstract class AbstractView implements View
     */
    @Override public String toString()
    {
-      return ("[View id=" + m_id + " type=" + m_type + " name=" + m_name + (m_tableName == null ? "" : " table=" + m_tableName) + "]");
+      return "[View id=" + m_id + " type=" + m_type + " name=" + m_name + (m_tableName == null ? "" : " table=" + m_tableName) + "]";
    }
 
-   protected ProjectProperties m_properties;
-   protected TableContainer m_tables;
+   protected final ProjectFile m_file;
+   protected final TableContainer m_tables;
    protected Integer m_id;
    protected String m_name;
    protected ViewType m_type;

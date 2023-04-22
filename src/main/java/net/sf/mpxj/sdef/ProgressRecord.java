@@ -29,6 +29,7 @@ import net.sf.mpxj.Duration;
 import net.sf.mpxj.Task;
 import net.sf.mpxj.TimeUnit;
 import net.sf.mpxj.common.NumberHelper;
+import net.sf.mpxj.common.SlackHelper;
 
 /**
  * SDEF progress record.
@@ -55,9 +56,10 @@ class ProgressRecord extends AbstractSDEFRecord
       task.setActualStart(getDate(1));
       task.setActualFinish(getDate(2));
       task.setRemainingDuration(getDuration(3));
-      task.setCost(getDouble(4));
+      task.setCost(totalCost);
+      task.setActualCost(costToDate);
       task.setRemainingCost(remainingCost);
-      task.setCost(1, getDouble(6));
+      task.setStoredMaterial(getDouble(6));
       task.setEarlyStart(getDate(7));
       task.setEarlyFinish(getDate(8));
       task.setLateStart(getDate(9));
@@ -90,6 +92,11 @@ class ProgressRecord extends AbstractSDEFRecord
       task.setStart(start);
       task.setFinish(finish);
       task.setPercentageComplete(Double.valueOf(percentComplete));
+
+      //
+      // The schedule only includes total slack. We'll assume this value is correct and backfill start and finish slack values.
+      //
+      SlackHelper.inferSlack(task);
    }
 
    private static final SDEFField[] FIELDS = new SDEFField[]

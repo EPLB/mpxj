@@ -28,24 +28,32 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.text.ParseException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.stream.Stream;
 
+import net.sf.mpxj.CalendarType;
+import net.sf.mpxj.CostRateTable;
+import net.sf.mpxj.CostRateTableEntry;
 import net.sf.mpxj.DateRange;
 import net.sf.mpxj.Day;
+import net.sf.mpxj.DayType;
 import net.sf.mpxj.Duration;
 import net.sf.mpxj.EventManager;
 import net.sf.mpxj.FileVersion;
 import net.sf.mpxj.MPXJException;
 import net.sf.mpxj.ProjectCalendar;
+import net.sf.mpxj.ProjectCalendarContainer;
+import net.sf.mpxj.ProjectCalendarDays;
 import net.sf.mpxj.ProjectCalendarException;
 import net.sf.mpxj.ProjectCalendarHours;
 import net.sf.mpxj.ProjectConfig;
 import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.ProjectProperties;
+import net.sf.mpxj.Rate;
 import net.sf.mpxj.RecurrenceType;
 import net.sf.mpxj.RecurringTask;
 import net.sf.mpxj.Relation;
@@ -62,6 +70,7 @@ import net.sf.mpxj.common.DateHelper;
 import net.sf.mpxj.common.InputStreamTokenizer;
 import net.sf.mpxj.common.NumberHelper;
 import net.sf.mpxj.common.ReaderTokenizer;
+import net.sf.mpxj.common.SlackHelper;
 import net.sf.mpxj.common.Tokenizer;
 import net.sf.mpxj.reader.AbstractProjectStreamReader;
 
@@ -70,9 +79,6 @@ import net.sf.mpxj.reader.AbstractProjectStreamReader;
  */
 public final class MPXReader extends AbstractProjectStreamReader
 {
-   /**
-    * {@inheritDoc}
-    */
    @Override public ProjectFile read(InputStream is) throws MPXJException
    {
       int line = 1;
@@ -118,9 +124,9 @@ public final class MPXReader extends AbstractProjectStreamReader
          m_projectFile.getProjectProperties().setMpxDelimiter(m_delimiter);
          m_projectFile.getProjectProperties().setFileApplication("Microsoft");
          m_projectFile.getProjectProperties().setFileType("MPX");
-         m_taskModel = new TaskModel(m_projectFile, m_locale);
+         m_taskModel = new TaskModel(m_projectFile, m_locale, null);
          m_taskModel.setLocale(m_locale);
-         m_resourceModel = new ResourceModel(m_projectFile, m_locale);
+         m_resourceModel = new ResourceModel(m_projectFile, m_locale, null);
          m_resourceModel.setLocale(m_locale);
          m_baseOutlineLevel = -1;
          m_formats = new MPXJFormats(m_locale, LocaleData.getString(m_locale, LocaleData.NA), m_projectFile);
@@ -171,6 +177,7 @@ public final class MPXReader extends AbstractProjectStreamReader
          }
 
          processDeferredRelationships();
+         validateCalendars();
 
          //
          // Ensure that the structure is consistent
@@ -209,12 +216,9 @@ public final class MPXReader extends AbstractProjectStreamReader
       }
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public List<ProjectFile> readAll(InputStream inputStream) throws MPXJException
    {
-      return Arrays.asList(read(inputStream));
+      return Collections.singletonList(read(inputStream));
    }
 
    /**
@@ -222,7 +226,6 @@ public final class MPXReader extends AbstractProjectStreamReader
     *
     * @param recordNumber record number
     * @param record record data
-    * @throws MPXJException
     */
    private void parseRecord(Integer recordNumber, Record record) throws MPXJException
    {
@@ -268,8 +271,7 @@ public final class MPXReader extends AbstractProjectStreamReader
          {
             if (m_lastBaseCalendar != null)
             {
-               ProjectCalendarHours hours = m_lastBaseCalendar.addCalendarHours();
-               populateCalendarHours(record, hours);
+               populateCalendarHours(record, m_lastBaseCalendar);
             }
 
             break;
@@ -294,7 +296,7 @@ public final class MPXReader extends AbstractProjectStreamReader
 
          case MPXConstants.RESOURCE_MODEL_TEXT_RECORD_NUMBER:
          {
-            if ((m_resourceTableDefinition == false) && (m_ignoreTextModels == false))
+            if (!m_resourceTableDefinition && !m_ignoreTextModels)
             {
                m_resourceModel.update(record, true);
                m_resourceTableDefinition = true;
@@ -305,7 +307,7 @@ public final class MPXReader extends AbstractProjectStreamReader
 
          case MPXConstants.RESOURCE_MODEL_NUMERIC_RECORD_NUMBER:
          {
-            if (m_resourceTableDefinition == false)
+            if (!m_resourceTableDefinition)
             {
                m_resourceModel.update(record, false);
                m_resourceTableDefinition = true;
@@ -336,7 +338,7 @@ public final class MPXReader extends AbstractProjectStreamReader
          {
             if (m_lastResource != null)
             {
-               m_lastResourceCalendar = m_lastResource.addResourceCalendar();
+               m_lastResourceCalendar = m_lastResource.addCalendar();
                populateCalendar(record, m_lastResourceCalendar, false);
             }
 
@@ -347,8 +349,7 @@ public final class MPXReader extends AbstractProjectStreamReader
          {
             if (m_lastResourceCalendar != null)
             {
-               ProjectCalendarHours hours = m_lastResourceCalendar.addCalendarHours();
-               populateCalendarHours(record, hours);
+               populateCalendarHours(record, m_lastResourceCalendar);
             }
 
             break;
@@ -366,7 +367,7 @@ public final class MPXReader extends AbstractProjectStreamReader
 
          case MPXConstants.TASK_MODEL_TEXT_RECORD_NUMBER:
          {
-            if ((m_taskTableDefinition == false) && (m_ignoreTextModels == false))
+            if (!m_taskTableDefinition && !m_ignoreTextModels)
             {
                m_taskModel.update(record, true);
                m_taskTableDefinition = true;
@@ -377,7 +378,7 @@ public final class MPXReader extends AbstractProjectStreamReader
 
          case MPXConstants.TASK_MODEL_NUMERIC_RECORD_NUMBER:
          {
-            if (m_taskTableDefinition == false)
+            if (!m_taskTableDefinition)
             {
                m_taskModel.update(record, false);
                m_taskTableDefinition = true;
@@ -401,7 +402,7 @@ public final class MPXReader extends AbstractProjectStreamReader
             if (outlineLevel != m_baseOutlineLevel)
             {
                List<Task> childTasks = m_projectFile.getChildTasks();
-               if (childTasks.isEmpty() == true)
+               if (childTasks.isEmpty())
                {
                   throw new MPXJException(MPXJException.INVALID_OUTLINE);
                }
@@ -499,15 +500,14 @@ public final class MPXReader extends AbstractProjectStreamReader
     *
     * @param record MPX record
     * @param properties project properties
-    * @throws MPXJException
     */
    private void populateDefaultSettings(Record record, ProjectProperties properties) throws MPXJException
    {
       properties.setDefaultDurationUnits(record.getTimeUnit(0));
       properties.setDefaultDurationIsFixed(record.getNumericBoolean(1));
       properties.setDefaultWorkUnits(record.getTimeUnit(2));
-      properties.setMinutesPerDay(Double.valueOf(NumberHelper.getDouble(record.getFloat(3)) * 60));
-      properties.setMinutesPerWeek(Double.valueOf(NumberHelper.getDouble(record.getFloat(4)) * 60));
+      properties.setMinutesPerDay(Integer.valueOf((int) (NumberHelper.getDouble(record.getFloat(3)) * 60)));
+      properties.setMinutesPerWeek(Integer.valueOf((int) (NumberHelper.getDouble(record.getFloat(4)) * 60)));
       properties.setDefaultStandardRate(record.getRate(5));
       properties.setDefaultOvertimeRate(record.getRate(6));
       properties.setUpdatingTaskStatusUpdatesResourceStatus(record.getNumericBoolean(7));
@@ -582,14 +582,12 @@ public final class MPXReader extends AbstractProjectStreamReader
     *
     * @param record MPX record
     * @param properties project properties
-    * @throws MPXJException
     */
    private void populateProjectHeader(Record record, ProjectProperties properties) throws MPXJException
    {
       properties.setProjectTitle(record.getString(0));
       properties.setCompany(record.getString(1));
       properties.setManager(record.getString(2));
-      properties.setDefaultCalendarName(record.getString(3));
       properties.setStartDate(record.getDateTime(4));
       properties.setFinishDate(record.getDateTime(5));
       properties.setScheduleFrom(record.getScheduleFrom(6));
@@ -615,18 +613,19 @@ public final class MPXReader extends AbstractProjectStreamReader
       properties.setSubject(record.getString(26));
       properties.setAuthor(record.getString(27));
       properties.setKeywords(record.getString(28));
+
+      m_defaultCalendarName = record.getString(3);
    }
 
    /**
     * Populates a calendar hours instance.
     *
     * @param record MPX record
-    * @param hours calendar hours instance
-    * @throws MPXJException
+    * @param calendar parent calendar
     */
-   private void populateCalendarHours(Record record, ProjectCalendarHours hours) throws MPXJException
+   private void populateCalendarHours(Record record, ProjectCalendar calendar) throws MPXJException
    {
-      hours.setDay(Day.getInstance(NumberHelper.getInt(record.getInteger(0))));
+      ProjectCalendarHours hours = calendar.addCalendarHours(Day.getInstance(NumberHelper.getInt(record.getInteger(0))));
       addDateRange(hours, record.getTime(1), record.getTime(2));
       addDateRange(hours, record.getTime(3), record.getTime(4));
       addDateRange(hours, record.getTime(5), record.getTime(6));
@@ -654,7 +653,7 @@ public final class MPXReader extends AbstractProjectStreamReader
          end = cal.getTime();
          DateHelper.pushCalendar(cal);
 
-         hours.addRange(new DateRange(start, end));
+         hours.add(new DateRange(start, end));
       }
    }
 
@@ -663,7 +662,6 @@ public final class MPXReader extends AbstractProjectStreamReader
     *
     * @param record MPX record
     * @param calendar calendar to which the exception will be added
-    * @throws MPXJException
     */
    private void populateCalendarException(Record record, ProjectCalendar calendar) throws MPXJException
    {
@@ -698,7 +696,7 @@ public final class MPXReader extends AbstractProjectStreamReader
    {
       if (start != null && finish != null)
       {
-         exception.addRange(new DateRange(start, finish));
+         exception.add(new DateRange(start, finish));
       }
    }
 
@@ -711,7 +709,7 @@ public final class MPXReader extends AbstractProjectStreamReader
     */
    private void populateCalendar(Record record, ProjectCalendar calendar, boolean isBaseCalendar)
    {
-      if (isBaseCalendar == true)
+      if (isBaseCalendar)
       {
          calendar.setName(record.getString(0));
       }
@@ -720,13 +718,13 @@ public final class MPXReader extends AbstractProjectStreamReader
          calendar.setParent(m_projectFile.getCalendarByName(record.getString(0)));
       }
 
-      calendar.setWorkingDay(Day.SUNDAY, record.getDayType(1));
-      calendar.setWorkingDay(Day.MONDAY, record.getDayType(2));
-      calendar.setWorkingDay(Day.TUESDAY, record.getDayType(3));
-      calendar.setWorkingDay(Day.WEDNESDAY, record.getDayType(4));
-      calendar.setWorkingDay(Day.THURSDAY, record.getDayType(5));
-      calendar.setWorkingDay(Day.FRIDAY, record.getDayType(6));
-      calendar.setWorkingDay(Day.SATURDAY, record.getDayType(7));
+      calendar.setCalendarDayType(Day.SUNDAY, record.getDayType(1));
+      calendar.setCalendarDayType(Day.MONDAY, record.getDayType(2));
+      calendar.setCalendarDayType(Day.TUESDAY, record.getDayType(3));
+      calendar.setCalendarDayType(Day.WEDNESDAY, record.getDayType(4));
+      calendar.setCalendarDayType(Day.THURSDAY, record.getDayType(5));
+      calendar.setCalendarDayType(Day.FRIDAY, record.getDayType(6));
+      calendar.setCalendarDayType(Day.SATURDAY, record.getDayType(7));
 
       m_eventManager.fireCalendarReadEvent(calendar);
    }
@@ -736,7 +734,6 @@ public final class MPXReader extends AbstractProjectStreamReader
     *
     * @param resource resource instance
     * @param record MPX record
-    * @throws MPXJException
     */
    private void populateResource(Resource resource, Record record) throws MPXJException
    {
@@ -744,6 +741,9 @@ public final class MPXReader extends AbstractProjectStreamReader
 
       int length = record.getLength();
       int[] model = m_resourceModel.getModel();
+      Rate standardRate = Rate.ZERO;
+      Rate overtimeRate = Rate.ZERO;
+      Number costPerUse = NumberHelper.DOUBLE_ZERO;
 
       for (int i = 0; i < length; i++)
       {
@@ -795,7 +795,6 @@ public final class MPXReader extends AbstractProjectStreamReader
             }
 
             case COST:
-            case COST_PER_USE:
             case COST_VARIANCE:
             case BASELINE_COST:
             case ACTUAL_COST:
@@ -805,10 +804,21 @@ public final class MPXReader extends AbstractProjectStreamReader
                break;
             }
 
+            case COST_PER_USE:
+            {
+               costPerUse = record.getCurrency(i);
+               break;
+            }
+
             case OVERTIME_RATE:
+            {
+               overtimeRate = record.getRate(i);
+               break;
+            }
+
             case STANDARD_RATE:
             {
-               resource.set(resourceField, record.getRate(i));
+               standardRate = record.getRate(i);
                break;
             }
 
@@ -844,15 +854,19 @@ public final class MPXReader extends AbstractProjectStreamReader
          }
       }
 
-      if (m_projectConfig.getAutoResourceUniqueID() == true)
+      if (m_projectConfig.getAutoResourceUniqueID())
       {
          resource.setUniqueID(Integer.valueOf(m_projectConfig.getNextResourceUniqueID()));
       }
 
-      if (m_projectConfig.getAutoResourceID() == true)
+      if (m_projectConfig.getAutoResourceID())
       {
          resource.setID(Integer.valueOf(m_projectConfig.getNextResourceID()));
       }
+
+      CostRateTable table = new CostRateTable();
+      table.add(new CostRateTableEntry(DateHelper.START_DATE_NA, DateHelper.END_DATE_NA, costPerUse, standardRate, overtimeRate));
+      resource.setCostRateTable(0, table);
 
       //
       // Handle malformed MPX files - ensure we have a unique ID
@@ -882,8 +896,6 @@ public final class MPXReader extends AbstractProjectStreamReader
    /**
     * This method iterates through the deferred relationships,
     * parsing the data and setting up relationships between tasks.
-    *
-    * @throws MPXJException
     */
    private void processDeferredRelationships() throws MPXJException
    {
@@ -897,7 +909,6 @@ public final class MPXReader extends AbstractProjectStreamReader
     * This method processes a single deferred relationship list.
     *
     * @param dr deferred relationship list data
-    * @throws MPXJException
     */
    private void processDeferredRelationship(DeferredRelationship dr) throws MPXJException
    {
@@ -936,7 +947,6 @@ public final class MPXReader extends AbstractProjectStreamReader
     * @param field which task field source of data
     * @param sourceTask relationship source task
     * @param relationship relationship string
-    * @throws MPXJException
     */
    private void populateRelation(TaskField field, Task sourceTask, String relationship) throws MPXJException
    {
@@ -946,7 +956,7 @@ public final class MPXReader extends AbstractProjectStreamReader
       //
       // Extract the identifier
       //
-      while ((index < length) && (Character.isDigit(relationship.charAt(index)) == true))
+      while ((index < length) && Character.isDigit(relationship.charAt(index)))
       {
          ++index;
       }
@@ -979,8 +989,8 @@ public final class MPXReader extends AbstractProjectStreamReader
       // If we haven't reached the end, we next expect to find
       // SF, SS, FS, FF
       //
-      RelationType type = null;
-      Duration lag = null;
+      RelationType type;
+      Duration lag;
 
       if (index == length)
       {
@@ -1032,13 +1042,12 @@ public final class MPXReader extends AbstractProjectStreamReader
     *
     * @param record MPX record
     * @param task task instance
-    * @throws MPXJException
     */
    private void populateTask(Record record, Task task) throws MPXJException
    {
       String falseText = LocaleData.getString(m_locale, LocaleData.NO);
 
-      int mpxFieldID = 0;
+      int mpxFieldID;
       String field;
 
       int i = 0;
@@ -1218,7 +1227,7 @@ public final class MPXReader extends AbstractProjectStreamReader
             case ROLLUP:
             case UPDATE_NEEDED:
             {
-               task.set(taskField, ((field.equalsIgnoreCase(falseText) == true) ? Boolean.FALSE : Boolean.TRUE));
+               task.set(taskField, (field.equalsIgnoreCase(falseText) ? Boolean.FALSE : Boolean.TRUE));
                break;
             }
 
@@ -1287,27 +1296,27 @@ public final class MPXReader extends AbstractProjectStreamReader
          }
       }
 
-      if (m_projectConfig.getAutoWBS() == true)
+      if (m_projectConfig.getAutoWBS())
       {
          task.generateWBS(null);
       }
 
-      if (m_projectConfig.getAutoOutlineNumber() == true)
+      if (m_projectConfig.getAutoOutlineNumber())
       {
          task.generateOutlineNumber(null);
       }
 
-      if (m_projectConfig.getAutoOutlineLevel() == true)
+      if (m_projectConfig.getAutoOutlineLevel())
       {
          task.setOutlineLevel(Integer.valueOf(1));
       }
 
-      if (m_projectConfig.getAutoTaskUniqueID() == true)
+      if (m_projectConfig.getAutoTaskUniqueID())
       {
          task.setUniqueID(Integer.valueOf(m_projectConfig.getNextTaskUniqueID()));
       }
 
-      if (task.getID() == null || m_projectConfig.getAutoTaskID() == true)
+      if (task.getID() == null || m_projectConfig.getAutoTaskID())
       {
          task.setID(Integer.valueOf(m_projectConfig.getNextTaskID()));
       }
@@ -1343,6 +1352,11 @@ public final class MPXReader extends AbstractProjectStreamReader
       {
          task.setMilestone(false);
       }
+
+      //
+      // The schedule only includes total slack. We'll assume this value is correct and backfill start and finish slack values.
+      //
+      SlackHelper.inferSlack(task);
    }
 
    /**
@@ -1350,7 +1364,6 @@ public final class MPXReader extends AbstractProjectStreamReader
     *
     * @param record MPX record
     * @param task recurring task
-    * @throws MPXJException
     */
    private void populateRecurringTask(Record record, RecurringTask task) throws MPXJException
    {
@@ -1424,7 +1437,6 @@ public final class MPXReader extends AbstractProjectStreamReader
     *
     * @param record MPX record
     * @param assignment resource assignment
-    * @throws MPXJException
     */
    private void populateResourceAssignment(Record record, ResourceAssignment assignment) throws MPXJException
    {
@@ -1479,7 +1491,6 @@ public final class MPXReader extends AbstractProjectStreamReader
     *
     * @param record MPX record
     * @param workgroup workgroup instance
-    * @throws MPXJException
     */
    private void populateResourceAssignmentWorkgroupFields(Record record, ResourceAssignmentWorkgroupFields workgroup) throws MPXJException
    {
@@ -1489,6 +1500,79 @@ public final class MPXReader extends AbstractProjectStreamReader
       workgroup.setUpdateStart(record.getDateTime(3));
       workgroup.setUpdateFinish(record.getDateTime(4));
       workgroup.setScheduleID(record.getString(5));
+   }
+
+   /**
+    * Validate the project's calendars and fix any issues.
+    */
+   private void validateCalendars()
+   {
+      // Ensure we have a default calendar
+      ProjectCalendarContainer calendars = m_projectFile.getCalendars();
+      ProjectCalendar defaultCalendar = calendars.getByName(m_defaultCalendarName);
+      if (defaultCalendar == null)
+      {
+         defaultCalendar = calendars.findOrCreateDefaultCalendar();
+      }
+      m_projectFile.getProjectProperties().setDefaultCalendar(defaultCalendar);
+
+      // Ensure each individual calendar is valid
+      calendars.forEach(this::validateCalendar);
+
+      //
+      // Resource calendar post processing
+      //
+      for (Resource resource : m_projectFile.getResources())
+      {
+         ProjectCalendar calendar = resource.getCalendar();
+         if (calendar != null)
+         {
+            // Configure the calendar type
+            if (calendar.isDerived())
+            {
+               calendar.setType(CalendarType.RESOURCE);
+               calendar.setPersonal(calendar.getResourceCount() == 1);
+            }
+         }
+      }
+   }
+
+   /**
+    * Validate a calendar and fix any issues.
+    *
+    * @param calendar calendar to validate
+    */
+   private void validateCalendar(ProjectCalendar calendar)
+   {
+      //
+      // If the calendar does not have a parent calendar, but has DEFAULT day types
+      // then we assume it was intended to have a parent calendar, so we set the
+      // parent to be the default calendar for this project.
+      //
+      if (calendar.getParent() == null && Stream.of(Day.values()).anyMatch(d -> calendar.getCalendarDayType(d) == DayType.DEFAULT))
+      {
+         calendar.setParent(m_projectFile.getDefaultCalendar());
+      }
+
+      //
+      // Populate WORKING or NON_WORKING days with calendar hours if they are missing.
+      //
+      for (Day day : Day.values())
+      {
+         if (calendar.getCalendarHours(day) == null)
+         {
+            DayType dayType = calendar.getCalendarDayType(day);
+            if (dayType != DayType.DEFAULT)
+            {
+               ProjectCalendarHours hours = calendar.addCalendarHours(day);
+               if (dayType == DayType.WORKING)
+               {
+                  hours.add(ProjectCalendarDays.DEFAULT_WORKING_MORNING);
+                  hours.add(ProjectCalendarDays.DEFAULT_WORKING_AFTERNOON);
+               }
+            }
+         }
+      }
    }
 
    /**
@@ -1562,7 +1646,7 @@ public final class MPXReader extends AbstractProjectStreamReader
    private Locale m_locale = Locale.ENGLISH;
    private boolean m_ignoreTextModels = true;
 
-   /**
+   /*
     * Transient working data.
     */
 
@@ -1653,6 +1737,7 @@ public final class MPXReader extends AbstractProjectStreamReader
    private char m_delimiter;
    private MPXJFormats m_formats;
    private List<DeferredRelationship> m_deferredRelationships;
+   private String m_defaultCalendarName;
 
    /**
     * This member data is used to hold the outline level number of the

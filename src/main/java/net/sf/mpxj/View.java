@@ -44,7 +44,7 @@ public interface View
 
    /**
     * This method is used to retrieve the view name. Note that internally
-    * in MS Project the view name will contain an ampersand (&) used to
+    * in MS Project the view name will contain an ampersand (&amp;) used to
     * flag the letter that can be used as a shortcut for this view. The
     * ampersand is stripped out by MPXJ.
     *
@@ -58,4 +58,19 @@ public interface View
     * @return view type
     */
    public ViewType getType();
+
+   /**
+    * Retrieve the name of the table part of the view.
+    *
+    * @return table name
+    */
+   String getTableName();
+
+   /**
+    * Retrieve an instance of the Table class representing the
+    * table part of this view.
+    *
+    * @return table instance
+    */
+   public Table getTable();
 }

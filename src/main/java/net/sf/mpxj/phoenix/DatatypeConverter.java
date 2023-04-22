@@ -174,19 +174,26 @@ public final class DatatypeConverter
     */
    public static final Date parseDateTime(String value)
    {
+      if (value == null || value.isEmpty() || value.equals(NOT_A_DATE_TIME))
+      {
+         return null;
+      }
+
+      if (value.equals(PLUS_INFINITY))
+      {
+         return DateHelper.END_DATE_NA;
+      }
+
       Date result = null;
 
-      if (value != null && value.length() != 0)
+      try
       {
-         try
-         {
-            result = DATE_FORMAT.get().parse(value);
-         }
+         result = DATE_FORMAT.get().parse(value);
+      }
 
-         catch (ParseException ex)
-         {
-            // Ignored
-         }
+      catch (ParseException ex)
+      {
+         // Ignored
       }
 
       return result;
@@ -314,7 +321,7 @@ public final class DatatypeConverter
       TIME_UNITS_TO_STRING_MAP.put(TimeUnit.DAYS, "Days");
    }
 
-   private static Map<String, RelationType> NAME_TO_RELATION_TYPE = new HashMap<>();
+   private static final Map<String, RelationType> NAME_TO_RELATION_TYPE = new HashMap<>();
    static
    {
       NAME_TO_RELATION_TYPE.put("FinishToFinish", RelationType.FINISH_FINISH);
@@ -323,7 +330,7 @@ public final class DatatypeConverter
       NAME_TO_RELATION_TYPE.put("StartToStart", RelationType.START_START);
    }
 
-   private static Map<RelationType, String> RELATION_TYPE_TO_NAME = new HashMap<>();
+   private static final Map<RelationType, String> RELATION_TYPE_TO_NAME = new HashMap<>();
    static
    {
       RELATION_TYPE_TO_NAME.put(RelationType.FINISH_FINISH, "FinishToFinish");
@@ -332,7 +339,7 @@ public final class DatatypeConverter
       RELATION_TYPE_TO_NAME.put(RelationType.START_START, "StartToStart");
    }
 
-   private static Map<String, Day> NAME_TO_DAY = new HashMap<>();
+   private static final Map<String, Day> NAME_TO_DAY = new HashMap<>();
    static
    {
       NAME_TO_DAY.put("Mon", Day.MONDAY);
@@ -344,7 +351,7 @@ public final class DatatypeConverter
       NAME_TO_DAY.put("Sun", Day.SUNDAY);
    }
 
-   private static Map<Day, String> DAY_TO_NAME = new HashMap<>();
+   private static final Map<Day, String> DAY_TO_NAME = new HashMap<>();
    static
    {
       DAY_TO_NAME.put(Day.MONDAY, "Mon");
@@ -356,13 +363,12 @@ public final class DatatypeConverter
       DAY_TO_NAME.put(Day.SUNDAY, "Sun");
    }
 
-   private static final ThreadLocal<DateFormat> DATE_FORMAT = new ThreadLocal<DateFormat>()
-   {
-      @Override protected DateFormat initialValue()
-      {
-         DateFormat df = new SimpleDateFormat("yyyyMMdd'T'HHmmss");
-         df.setLenient(false);
-         return df;
-      }
-   };
+   private static final String NOT_A_DATE_TIME = "not-a-date-time";
+   private static final String PLUS_INFINITY = "+infinity";
+
+   private static final ThreadLocal<DateFormat> DATE_FORMAT = ThreadLocal.withInitial(() -> {
+      DateFormat df = new SimpleDateFormat("yyyyMMdd'T'HHmmss");
+      df.setLenient(false);
+      return df;
+   });
 }

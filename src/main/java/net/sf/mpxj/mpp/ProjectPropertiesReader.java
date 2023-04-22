@@ -26,6 +26,7 @@ package net.sf.mpxj.mpp;
 import java.util.Map;
 import java.util.TreeMap;
 
+import net.sf.mpxj.Duration;
 import org.apache.poi.hpsf.CustomProperties;
 import org.apache.poi.hpsf.CustomProperty;
 import org.apache.poi.hpsf.DocumentSummaryInformation;
@@ -41,7 +42,6 @@ import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.ProjectProperties;
 import net.sf.mpxj.Rate;
 import net.sf.mpxj.ScheduleFrom;
-import net.sf.mpxj.TaskType;
 import net.sf.mpxj.TimeUnit;
 import net.sf.mpxj.common.NumberHelper;
 
@@ -66,7 +66,6 @@ public final class ProjectPropertiesReader
          ph.setStartDate(props.getTimestamp(Props.PROJECT_START_DATE));
          ph.setFinishDate(props.getTimestamp(Props.PROJECT_FINISH_DATE));
          ph.setScheduleFrom(ScheduleFrom.getInstance(1 - props.getShort(Props.SCHEDULE_FROM)));
-         ph.setDefaultCalendarName(props.getUnicodeString(Props.DEFAULT_CALENDAR_NAME));
          ph.setDefaultStartTime(props.getTime(Props.START_TIME));
          ph.setDefaultEndTime(props.getTime(Props.END_TIME));
          ph.setStatusDate(props.getTimestamp(Props.STATUS_DATE));
@@ -81,13 +80,13 @@ public final class ProjectPropertiesReader
          ph.setDefaultWorkUnits(MPPUtility.getWorkTimeUnits(props.getShort(Props.WORK_UNITS)));
          ph.setSplitInProgressTasks(props.getBoolean(Props.SPLIT_TASKS));
          ph.setUpdatingTaskStatusUpdatesResourceStatus(props.getBoolean(Props.TASK_UPDATES_RESOURCE));
-         ph.setCriticalSlackLimit(Integer.valueOf(props.getInt(Props.CRITICAL_SLACK_LIMIT)));
+         ph.setCriticalSlackLimit(Duration.getInstance(props.getInt(Props.CRITICAL_SLACK_LIMIT), TimeUnit.DAYS));
 
          ph.setCurrencyDigits(Integer.valueOf(props.getShort(Props.CURRENCY_DIGITS)));
          ph.setCurrencySymbol(props.getUnicodeString(Props.CURRENCY_SYMBOL));
          ph.setCurrencyCode(props.getUnicodeString(Props.CURRENCY_CODE));
          //ph.setDecimalSeparator();
-         ph.setDefaultTaskType(TaskType.getInstance(props.getShort(Props.DEFAULT_TASK_TYPE)));
+         ph.setDefaultTaskType(TaskTypeHelper.getInstance(props.getShort(Props.DEFAULT_TASK_TYPE)));
          ph.setSymbolPosition(MPPUtility.getSymbolPosition(props.getShort(Props.CURRENCY_PLACEMENT)));
          //ph.setThousandsSeparator();
          ph.setWeekStartDay(Day.getInstance(props.getShort(Props.WEEK_START_DAY) + 1));

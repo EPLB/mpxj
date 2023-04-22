@@ -26,7 +26,7 @@ package net.sf.mpxj;
 import net.sf.mpxj.common.EnumHelper;
 
 /**
- * Lookup tables of custom field values use these as type identifiers.
+ * Enumeration used  by custom field value items to represent their data type.
  */
 public enum CustomFieldValueDataType implements MpxjEnum
 {
@@ -45,7 +45,7 @@ public enum CustomFieldValueDataType implements MpxjEnum
     * @param maskValue data type used in mask definition
     * @param type data type
     */
-   private CustomFieldValueDataType(int value, int maskValue, DataType type)
+   CustomFieldValueDataType(int value, int maskValue, DataType type)
    {
       m_value = value;
       m_maskValue = maskValue;

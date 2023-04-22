@@ -33,12 +33,18 @@ import java.util.UUID;
 
 import net.sf.mpxj.CurrencySymbolPosition;
 import net.sf.mpxj.Duration;
+import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.ProjectProperties;
+import net.sf.mpxj.Rate;
+import net.sf.mpxj.Resource;
+import net.sf.mpxj.ResourceField;
 import net.sf.mpxj.TimeUnit;
 import net.sf.mpxj.common.ByteArrayHelper;
 import net.sf.mpxj.common.CharsetHelper;
 import net.sf.mpxj.common.DateHelper;
+import net.sf.mpxj.common.InputStreamHelper;
 import net.sf.mpxj.common.NumberHelper;
+import net.sf.mpxj.common.RateHelper;
 
 /**
  * This class provides common functionality used by each of the classes
@@ -124,9 +130,8 @@ public final class MPPUtility
          StringBuilder buffer = new StringBuilder();
          char c;
 
-         for (int i = 0; i < PASSWORD_MASK.length; i++)
+         for (int index : PASSWORD_MASK)
          {
-            int index = PASSWORD_MASK[i];
             c = (char) data[index];
 
             if (c == 0)
@@ -166,8 +171,7 @@ public final class MPPUtility
     */
    public static final int getByte(byte[] data, int offset)
    {
-      int result = (data[offset] & 0xFF);
-      return result;
+      return (data[offset] & 0xFF);
    }
 
    /**
@@ -273,17 +277,17 @@ public final class MPPUtility
    public static final UUID getGUID(byte[] data, int offset)
    {
       UUID result = null;
-      if (data != null && data.length > 15)
+      if (data != null && data.length > offset + 15)
       {
          long long1 = 0;
          long1 |= ((long) (data[offset + 3] & 0xFF)) << 56;
          long1 |= ((long) (data[offset + 2] & 0xFF)) << 48;
          long1 |= ((long) (data[offset + 1] & 0xFF)) << 40;
-         long1 |= ((long) (data[offset + 0] & 0xFF)) << 32;
+         long1 |= ((long) (data[offset] & 0xFF)) << 32;
          long1 |= ((long) (data[offset + 5] & 0xFF)) << 24;
          long1 |= ((long) (data[offset + 4] & 0xFF)) << 16;
          long1 |= ((long) (data[offset + 7] & 0xFF)) << 8;
-         long1 |= ((long) (data[offset + 6] & 0xFF)) << 0;
+         long1 |= (data[offset + 6] & 0xFF);
 
          long long2 = 0;
          long2 |= ((long) (data[offset + 8] & 0xFF)) << 56;
@@ -293,9 +297,12 @@ public final class MPPUtility
          long2 |= ((long) (data[offset + 12] & 0xFF)) << 24;
          long2 |= ((long) (data[offset + 13] & 0xFF)) << 16;
          long2 |= ((long) (data[offset + 14] & 0xFF)) << 8;
-         long2 |= ((long) (data[offset + 15] & 0xFF)) << 0;
+         long2 |= (data[offset + 15] & 0xFF);
 
-         result = new UUID(long1, long2);
+         if (long1 != 0 || long2 != 0)
+         {
+            result = new UUID(long1, long2);
+         }
       }
       return result;
    }
@@ -456,7 +463,7 @@ public final class MPPUtility
     * @param offset offset into string data
     * @return length in bytes
     */
-   private static final int getUnicodeStringLengthInBytes(byte[] data, int offset)
+   private static int getUnicodeStringLengthInBytes(byte[] data, int offset)
    {
       int result;
       if (data == null || offset >= data.length)
@@ -932,6 +939,42 @@ public final class MPPUtility
    }
 
    /**
+    * Convert from the internal representation of a rate as an amount per hour to the
+    * format presented to the user.
+    *
+    * @param file parent file
+    * @param resource parent resource
+    * @param rateField field holding the rate
+    * @param unitsField field holding the rate's time units
+    */
+   public static void convertRateFromHours(ProjectFile file, Resource resource, ResourceField rateField, ResourceField unitsField)
+   {
+      Rate rate = (Rate) resource.getCachedValue(rateField);
+      if (rate == null)
+      {
+         return;
+      }
+
+      TimeUnit targetUnits = (TimeUnit) resource.getCachedValue(unitsField);
+      if (targetUnits == null)
+      {
+         return;
+      }
+
+      // For "flat" rates (for example, for cost or material resources) where there is
+      // no time component, the MPP file stores a time unit which we recognise
+      // as elapsed minutes. If we encounter this, reset the time units to hours
+      // so we don't try to change the value.
+      // TODO: improve handling of  cost and material rates
+      if (targetUnits == TimeUnit.ELAPSED_MINUTES)
+      {
+         targetUnits = TimeUnit.HOURS;
+      }
+
+      resource.set(rateField, RateHelper.convertFromHours(file, rate, targetUnits));
+   }
+
+   /**
     * This method allows a subsection of a byte array to be copied.
     *
     * @param data source data
@@ -980,9 +1023,7 @@ public final class MPPUtility
    {
       try
       {
-         byte[] data = new byte[is.available()];
-         is.read(data);
-         fileHexDump(fileName, data);
+         fileHexDump(fileName, InputStreamHelper.read(is, is.available()));
       }
 
       catch (IOException ex)
@@ -1080,7 +1121,7 @@ public final class MPPUtility
                   Date d = MPPUtility.getTimestamp(data, i);
                   if (d != null)
                   {
-                     System.out.println(i + ":" + d.toString());
+                     System.out.println(i + ":" + d);
                   }
                }
                catch (Exception ex)
@@ -1107,7 +1148,7 @@ public final class MPPUtility
                   Date d = MPPUtility.getDate(data, i);
                   if (d != null)
                   {
-                     System.out.println(i + ":" + d.toString());
+                     System.out.println(i + ":" + d);
                   }
                }
                catch (Exception ex)
@@ -1120,7 +1161,7 @@ public final class MPPUtility
                try
                {
                   Date d = MPPUtility.getTime(data, i);
-                  System.out.println(i + ":" + d.toString());
+                  System.out.println(i + ":" + d);
                }
                catch (Exception ex)
                {
@@ -1204,7 +1245,7 @@ public final class MPPUtility
                Date d = data.getTimestamp(id, Integer.valueOf(i));
                if (d != null)
                {
-                  System.out.println(i + ":" + d.toString());
+                  System.out.println(i + ":" + d);
                }
             }
             catch (Exception ex)
@@ -1286,7 +1327,7 @@ public final class MPPUtility
    /**
     * Epoch Date as a Date instance.
     */
-   private static Date EPOCH_DATE = DateHelper.getTimestampFromLong(EPOCH);
+   private static final Date EPOCH_DATE = DateHelper.getTimestampFromLong(EPOCH);
 
    /**
     * Mask used to remove flags from the duration units field.

@@ -27,8 +27,8 @@ import java.io.InputStream;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.Arrays;
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -39,11 +39,16 @@ import javax.xml.bind.JAXBContext;
 import javax.xml.bind.JAXBException;
 import javax.xml.parsers.ParserConfigurationException;
 
+import net.sf.mpxj.CostRateTable;
+import net.sf.mpxj.CostRateTableEntry;
+import net.sf.mpxj.FieldTypeClass;
+import net.sf.mpxj.UserDefinedField;
+import net.sf.mpxj.UserDefinedFieldContainer;
 import org.xml.sax.SAXException;
 
 import net.sf.mpxj.ChildTaskContainer;
 import net.sf.mpxj.ConstraintType;
-import net.sf.mpxj.CustomField;
+import net.sf.mpxj.DataType;
 import net.sf.mpxj.Day;
 import net.sf.mpxj.Duration;
 import net.sf.mpxj.EventManager;
@@ -51,9 +56,9 @@ import net.sf.mpxj.FieldType;
 import net.sf.mpxj.MPXJException;
 import net.sf.mpxj.Priority;
 import net.sf.mpxj.ProjectCalendar;
+import net.sf.mpxj.ProjectCalendarDays;
 import net.sf.mpxj.ProjectCalendarException;
 import net.sf.mpxj.ProjectCalendarHours;
-import net.sf.mpxj.ProjectCalendarWeek;
 import net.sf.mpxj.ProjectConfig;
 import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.ProjectProperties;
@@ -62,14 +67,11 @@ import net.sf.mpxj.Relation;
 import net.sf.mpxj.RelationType;
 import net.sf.mpxj.Resource;
 import net.sf.mpxj.ResourceAssignment;
-import net.sf.mpxj.ResourceField;
 import net.sf.mpxj.Task;
 import net.sf.mpxj.TimeUnit;
 import net.sf.mpxj.common.DateHelper;
 import net.sf.mpxj.common.NumberHelper;
 import net.sf.mpxj.common.Pair;
-import net.sf.mpxj.common.ResourceFieldLists;
-import net.sf.mpxj.common.TaskFieldLists;
 import net.sf.mpxj.common.UnmarshalHelper;
 import net.sf.mpxj.ganttproject.schema.Allocation;
 import net.sf.mpxj.ganttproject.schema.Allocations;
@@ -93,9 +95,6 @@ import net.sf.mpxj.reader.AbstractProjectStreamReader;
  */
 public final class GanttProjectReader extends AbstractProjectStreamReader
 {
-   /**
-    * {@inheritDoc}
-    */
    @Override public ProjectFile read(InputStream stream) throws MPXJException
    {
       try
@@ -111,6 +110,7 @@ public final class GanttProjectReader extends AbstractProjectStreamReader
          m_taskPropertyDefinitions = new HashMap<>();
          m_roleDefinitions = new HashMap<>();
          m_dateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SS'Z'");
+         m_userDefinedFieldID = 0;
 
          ProjectConfig config = m_projectFile.getProjectConfig();
          config.setAutoResourceUniqueID(false);
@@ -141,17 +141,7 @@ public final class GanttProjectReader extends AbstractProjectStreamReader
          return m_projectFile;
       }
 
-      catch (ParserConfigurationException ex)
-      {
-         throw new MPXJException("Failed to parse file", ex);
-      }
-
-      catch (JAXBException ex)
-      {
-         throw new MPXJException("Failed to parse file", ex);
-      }
-
-      catch (SAXException ex)
+      catch (ParserConfigurationException | SAXException | JAXBException ex)
       {
          throw new MPXJException("Failed to parse file", ex);
       }
@@ -168,12 +158,9 @@ public final class GanttProjectReader extends AbstractProjectStreamReader
       }
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public List<ProjectFile> readAll(InputStream inputStream) throws MPXJException
    {
-      return Arrays.asList(read(inputStream));
+      return Collections.singletonList(read(inputStream));
    }
 
    /**
@@ -191,9 +178,14 @@ public final class GanttProjectReader extends AbstractProjectStreamReader
       String locale = ganttProject.getLocale();
       if (locale == null)
       {
-         locale = "en_US";
+         locale = "en-US";
       }
-      m_localeDateFormat = DateFormat.getDateInstance(DateFormat.SHORT, new Locale(locale));
+      else
+      {
+         locale = locale.replace('_', '-');
+      }
+
+      m_localeDateFormat = DateFormat.getDateInstance(DateFormat.SHORT, Locale.forLanguageTag(locale));
    }
 
    /**
@@ -205,6 +197,7 @@ public final class GanttProjectReader extends AbstractProjectStreamReader
    {
       m_mpxjCalendar = m_projectFile.addCalendar();
       m_mpxjCalendar.setName(ProjectCalendar.DEFAULT_BASE_CALENDAR_NAME);
+      m_projectFile.getProjectProperties().setDefaultCalendar(m_mpxjCalendar);
 
       Calendars gpCalendar = ganttProject.getCalendars();
       setWorkingDays(m_mpxjCalendar, gpCalendar);
@@ -245,11 +238,11 @@ public final class GanttProjectReader extends AbstractProjectStreamReader
 
       for (Day day : Day.values())
       {
+         ProjectCalendarHours hours = mpxjCalendar.addCalendarHours(day);
          if (mpxjCalendar.isWorkingDay(day))
          {
-            ProjectCalendarHours hours = mpxjCalendar.addCalendarHours(day);
-            hours.addRange(ProjectCalendarWeek.DEFAULT_WORKING_MORNING);
-            hours.addRange(ProjectCalendarWeek.DEFAULT_WORKING_AFTERNOON);
+            hours.add(ProjectCalendarDays.DEFAULT_WORKING_MORNING);
+            hours.add(ProjectCalendarDays.DEFAULT_WORKING_AFTERNOON);
          }
       }
    }
@@ -304,13 +297,13 @@ public final class GanttProjectReader extends AbstractProjectStreamReader
          calendar.set(Calendar.DAY_OF_MONTH, NumberHelper.getInt(date.getDate()));
          Date exceptionDate = calendar.getTime();
          DateHelper.pushCalendar(calendar);
-         ProjectCalendarException exception = mpxjCalendar.addCalendarException(exceptionDate, exceptionDate);
+         ProjectCalendarException exception = mpxjCalendar.addCalendarException(exceptionDate);
 
          // TODO: not sure how NEUTRAL should be handled
          if ("WORKING_DAY".equals(date.getType()))
          {
-            exception.addRange(ProjectCalendarWeek.DEFAULT_WORKING_MORNING);
-            exception.addRange(ProjectCalendarWeek.DEFAULT_WORKING_AFTERNOON);
+            exception.add(ProjectCalendarDays.DEFAULT_WORKING_MORNING);
+            exception.add(ProjectCalendarDays.DEFAULT_WORKING_AFTERNOON);
          }
       }
    }
@@ -339,40 +332,30 @@ public final class GanttProjectReader extends AbstractProjectStreamReader
     */
    private void readResourceCustomPropertyDefinitions(Resources gpResources)
    {
-      CustomField field = m_projectFile.getCustomFields().getCustomField(ResourceField.TEXT1);
-      field.setAlias("Phone").setUserDefined(false);
+      UserDefinedFieldContainer container = m_projectFile.getUserDefinedFields();
 
       for (CustomPropertyDefinition definition : gpResources.getCustomPropertyDefinition())
       {
-         //
-         // Find the next available field of the correct type.
-         //
-         String type = definition.getType();
-         FieldType fieldType = RESOURCE_PROPERTY_TYPES.get(type).getField();
-
-         //
-         // If we have run out of fields of the right type, try using a text field.
-         //
-         if (fieldType == null)
+         DataType type = DATA_TYPE_MAP.get(definition.getType());
+         if (type == null)
          {
-            fieldType = RESOURCE_PROPERTY_TYPES.get("text").getField();
+            continue;
          }
 
-         //
-         // If we actually have a field available, set the alias to match
-         // the name used in GanttProject.
-         //
-         if (fieldType != null)
+         Integer id = Integer.valueOf(++m_userDefinedFieldID);
+         String internalName = "user_field_" + id;
+         String externalName = definition.getName();
+
+         UserDefinedField fieldType = new UserDefinedField(id, internalName, externalName, FieldTypeClass.RESOURCE, false, type);
+         container.add(fieldType);
+         m_projectFile.getCustomFields().add(fieldType).setAlias(definition.getName());
+
+         String defaultValue = definition.getDefaultValue();
+         if (defaultValue != null && defaultValue.isEmpty())
          {
-            field = m_projectFile.getCustomFields().getCustomField(fieldType);
-            field.setAlias(definition.getName());
-            String defaultValue = definition.getDefaultValue();
-            if (defaultValue != null && defaultValue.isEmpty())
-            {
-               defaultValue = null;
-            }
-            m_resourcePropertyDefinitions.put(definition.getId(), new Pair<>(fieldType, defaultValue));
+            defaultValue = null;
          }
+         m_resourcePropertyDefinitions.put(definition.getId(), new Pair<>(fieldType, parseValue(fieldType.getDataType(), m_localeDateFormat, defaultValue)));
       }
    }
 
@@ -383,6 +366,8 @@ public final class GanttProjectReader extends AbstractProjectStreamReader
     */
    private void readTaskCustomPropertyDefinitions(Tasks gpTasks)
    {
+      UserDefinedFieldContainer container = m_projectFile.getUserDefinedFields();
+
       for (Taskproperty definition : gpTasks.getTaskproperties().getTaskproperty())
       {
          //
@@ -393,35 +378,26 @@ public final class GanttProjectReader extends AbstractProjectStreamReader
             continue;
          }
 
-         //
-         // Find the next available field of the correct type.
-         //
-         String type = definition.getValuetype();
-         FieldType fieldType = TASK_PROPERTY_TYPES.get(type).getField();
-
-         //
-         // If we have run out of fields of the right type, try using a text field.
-         //
-         if (fieldType == null)
+         DataType type = DATA_TYPE_MAP.get(definition.getValuetype());
+         if (type == null)
          {
-            fieldType = TASK_PROPERTY_TYPES.get("text").getField();
+            continue;
          }
 
-         //
-         // If we actually have a field available, set the alias to match
-         // the name used in GanttProject.
-         //
-         if (fieldType != null)
+         Integer id = Integer.valueOf(++m_userDefinedFieldID);
+         String internalName = "user_field_" + id;
+         String externalName = definition.getName();
+
+         UserDefinedField fieldType = new UserDefinedField(id, internalName, externalName, FieldTypeClass.TASK, false, type);
+         container.add(fieldType);
+         m_projectFile.getCustomFields().add(fieldType).setAlias(definition.getName());
+
+         String defaultValue = definition.getDefaultvalue();
+         if (defaultValue != null && defaultValue.isEmpty())
          {
-            CustomField field = m_projectFile.getCustomFields().getCustomField(fieldType);
-            field.setAlias(definition.getName());
-            String defaultValue = definition.getDefaultvalue();
-            if (defaultValue != null && defaultValue.isEmpty())
-            {
-               defaultValue = null;
-            }
-            m_taskPropertyDefinitions.put(definition.getId(), new Pair<>(fieldType, defaultValue));
+            defaultValue = null;
          }
+         m_taskPropertyDefinitions.put(definition.getId(), new Pair<>(fieldType, parseValue(fieldType.getDataType(), m_dateFormat, defaultValue)));
       }
    }
 
@@ -459,15 +435,19 @@ public final class GanttProjectReader extends AbstractProjectStreamReader
       mpxjResource.setUniqueID(Integer.valueOf(NumberHelper.getInt(gpResource.getId()) + 1));
       mpxjResource.setName(gpResource.getName());
       mpxjResource.setEmailAddress(gpResource.getContacts());
-      mpxjResource.setText(1, gpResource.getPhone());
+      mpxjResource.setPhone(gpResource.getPhone());
       mpxjResource.setGroup(m_roleDefinitions.get(gpResource.getFunction()));
+
+      readResourceCustomFields(gpResource, mpxjResource);
 
       net.sf.mpxj.ganttproject.schema.Rate gpRate = gpResource.getRate();
       if (gpRate != null)
       {
-         mpxjResource.setStandardRate(new Rate(gpRate.getValueAttribute(), TimeUnit.DAYS));
+         CostRateTable table = new CostRateTable();
+         table.add(new CostRateTableEntry(DateHelper.START_DATE_NA, DateHelper.END_DATE_NA, NumberHelper.DOUBLE_ZERO, new Rate(gpRate.getValueAttribute(), TimeUnit.DAYS)));
+         mpxjResource.setCostRateTable(0, table);
       }
-      readResourceCustomFields(gpResource, mpxjResource);
+
       m_eventManager.fireResourceReadEvent(mpxjResource);
    }
 
@@ -483,7 +463,7 @@ public final class GanttProjectReader extends AbstractProjectStreamReader
       // Populate custom field default values
       //
       Map<FieldType, Object> customFields = new HashMap<>();
-      for (Pair<FieldType, String> definition : m_resourcePropertyDefinitions.values())
+      for (Pair<FieldType, Object> definition : m_resourcePropertyDefinitions.values())
       {
          customFields.put(definition.getFirst(), definition.getSecond());
       }
@@ -493,7 +473,7 @@ public final class GanttProjectReader extends AbstractProjectStreamReader
       //
       for (CustomResourceProperty property : gpResource.getCustomProperty())
       {
-         Pair<FieldType, String> definition = m_resourcePropertyDefinitions.get(property.getDefinitionId());
+         Pair<FieldType, Object> definition = m_resourcePropertyDefinitions.get(property.getDefinitionId());
          if (definition != null)
          {
             //
@@ -508,55 +488,10 @@ public final class GanttProjectReader extends AbstractProjectStreamReader
             //
             // If we have a value,convert it to the correct type
             //
-            if (value != null)
+            Object result = parseValue(definition.getFirst().getDataType(), m_localeDateFormat, value);
+            if (result != null)
             {
-               Object result;
-
-               switch (definition.getFirst().getDataType())
-               {
-                  case NUMERIC:
-                  {
-                     if (value.indexOf('.') == -1)
-                     {
-                        result = Integer.valueOf(value);
-                     }
-                     else
-                     {
-                        result = Double.valueOf(value);
-                     }
-                     break;
-                  }
-
-                  case DATE:
-                  {
-                     try
-                     {
-                        result = m_localeDateFormat.parse(value);
-                     }
-                     catch (ParseException ex)
-                     {
-                        result = null;
-                     }
-                     break;
-                  }
-
-                  case BOOLEAN:
-                  {
-                     result = Boolean.valueOf(value.equals("true"));
-                     break;
-                  }
-
-                  default:
-                  {
-                     result = value;
-                     break;
-                  }
-               }
-
-               if (result != null)
-               {
-                  customFields.put(definition.getFirst(), result);
-               }
+               customFields.put(definition.getFirst(), result);
             }
          }
       }
@@ -582,7 +517,7 @@ public final class GanttProjectReader extends AbstractProjectStreamReader
       // Populate custom field default values
       //
       Map<FieldType, Object> customFields = new HashMap<>();
-      for (Pair<FieldType, String> definition : m_taskPropertyDefinitions.values())
+      for (Pair<FieldType, Object> definition : m_taskPropertyDefinitions.values())
       {
          customFields.put(definition.getFirst(), definition.getSecond());
       }
@@ -592,7 +527,7 @@ public final class GanttProjectReader extends AbstractProjectStreamReader
       //
       for (CustomTaskProperty property : gpTask.getCustomproperty())
       {
-         Pair<FieldType, String> definition = m_taskPropertyDefinitions.get(property.getTaskpropertyId());
+         Pair<FieldType, Object> definition = m_taskPropertyDefinitions.get(property.getTaskpropertyId());
          if (definition != null)
          {
             //
@@ -607,55 +542,10 @@ public final class GanttProjectReader extends AbstractProjectStreamReader
             //
             // If we have a value,convert it to the correct type
             //
-            if (value != null)
+            Object result = parseValue(definition.getFirst().getDataType(), m_dateFormat, value);
+            if (result != null)
             {
-               Object result;
-
-               switch (definition.getFirst().getDataType())
-               {
-                  case NUMERIC:
-                  {
-                     if (value.indexOf('.') == -1)
-                     {
-                        result = Integer.valueOf(value);
-                     }
-                     else
-                     {
-                        result = Double.valueOf(value);
-                     }
-                     break;
-                  }
-
-                  case DATE:
-                  {
-                     try
-                     {
-                        result = m_dateFormat.parse(value);
-                     }
-                     catch (ParseException ex)
-                     {
-                        result = null;
-                     }
-                     break;
-                  }
-
-                  case BOOLEAN:
-                  {
-                     result = Boolean.valueOf(value.equals("true"));
-                     break;
-                  }
-
-                  default:
-                  {
-                     result = value;
-                     break;
-                  }
-               }
-
-               if (result != null)
-               {
-                  customFields.put(definition.getFirst(), result);
-               }
+               customFields.put(definition.getFirst(), result);
             }
          }
       }
@@ -667,6 +557,57 @@ public final class GanttProjectReader extends AbstractProjectStreamReader
             mpxjTask.set(item.getKey(), item.getValue());
          }
       }
+   }
+
+   private Object parseValue(DataType type, DateFormat dateFormat, String value)
+   {
+      Object result = null;
+
+      if (value != null)
+      {
+         switch (type)
+         {
+            case NUMERIC:
+            {
+               if (value.indexOf('.') == -1)
+               {
+                  result = Integer.valueOf(value);
+               }
+               else
+               {
+                  result = Double.valueOf(value);
+               }
+               break;
+            }
+
+            case DATE:
+            {
+               try
+               {
+                  result = dateFormat.parse(value);
+               }
+               catch (ParseException ex)
+               {
+                  // Ignore the error and return null
+               }
+               break;
+            }
+
+            case BOOLEAN:
+            {
+               result = Boolean.valueOf(value.equals("true"));
+               break;
+            }
+
+            default:
+            {
+               result = value;
+               break;
+            }
+         }
+      }
+
+      return result;
    }
 
    /**
@@ -685,7 +626,7 @@ public final class GanttProjectReader extends AbstractProjectStreamReader
    }
 
    /**
-    * Recursively read a task, and any sub tasks.
+    * Recursively read a task, and any sub-tasks.
     *
     * @param mpxjParent Parent for the MPXJ tasks
     * @param gpTask GanttProject task
@@ -705,6 +646,8 @@ public final class GanttProjectReader extends AbstractProjectStreamReader
       if (duration.getDuration() == 0)
       {
          mpxjTask.setMilestone(true);
+         mpxjTask.setStart(gpTask.getStart());
+         mpxjTask.setFinish(gpTask.getStart());
       }
       else
       {
@@ -863,31 +806,10 @@ public final class GanttProjectReader extends AbstractProjectStreamReader
    private EventManager m_eventManager;
    private DateFormat m_localeDateFormat;
    private DateFormat m_dateFormat;
-   private Map<String, Pair<FieldType, String>> m_resourcePropertyDefinitions;
-   private Map<String, Pair<FieldType, String>> m_taskPropertyDefinitions;
+   private Map<String, Pair<FieldType, Object>> m_resourcePropertyDefinitions;
+   private Map<String, Pair<FieldType, Object>> m_taskPropertyDefinitions;
    private Map<String, String> m_roleDefinitions;
-
-   private static final Map<String, CustomProperty> RESOURCE_PROPERTY_TYPES = new HashMap<>();
-   static
-   {
-      CustomProperty numeric = new CustomProperty(ResourceFieldLists.CUSTOM_NUMBER);
-      RESOURCE_PROPERTY_TYPES.put("int", numeric);
-      RESOURCE_PROPERTY_TYPES.put("double", numeric);
-      RESOURCE_PROPERTY_TYPES.put("text", new CustomProperty(ResourceFieldLists.CUSTOM_TEXT, 1));
-      RESOURCE_PROPERTY_TYPES.put("date", new CustomProperty(ResourceFieldLists.CUSTOM_DATE));
-      RESOURCE_PROPERTY_TYPES.put("boolean", new CustomProperty(ResourceFieldLists.CUSTOM_FLAG));
-   }
-
-   private static final Map<String, CustomProperty> TASK_PROPERTY_TYPES = new HashMap<>();
-   static
-   {
-      CustomProperty numeric = new CustomProperty(TaskFieldLists.CUSTOM_NUMBER);
-      TASK_PROPERTY_TYPES.put("int", numeric);
-      TASK_PROPERTY_TYPES.put("double", numeric);
-      TASK_PROPERTY_TYPES.put("text", new CustomProperty(TaskFieldLists.CUSTOM_TEXT));
-      TASK_PROPERTY_TYPES.put("date", new CustomProperty(TaskFieldLists.CUSTOM_DATE));
-      TASK_PROPERTY_TYPES.put("boolean", new CustomProperty(TaskFieldLists.CUSTOM_FLAG));
-   }
+   private int m_userDefinedFieldID;
 
    private static final int[] PRIORITY =
    {
@@ -898,7 +820,7 @@ public final class GanttProjectReader extends AbstractProjectStreamReader
       Priority.HIGHEST, // 4 - Highest
    };
 
-   static final RelationType[] RELATION =
+   private static final RelationType[] RELATION =
    {
       null, //0
       RelationType.START_START, // 1 - Start Start
@@ -906,6 +828,16 @@ public final class GanttProjectReader extends AbstractProjectStreamReader
       RelationType.FINISH_FINISH, // 3 - Finish Finish
       RelationType.START_FINISH // 4 - Start Finish
    };
+
+   private static final Map<String, DataType> DATA_TYPE_MAP = new HashMap<>();
+   static
+   {
+      DATA_TYPE_MAP.put("int", DataType.NUMERIC);
+      DATA_TYPE_MAP.put("double", DataType.NUMERIC);
+      DATA_TYPE_MAP.put("text", DataType.STRING);
+      DATA_TYPE_MAP.put("date", DataType.DATE);
+      DATA_TYPE_MAP.put("boolean", DataType.BOOLEAN);
+   }
 
    /**
     * Cached context to minimise construction cost.

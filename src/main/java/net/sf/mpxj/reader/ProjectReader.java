@@ -27,6 +27,7 @@ import java.io.File;
 import java.io.InputStream;
 import java.nio.charset.Charset;
 import java.util.List;
+import java.util.Properties;
 
 import net.sf.mpxj.MPXJException;
 import net.sf.mpxj.ProjectFile;
@@ -40,6 +41,25 @@ import net.sf.mpxj.listener.ProjectListener;
 public interface ProjectReader
 {
    /**
+    * Pass a set of Properties to allow the behavior of a reader to be configured.
+    * This provides an alternative to calling individual setter methods to set
+    * the values of the properties you need to configure.
+    * <p>
+    * NOTE: currently this only supports Boolean properties.
+    * <p>
+    * Properties are passed in this form:
+    * {@code <class name>.<property name>=<property value>}. This method will ignore any properties
+    * which are not intended for the current reader class. Here's an example:
+    * <pre>
+    * net.sf.mpxj.phoenix.PhoenixReader.UseActivityCodesForTaskHierarchy=true
+    * </pre>
+    *
+    * @param props properties to set
+    * @return current ProjectReader instance to allow method chaining
+    */
+   public ProjectReader setProperties(Properties props);
+
+   /**
     * Add a listener to receive events as a project is being read.
     *
     * @param listener ProjectListener instance
@@ -51,7 +71,6 @@ public interface ProjectReader
     *
     * @param fileName file name
     * @return ProjectFile instance
-    * @throws MPXJException
     */
    public ProjectFile read(String fileName) throws MPXJException;
 
@@ -60,7 +79,6 @@ public interface ProjectReader
     *
     * @param fileName file name
     * @return ProjectFile instance
-    * @throws MPXJException
     */
    public List<ProjectFile> readAll(String fileName) throws MPXJException;
 
@@ -69,7 +87,6 @@ public interface ProjectReader
     *
     * @param file File instance
     * @return ProjectFile instance
-    * @throws MPXJException
     */
    public ProjectFile read(File file) throws MPXJException;
 
@@ -78,7 +95,6 @@ public interface ProjectReader
     *
     * @param file File instance
     * @return ProjectFile instance
-    * @throws MPXJException
     */
    public List<ProjectFile> readAll(File file) throws MPXJException;
 
@@ -88,7 +104,6 @@ public interface ProjectReader
     *
     * @param inputStream InputStream instance
     * @return ProjectFile instance
-    * @throws MPXJException
     */
    public ProjectFile read(InputStream inputStream) throws MPXJException;
 
@@ -98,7 +113,6 @@ public interface ProjectReader
     *
     * @param inputStream InputStream instance
     * @return ProjectFile instance
-    * @throws MPXJException
     */
    public List<ProjectFile> readAll(InputStream inputStream) throws MPXJException;
 

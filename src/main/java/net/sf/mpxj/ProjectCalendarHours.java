@@ -23,62 +23,63 @@
 
 package net.sf.mpxj;
 
+import java.util.AbstractList;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+
 /**
  * This class is used to represent the records in an MPX file that define
  * working hours in a calendar.
  */
-public final class ProjectCalendarHours extends ProjectCalendarDateRanges
+public class ProjectCalendarHours extends AbstractList<DateRange>
 {
-   /**
-    * Default constructor.
-    *
-    * @param parentCalendar the parent calendar for this instance
-    */
-   ProjectCalendarHours(ProjectCalendarWeek parentCalendar)
+   @Override public boolean add(DateRange range)
    {
-      m_parentCalendar = parentCalendar;
+      return m_ranges.add(range);
    }
 
-   /**
-    * Retrieve the parent calendar for these hours.
-    *
-    * @return parent calendar
-    */
-   public ProjectCalendarWeek getParentCalendar()
+   @Override public DateRange set(int index, DateRange value)
    {
-      return (m_parentCalendar);
+      return m_ranges.set(index, value);
    }
 
-   /**
-    * Get day.
-    *
-    * @return day instance
-    */
-   public Day getDay()
+   @Override public DateRange get(int index)
    {
-      return (m_day);
-   }
+      DateRange result;
 
-   /**
-    * Set day.
-    *
-    * @param d day instance
-    */
-   public void setDay(Day d)
-   {
-      if (m_day != null)
+      if (index >= 0 && index < m_ranges.size())
       {
-         m_parentCalendar.removeHoursFromDay(this);
+         result = m_ranges.get(index);
+      }
+      else
+      {
+         result = DateRange.EMPTY_RANGE;
       }
 
-      m_day = d;
-
-      m_parentCalendar.attachHoursToDay(this);
+      return result;
    }
 
    /**
-    * {@inheritDoc}
+    * Retrieve an iterator to allow the list of date ranges to be traversed.
+    *
+    * @return iterator.
     */
+   @Override public Iterator<DateRange> iterator()
+   {
+      return m_ranges.iterator();
+   }
+
+   @Override public int size()
+   {
+      return m_ranges.size();
+   }
+
+   @Override public void clear()
+   {
+      m_ranges.clear();
+   }
+
    @Override public String toString()
    {
       StringBuilder sb = new StringBuilder();
@@ -91,6 +92,5 @@ public final class ProjectCalendarHours extends ProjectCalendarDateRanges
       return (sb.toString());
    }
 
-   private ProjectCalendarWeek m_parentCalendar;
-   private Day m_day;
+   private final List<DateRange> m_ranges = new ArrayList<>();
 }

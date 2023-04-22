@@ -24,15 +24,20 @@
 package net.sf.mpxj;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Date;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import net.sf.mpxj.common.NumberHelper;
 
 /**
  * This class represents a project plan.
  */
-public final class ProjectFile implements ChildTaskContainer
+public final class ProjectFile implements ChildTaskContainer, ChildResourceContainer
 {
    /**
     * Retrieve project configuration data.
@@ -72,15 +77,21 @@ public final class ProjectFile implements ChildTaskContainer
     */
    public void validateUniqueIDsForMicrosoftProject()
    {
+      // The default calendar is a special case as we hold
+      // a reference to its ID in the project properties.
+      // We'll grab a copy of it here then set it again
+      // after we've renumbered, so the ID value is correct.
+      ProjectCalendar defaultCalendar = getDefaultCalendar();
       m_tasks.validateUniqueIDsForMicrosoftProject();
       m_resources.validateUniqueIDsForMicrosoftProject();
       m_assignments.validateUniqueIDsForMicrosoftProject();
       m_calendars.validateUniqueIDsForMicrosoftProject();
+      setDefaultCalendar(defaultCalendar);
    }
 
    /**
-    * This method is used to retrieve a list of all of the top level tasks
-    * that are defined in this project file.
+    * This method is used to retrieve a list of all top level tasks
+    * defined in this project file.
     *
     * @return list of tasks
     */
@@ -90,8 +101,19 @@ public final class ProjectFile implements ChildTaskContainer
    }
 
    /**
-    * This method is used to retrieve a list of all of the tasks
-    * that are defined in this project file.
+    * This method is used to retrieve a list of all top level resources
+    * defined in this project file.
+    *
+    * @return list of resources
+    */
+   @Override public List<Resource> getChildResources()
+   {
+      return m_childResources;
+   }
+
+   /**
+    * This method is used to retrieve a list of all tasks
+    * defined in this project file.
     *
     * @return list of all tasks
     */
@@ -169,7 +191,7 @@ public final class ProjectFile implements ChildTaskContainer
     *
     * @return new resource object
     */
-   public Resource addResource()
+   @Override public Resource addResource()
    {
       return m_resources.add();
    }
@@ -286,15 +308,15 @@ public final class ProjectFile implements ChildTaskContainer
    public void updateStructure()
    {
       m_tasks.updateStructure();
+      m_resources.updateStructure();
    }
 
    /**
-    * Find the earliest task start date. We treat this as the
-    * start date for the project.
+    * Find the earliest task start date.
     *
     * @return start date
     */
-   public Date getStartDate()
+   public Date getEarliestStartDate()
    {
       Date startDate = null;
 
@@ -315,7 +337,7 @@ public final class ProjectFile implements ChildTaskContainer
          // to reflect a missed deadline.
          //
          Date taskStartDate;
-         if (task.getMilestone() == true)
+         if (task.getMilestone())
          {
             taskStartDate = task.getActualFinish();
             if (taskStartDate == null)
@@ -352,12 +374,11 @@ public final class ProjectFile implements ChildTaskContainer
    }
 
    /**
-    * Find the latest task finish date. We treat this as the
-    * finish date for the project.
+    * Find the latest task finish date.
     *
     * @return finish date
     */
-   public Date getFinishDate()
+   public Date getLatestFinishDate()
    {
       Date finishDate = null;
 
@@ -443,7 +464,7 @@ public final class ProjectFile implements ChildTaskContainer
    /**
     * Retrieves all the subprojects for this project.
     *
-    * @return all sub project details
+    * @return all subproject details
     */
    public SubProjectContainer getSubProjects()
    {
@@ -461,9 +482,9 @@ public final class ProjectFile implements ChildTaskContainer
    }
 
    /**
-    * Retrieves the custom field configuration for this project.
+    * Retrieves the custom fields for this project.
     *
-    * @return custom field configuration
+    * @return custom fields
     */
    public CustomFieldContainer getCustomFields()
    {
@@ -511,6 +532,46 @@ public final class ProjectFile implements ChildTaskContainer
    }
 
    /**
+    * Retrieves the user defined fields available for this schedule.
+    *
+    * @return user defined fields
+    */
+   public UserDefinedFieldContainer getUserDefinedFields()
+   {
+      return m_userDefinedFields;
+   }
+
+   /**
+    * Retrieves the work contours available for this schedule.
+    *
+    * @return work contours
+    */
+   public WorkContourContainer getWorkContours()
+   {
+      return m_workContours;
+   }
+
+   /**
+    * Retrieves the notes topics available for this schedule.
+    *
+    * @return notes topics
+    */
+   public NotesTopicContainer getNotesTopics()
+   {
+      return m_notesTopics;
+   }
+
+   /**
+    * Retrieve the locations available for this schedule.
+    *
+    * @return locations
+    */
+   public LocationContainer getLocations()
+   {
+      return m_locations;
+   }
+
+   /**
     * Retrieves the default calendar for this project based on the calendar name
     * given in the project properties. If a calendar of this name cannot be found, then
     * the first calendar listed for the project will be returned. If the
@@ -520,20 +581,7 @@ public final class ProjectFile implements ChildTaskContainer
     */
    public ProjectCalendar getDefaultCalendar()
    {
-      String calendarName = m_properties.getDefaultCalendarName();
-      ProjectCalendar calendar = getCalendarByName(calendarName);
-      if (calendar == null)
-      {
-         if (m_calendars.isEmpty())
-         {
-            calendar = addDefaultBaseCalendar();
-         }
-         else
-         {
-            calendar = m_calendars.get(0);
-         }
-      }
-      return calendar;
+      return getProjectProperties().getDefaultCalendar();
    }
 
    /**
@@ -545,7 +593,7 @@ public final class ProjectFile implements ChildTaskContainer
    {
       if (calendar != null)
       {
-         m_properties.setDefaultCalendarName(calendar.getName());
+         m_properties.setDefaultCalendar(calendar);
       }
    }
 
@@ -569,11 +617,88 @@ public final class ProjectFile implements ChildTaskContainer
       return result;
    }
 
+   /**
+    * Retrieve the baselines linked to this project.
+    * The baseline at index zero is the default baseline,
+    * the values at the remaining indexes (1-10) are the
+    * numbered baselines. The list will contain null
+    * if a particular baseline has not been set.
+    *
+    * @return list of baselines
+    */
+   public List<ProjectFile> getBaselines()
+   {
+      return Arrays.asList(m_baselines);
+   }
+
+   /**
+    * Store the supplied project as the default baseline, and use it to set the
+    * baseline cost, duration, finish, fixed cost accrual, fixed cost, start and
+    * work attributes for the tasks in the current project.
+    *
+    * @param baseline baseline project
+    */
+   public void setBaseline(ProjectFile baseline)
+   {
+      setBaseline(baseline, 0);
+   }
+
+   /**
+    * Store the supplied project as baselineN, and use it to set the
+    * baselineN cost, duration, finish, fixed cost accrual, fixed cost, start and
+    * work attributes for the tasks in the current project.
+    * The index argument selects which of the 10 baselines to populate. Passing
+    * an index of 0 populates the default baseline.
+    *
+    * @param baseline baseline project
+    * @param index baseline to populate (0-10)
+    */
+   public void setBaseline(ProjectFile baseline, int index)
+   {
+      if (index < 0 || index >= m_baselines.length)
+      {
+         throw new IllegalArgumentException(index + " is not a valid baseline index");
+      }
+
+      m_baselines[index] = baseline;
+      m_config.getBaselineStrategy().populateBaseline(this, baseline, index);
+   }
+
+   /**
+    * Clear the default baseline for this project.
+    */
+   public void clearBaseline()
+   {
+      clearBaseline(0);
+   }
+
+   /**
+    * Clear baselineN (1-10) for this project.
+    *
+    * @param index baseline index
+    */
+   public void clearBaseline(int index)
+   {
+      new DefaultBaselineStrategy().clearBaseline(this, index);
+   }
+
+   /**
+    * A convenience method used to retrieve a set of FieldType instances representing
+    * all populated fields in the project.
+    *
+    * @return set of all populated fields
+    */
+   public Set<FieldType> getPopulatedFields()
+   {
+      return Stream.of(m_tasks.getPopulatedFields(), m_resources.getPopulatedFields(), m_assignments.getPopulatedFields(), m_properties.getPopulatedFields()).flatMap(Collection::stream).collect(Collectors.toSet());
+   }
+
    private final ProjectConfig m_config = new ProjectConfig(this);
    private final ProjectProperties m_properties = new ProjectProperties(this);
    private final ResourceContainer m_resources = new ResourceContainer(this);
    private final TaskContainer m_tasks = new TaskContainer(this);
    private final List<Task> m_childTasks = new ArrayList<>();
+   private final List<Resource> m_childResources = new ArrayList<>();
    private final ResourceAssignmentContainer m_assignments = new ResourceAssignmentContainer(this);
    private final ProjectCalendarContainer m_calendars = new ProjectCalendarContainer(this);
    private final TableContainer m_tables = new TableContainer();
@@ -587,4 +712,9 @@ public final class ProjectFile implements ChildTaskContainer
    private final DataLinkContainer m_dataLinks = new DataLinkContainer();
    private final ExpenseCategoryContainer m_expenseCategories = new ExpenseCategoryContainer(this);
    private final CostAccountContainer m_costAccounts = new CostAccountContainer(this);
+   private final UserDefinedFieldContainer m_userDefinedFields = new UserDefinedFieldContainer();
+   private final WorkContourContainer m_workContours = new WorkContourContainer(this);
+   private final NotesTopicContainer m_notesTopics = new NotesTopicContainer(this);
+   private final LocationContainer m_locations = new LocationContainer(this);
+   private final ProjectFile[] m_baselines = new ProjectFile[11];
 }

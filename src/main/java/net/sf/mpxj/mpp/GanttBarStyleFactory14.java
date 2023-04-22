@@ -1,5 +1,5 @@
 /*
- * file:       GanttarStyleFactory14.java
+ * file:       GantBarStyleFactory14.java
  * author:     Jon Iles
  * copyright:  (c) Packwood Software 2010
  * date:       19/04/2010
@@ -23,18 +23,17 @@
 
 package net.sf.mpxj.mpp;
 
+import net.sf.mpxj.FieldType;
+import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.TaskField;
-import net.sf.mpxj.common.MPPTaskField14;
+import net.sf.mpxj.common.FieldTypeHelper;
 
 /**
  * Reads Gantt bar styles from an MPP14 file.
  */
 public class GanttBarStyleFactory14 implements GanttBarStyleFactory
 {
-   /**
-    * {@inheritDoc}
-    */
-   @Override public GanttBarStyle[] processDefaultStyles(Props props)
+   @Override public GanttBarStyle[] processDefaultStyles(ProjectFile file, Props props)
    {
       GanttBarStyle[] barStyles = null;
       byte[] barStyleData = props.getByteArray(DEFAULT_PROPERTIES);
@@ -53,11 +52,11 @@ public class GanttBarStyleFactory14 implements GanttBarStyleFactory
 
                style.setName(MPPUtility.getUnicodeString(barStyleData, styleOffset + 91));
 
-               style.setLeftText(getTaskField(MPPUtility.getShort(barStyleData, styleOffset + 67)));
-               style.setRightText(getTaskField(MPPUtility.getShort(barStyleData, styleOffset + 71)));
-               style.setTopText(getTaskField(MPPUtility.getShort(barStyleData, styleOffset + 75)));
-               style.setBottomText(getTaskField(MPPUtility.getShort(barStyleData, styleOffset + 79)));
-               style.setInsideText(getTaskField(MPPUtility.getShort(barStyleData, styleOffset + 83)));
+               style.setLeftText(getTaskField(file, MPPUtility.getInt(barStyleData, styleOffset + 67)));
+               style.setRightText(getTaskField(file, MPPUtility.getInt(barStyleData, styleOffset + 71)));
+               style.setTopText(getTaskField(file, MPPUtility.getInt(barStyleData, styleOffset + 75)));
+               style.setBottomText(getTaskField(file, MPPUtility.getInt(barStyleData, styleOffset + 79)));
+               style.setInsideText(getTaskField(file, MPPUtility.getInt(barStyleData, styleOffset + 83)));
 
                style.setStartShape(GanttBarStartEndShape.getInstance(barStyleData[styleOffset + 15] % 25));
                style.setStartType(GanttBarStartEndType.getInstance(barStyleData[styleOffset + 15] / 25));
@@ -71,8 +70,8 @@ public class GanttBarStyleFactory14 implements GanttBarStyleFactory
                style.setEndType(GanttBarStartEndType.getInstance(barStyleData[styleOffset + 28] / 25));
                style.setEndColor(MPPUtility.getColor(barStyleData, styleOffset + 29));
 
-               style.setFromField(getTaskField(MPPUtility.getShort(barStyleData, styleOffset + 41)));
-               style.setToField(getTaskField(MPPUtility.getShort(barStyleData, styleOffset + 45)));
+               style.setFromField(getTaskField(file, MPPUtility.getInt(barStyleData, styleOffset + 41)));
+               style.setToField(getTaskField(file, MPPUtility.getInt(barStyleData, styleOffset + 45)));
 
                extractFlags(style, GanttBarShowForTasks.NORMAL, MPPUtility.getLong(barStyleData, styleOffset + 49));
                extractFlags(style, GanttBarShowForTasks.NOT_NORMAL, MPPUtility.getLong(barStyleData, styleOffset + 57));
@@ -86,10 +85,7 @@ public class GanttBarStyleFactory14 implements GanttBarStyleFactory
       return barStyles;
    }
 
-   /**
-    * {@inheritDoc}
-    */
-   @Override public GanttBarStyleException[] processExceptionStyles(Props props)
+   @Override public GanttBarStyleException[] processExceptionStyles(ProjectFile file, Props props)
    {
       GanttBarStyleException[] barStyle = null;
       byte[] barData = props.getByteArray(EXCEPTION_PROPERTIES);
@@ -119,11 +115,11 @@ public class GanttBarStyleFactory14 implements GanttBarStyleFactory
             style.setEndType(GanttBarStartEndType.getInstance(barData[offset + 33] / 25));
             style.setEndColor(MPPUtility.getColor(barData, offset + 34));
 
-            style.setLeftText(getTaskField(MPPUtility.getShort(barData, offset + 49)));
-            style.setRightText(getTaskField(MPPUtility.getShort(barData, offset + 53)));
-            style.setTopText(getTaskField(MPPUtility.getShort(barData, offset + 57)));
-            style.setBottomText(getTaskField(MPPUtility.getShort(barData, offset + 61)));
-            style.setInsideText(getTaskField(MPPUtility.getShort(barData, offset + 65)));
+            style.setLeftText(getTaskField(file, MPPUtility.getInt(barData, offset + 49)));
+            style.setRightText(getTaskField(file, MPPUtility.getInt(barData, offset + 53)));
+            style.setTopText(getTaskField(file, MPPUtility.getInt(barData, offset + 57)));
+            style.setBottomText(getTaskField(file, MPPUtility.getInt(barData, offset + 61)));
+            style.setInsideText(getTaskField(file, MPPUtility.getInt(barData, offset + 65)));
 
             //System.out.println(style);
             offset += 71;
@@ -167,39 +163,41 @@ public class GanttBarStyleFactory14 implements GanttBarStyleFactory
    /**
     * Maps an integer field ID to a field type.
     *
+    * @param file parent file
     * @param field field ID
     * @return field type
     */
-   private TaskField getTaskField(int field)
+   private FieldType getTaskField(ProjectFile file, int field)
    {
-      TaskField result = MPPTaskField14.getInstance(field);
-
-      if (result != null)
+      FieldType result = FieldTypeHelper.getInstance(file, field);
+      if (!(result instanceof TaskField))
       {
-         switch (result)
+         return result;
+      }
+
+      switch ((TaskField) result)
+      {
+         case START_TEXT:
          {
-            case START_TEXT:
-            {
-               result = TaskField.START;
-               break;
-            }
+            result = TaskField.START;
+            break;
+         }
 
-            case FINISH_TEXT:
-            {
-               result = TaskField.FINISH;
-               break;
-            }
+         case FINISH_TEXT:
+         {
+            result = TaskField.FINISH;
+            break;
+         }
 
-            case DURATION_TEXT:
-            {
-               result = TaskField.DURATION;
-               break;
-            }
+         case DURATION_TEXT:
+         {
+            result = TaskField.DURATION;
+            break;
+         }
 
-            default:
-            {
-               break;
-            }
+         default:
+         {
+            break;
          }
       }
 

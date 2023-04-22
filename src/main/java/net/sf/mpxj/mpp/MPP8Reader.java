@@ -32,6 +32,10 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 
+import net.sf.mpxj.CostRateTable;
+import net.sf.mpxj.CostRateTableEntry;
+import net.sf.mpxj.common.DateHelper;
+import net.sf.mpxj.common.FieldTypeHelper;
 import org.apache.poi.poifs.filesystem.DirectoryEntry;
 import org.apache.poi.poifs.filesystem.DocumentEntry;
 import org.apache.poi.poifs.filesystem.DocumentInputStream;
@@ -55,17 +59,14 @@ import net.sf.mpxj.Relation;
 import net.sf.mpxj.RelationType;
 import net.sf.mpxj.Resource;
 import net.sf.mpxj.ResourceAssignment;
+import net.sf.mpxj.RtfNotes;
 import net.sf.mpxj.Table;
 import net.sf.mpxj.TableContainer;
 import net.sf.mpxj.Task;
-import net.sf.mpxj.TaskType;
 import net.sf.mpxj.TimeUnit;
 import net.sf.mpxj.View;
-import net.sf.mpxj.common.MPPResourceField;
-import net.sf.mpxj.common.MPPTaskField;
 import net.sf.mpxj.common.NumberHelper;
 import net.sf.mpxj.common.Pair;
-import net.sf.mpxj.common.RtfHelper;
 
 /**
  * This class is used to represent a Microsoft Project MPP8 file. This
@@ -82,14 +83,12 @@ final class MPP8Reader implements MPPVariantReader
     * @param reader parent file reader
     * @param file Parent MPX file
     * @param root Root of the POI file system.
-    * @throws MPXJException
-    * @throws IOException
     */
    @Override public void process(MPPReader reader, ProjectFile file, DirectoryEntry root) throws MPXJException, IOException
    {
       try
       {
-         populateMemberData(reader, file, root);
+         populateMemberData(file, root);
          processProjectProperties();
 
          if (!reader.getReadPropertiesOnly())
@@ -118,13 +117,11 @@ final class MPP8Reader implements MPPVariantReader
    /**
     * Populate member data used by the rest of the reader.
     *
-    * @param reader parent file reader
     * @param file parent MPP file
     * @param root Root of the POI file system.
     */
-   private void populateMemberData(MPPReader reader, ProjectFile file, DirectoryEntry root) throws IOException
+   private void populateMemberData(ProjectFile file, DirectoryEntry root) throws IOException
    {
-      m_reader = reader;
       m_root = root;
       m_file = file;
       m_eventManager = file.getEventManager();
@@ -132,6 +129,7 @@ final class MPP8Reader implements MPPVariantReader
       m_calendarMap = new HashMap<>();
       m_projectDir = (DirectoryEntry) root.getEntry("   1");
       m_viewDir = (DirectoryEntry) root.getEntry("   2");
+      m_projectProps = new Props8(new DocumentInputStream(((DocumentEntry) m_projectDir.getEntry("Props"))));
 
       m_file.getProjectProperties().setMppFileType(Integer.valueOf(8));
    }
@@ -141,23 +139,22 @@ final class MPP8Reader implements MPPVariantReader
     */
    private void clearMemberData()
    {
-      m_reader = null;
       m_root = null;
       m_eventManager = null;
       m_file = null;
       m_calendarMap = null;
       m_projectDir = null;
       m_viewDir = null;
+      m_projectProps = null;
    }
 
    /**
     * Process the project properties data.
     */
-   private void processProjectProperties() throws MPXJException, IOException
+   private void processProjectProperties() throws MPXJException
    {
-      Props8 props = new Props8(new DocumentInputStream(((DocumentEntry) m_projectDir.getEntry("Props"))));
       ProjectPropertiesReader reader = new ProjectPropertiesReader();
-      reader.process(m_file, props, m_root);
+      reader.process(m_file, m_projectProps, m_root);
    }
 
    /**
@@ -176,9 +173,6 @@ final class MPP8Reader implements MPPVariantReader
 
    /**
     * This method extracts and collates calendar data.
-    *
-    * @throws MPXJException
-    * @throws IOException
     */
    private void processCalendarData() throws MPXJException, IOException
    {
@@ -299,16 +293,24 @@ final class MPP8Reader implements MPPVariantReader
                if (defaultFlag == 1)
                {
                   cal.setWorkingDay(day, DEFAULT_WORKING_WEEK[index]);
-                  if (cal.isWorkingDay(day) == true)
+                  if (cal.isWorkingDay(day))
                   {
-                     hours = cal.addCalendarHours(net.sf.mpxj.Day.getInstance(index + 1));
-                     hours.addRange(new DateRange(defaultStart1, defaultEnd1));
-                     hours.addRange(new DateRange(defaultStart2, defaultEnd2));
+                     hours = cal.addCalendarHours(Day.getInstance(index + 1));
+                     hours.add(new DateRange(defaultStart1, defaultEnd1));
+                     hours.add(new DateRange(defaultStart2, defaultEnd2));
+                  }
+                  else
+                  {
+                     if (baseCalendarID <= 0)
+                     {
+                        cal.addCalendarHours(Day.getInstance(index + 1));
+                     }
                   }
                }
                else
                {
                   periodCount = MPPUtility.getShort(extData, offset + 2);
+                  hours = cal.addCalendarHours(Day.getInstance(index + 1));
                   if (periodCount == 0)
                   {
                      cal.setWorkingDay(day, false);
@@ -316,13 +318,12 @@ final class MPP8Reader implements MPPVariantReader
                   else
                   {
                      cal.setWorkingDay(day, true);
-                     hours = cal.addCalendarHours(Day.getInstance(index + 1));
 
                      for (periodIndex = 0; periodIndex < periodCount; periodIndex++)
                      {
                         start = MPPUtility.getTime(extData, offset + 8 + (periodIndex * 2));
                         duration = MPPUtility.getDuration(extData, offset + 16 + (periodIndex * 4));
-                        hours.addRange(new DateRange(start, new Date(start.getTime() + duration)));
+                        hours.add(new DateRange(start, new Date(start.getTime() + duration)));
                      }
                   }
                }
@@ -349,7 +350,7 @@ final class MPP8Reader implements MPPVariantReader
                      {
                         start = MPPUtility.getTime(extData, offset + 12 + (exceptionPeriodIndex * 2));
                         duration = MPPUtility.getDuration(extData, offset + 20 + (exceptionPeriodIndex * 4));
-                        exception.addRange(new DateRange(start, new Date(start.getTime() + duration)));
+                        exception.add(new DateRange(start, new Date(start.getTime() + duration)));
                      }
                   }
                }
@@ -361,6 +362,13 @@ final class MPP8Reader implements MPPVariantReader
       }
 
       updateBaseCalendarNames(baseCalendars);
+
+      ProjectCalendar projectDefaultCalendar = m_file.getCalendars().getByName(m_projectProps.getUnicodeString(Props.DEFAULT_CALENDAR_NAME));
+      if (projectDefaultCalendar == null)
+      {
+         projectDefaultCalendar = m_file.getCalendars().findOrCreateDefaultCalendar();
+      }
+      m_file.getProjectProperties().setDefaultCalendar(projectDefaultCalendar);
    }
 
    /**
@@ -389,8 +397,6 @@ final class MPP8Reader implements MPPVariantReader
 
    /**
     * This method extracts and collates task data.
-    *
-    * @throws IOException
     */
    private void processTaskData() throws IOException
    {
@@ -402,7 +408,7 @@ final class MPP8Reader implements MPPVariantReader
       }
 
       FixDeferFix taskVarData = null;
-      ExtendedData taskExtData = null;
+      ExtendedData taskExtData;
 
       int tasks = taskFixedData.getItemCount();
       byte[] data;
@@ -415,6 +421,8 @@ final class MPP8Reader implements MPPVariantReader
       RecurringTaskReader recurringTaskReader = null;
       ProjectProperties properties = m_file.getProjectProperties();
       TimeUnit defaultProjectTimeUnits = properties.getDefaultDurationUnits();
+      HyperlinkReader hyperlinkReader = new HyperlinkReader();
+      hyperlinkReader.setHasScreenTip(false);
 
       for (int loop = 0; loop < tasks; loop++)
       {
@@ -571,7 +579,7 @@ final class MPP8Reader implements MPPVariantReader
          task.setFlag(20, (flags[2] & 0x10) != 0); // note that this is not correct
          //task.setFreeSlack();  // Calculated value
          task.setHideBar((data[16] & 0x01) != 0);
-         processHyperlinkData(task, taskVarData.getByteArray(-1 - taskExtData.getInt(TASK_HYPERLINK)));
+         hyperlinkReader.read(task, taskVarData.getByteArray(-1 - taskExtData.getInt(TASK_HYPERLINK)));
          task.setID(Integer.valueOf(id));
          //task.setIndicators(); // Calculated value
          task.setLateFinish(MPPUtility.getTimestamp(data, 160));
@@ -681,7 +689,7 @@ final class MPP8Reader implements MPPVariantReader
          task.setText(29, taskExtData.getUnicodeString(TASK_TEXT29));
          task.setText(30, taskExtData.getUnicodeString(TASK_TEXT30));
          //task.setTotalSlack(); // Calculated value
-         task.setType(TaskType.getInstance(MPPUtility.getShort(data, 134)));
+         task.setType(TaskTypeHelper.getInstance(MPPUtility.getShort(data, 134)));
          task.setUniqueID(Integer.valueOf(uniqueID));
          //task.setUniqueIDPredecessors(); // Calculated value
          //task.setUniqueIDSuccessors(); // Calculated value
@@ -763,53 +771,12 @@ final class MPP8Reader implements MPPVariantReader
 
       if (notes != null)
       {
-         if (m_reader.getPreserveNoteFormatting() == false)
-         {
-            notes = RtfHelper.strip(notes);
-         }
-
-         task.setNotes(notes);
-      }
-   }
-
-   /**
-    * This method is used to extract the task hyperlink attributes
-    * from a block of data and call the appropriate modifier methods
-    * to configure the specified task object.
-    *
-    * @param task task instance
-    * @param data hyperlink data block
-    */
-   private void processHyperlinkData(Task task, byte[] data)
-   {
-      if (data != null)
-      {
-         int offset = 12;
-         String hyperlink;
-         String address;
-         String subaddress;
-
-         offset += 12;
-         hyperlink = MPPUtility.getUnicodeString(data, offset);
-         offset += ((hyperlink.length() + 1) * 2);
-
-         offset += 12;
-         address = MPPUtility.getUnicodeString(data, offset);
-         offset += ((address.length() + 1) * 2);
-
-         offset += 12;
-         subaddress = MPPUtility.getUnicodeString(data, offset);
-
-         task.setHyperlink(hyperlink);
-         task.setHyperlinkAddress(address);
-         task.setHyperlinkSubAddress(subaddress);
+         task.setNotesObject(new RtfNotes(notes));
       }
    }
 
    /**
     * This method extracts and collates constraint data.
-    *
-    * @throws IOException
     */
    private void processConstraintData() throws IOException
    {
@@ -857,6 +824,7 @@ final class MPP8Reader implements MPPVariantReader
                      TimeUnit durationUnits = MPPUtility.getDurationTimeUnits(MPPUtility.getShort(data, 22));
                      Duration lag = MPPUtility.getDuration(MPPUtility.getInt(data, 24), durationUnits);
                      Relation relation = task2.addPredecessor(task1, type, lag);
+                     relation.setUniqueID(Integer.valueOf(MPPUtility.getInt(data, 0)));
                      m_eventManager.fireRelationReadEvent(relation);
                   }
                }
@@ -867,15 +835,13 @@ final class MPP8Reader implements MPPVariantReader
 
    /**
     * This method extracts and collates resource data.
-    *
-    * @throws IOException
     */
    private void processResourceData() throws IOException
    {
       DirectoryEntry rscDir = (DirectoryEntry) m_projectDir.getEntry("TBkndRsc");
       FixFix rscFixedData = new FixFix(196, new DocumentInputStream(((DocumentEntry) rscDir.getEntry("FixFix   0"))));
       FixDeferFix rscVarData = null;
-      ExtendedData rscExtData = null;
+      ExtendedData rscExtData;
 
       int resources = rscFixedData.getItemCount();
       byte[] data;
@@ -951,7 +917,6 @@ final class MPP8Reader implements MPPVariantReader
          resource.setCost(8, NumberHelper.getDouble(((double) rscExtData.getLong(RESOURCE_COST8)) / 100));
          resource.setCost(9, NumberHelper.getDouble(((double) rscExtData.getLong(RESOURCE_COST9)) / 100));
          resource.setCost(10, NumberHelper.getDouble(((double) rscExtData.getLong(RESOURCE_COST10)) / 100));
-         resource.setCostPerUse(NumberHelper.getDouble(((double) MPPUtility.getLong6(data, 80)) / 100));
          resource.setDate(1, rscExtData.getTimestamp(RESOURCE_DATE1));
          resource.setDate(2, rscExtData.getTimestamp(RESOURCE_DATE2));
          resource.setDate(3, rscExtData.getTimestamp(RESOURCE_DATE3));
@@ -1012,7 +977,6 @@ final class MPP8Reader implements MPPVariantReader
          //resource.setObjects(); // Calculated value
          //resource.setOverallocated(); // Calculated value
          resource.setOvertimeCost(NumberHelper.getDouble(((double) MPPUtility.getLong6(data, 138)) / 100));
-         resource.setOvertimeRate(new Rate(MPPUtility.getDouble(data, 44), TimeUnit.HOURS));
          resource.setOvertimeWork(MPPUtility.getDuration(((double) MPPUtility.getLong6(data, 74)) / 100, TimeUnit.HOURS));
          resource.setPeakUnits(NumberHelper.getDouble(((double) MPPUtility.getInt(data, 110)) / 100));
          //resource.setPercentageWorkComplete(); // Calculated value
@@ -1020,7 +984,6 @@ final class MPP8Reader implements MPPVariantReader
          resource.setRemainingCost(NumberHelper.getDouble(((double) MPPUtility.getLong6(data, 132)) / 100));
          resource.setRemainingOvertimeCost(NumberHelper.getDouble(((double) MPPUtility.getLong6(data, 150)) / 100));
          resource.setRemainingWork(MPPUtility.getDuration(((double) MPPUtility.getLong6(data, 86)) / 100, TimeUnit.HOURS));
-         resource.setStandardRate(new Rate(MPPUtility.getDouble(data, 36), TimeUnit.HOURS));
          resource.setStart(1, rscExtData.getTimestamp(RESOURCE_START1));
          resource.setStart(2, rscExtData.getTimestamp(RESOURCE_START2));
          resource.setStart(3, rscExtData.getTimestamp(RESOURCE_START3));
@@ -1068,7 +1031,7 @@ final class MPP8Reader implements MPPVariantReader
          // Attach the resource calendar
          //
          calendar = m_calendarMap.get(Integer.valueOf(MPPUtility.getInt(data, 24)));
-         resource.setResourceCalendar(calendar);
+         resource.setCalendar(calendar);
 
          //
          // Retrieve the resource notes.
@@ -1076,13 +1039,16 @@ final class MPP8Reader implements MPPVariantReader
          notes = rscExtData.getString(RESOURCE_NOTES);
          if (notes != null)
          {
-            if (m_reader.getPreserveNoteFormatting() == false)
-            {
-               notes = RtfHelper.strip(notes);
-            }
-
-            resource.setNotes(notes);
+            resource.setNotesObject(new RtfNotes(notes));
          }
+
+         Number costPerUse = NumberHelper.getDouble(((double) MPPUtility.getLong6(data, 80)) / 100);
+         Rate standardRate = new Rate(MPPUtility.getDouble(data, 36), TimeUnit.HOURS);
+         Rate overtimeRate = new Rate(MPPUtility.getDouble(data, 44), TimeUnit.HOURS);
+
+         CostRateTable costRateTable = new CostRateTable();
+         costRateTable.add(new CostRateTableEntry(DateHelper.START_DATE_NA, DateHelper.END_DATE_NA, costPerUse, standardRate, overtimeRate));
+         resource.setCostRateTable(0, costRateTable);
 
          m_eventManager.fireResourceReadEvent(resource);
       }
@@ -1090,14 +1056,12 @@ final class MPP8Reader implements MPPVariantReader
 
    /**
     * This method extracts and collates resource assignment data.
-    *
-    * @throws IOException
     */
    private void processAssignmentData() throws IOException
    {
       DirectoryEntry assnDir = (DirectoryEntry) m_projectDir.getEntry("TBkndAssn");
       FixFix assnFixedData = new FixFix(204, new DocumentInputStream(((DocumentEntry) assnDir.getEntry("FixFix   0"))));
-      if (assnFixedData.getDiff() != 0 || (assnFixedData.getSize() % 238 == 0 && testAssignmentTasks(assnFixedData) == false))
+      if (assnFixedData.getDiff() != 0 || (assnFixedData.getSize() % 238 == 0 && !testAssignmentTasks(assnFixedData)))
       {
          assnFixedData = new FixFix(238, new DocumentInputStream(((DocumentEntry) assnDir.getEntry("FixFix   0"))));
       }
@@ -1124,7 +1088,12 @@ final class MPP8Reader implements MPPVariantReader
 
             if (task != null && resource != null)
             {
-               ResourceAssignment assignment = task.addResourceAssignment(resource);
+               ResourceAssignment assignment = task.getExistingResourceAssignment(resource);
+               if (assignment == null)
+               {
+                  assignment = task.addResourceAssignment(resource);
+               }
+
                assignment.setActualCost(NumberHelper.getDouble(((double) MPPUtility.getLong6(data, 138)) / 100));
                assignment.setActualWork(MPPUtility.getDuration(((double) MPPUtility.getLong6(data, 96)) / 100, TimeUnit.HOURS));
                assignment.setCost(NumberHelper.getDouble(((double) MPPUtility.getLong6(data, 132)) / 100));
@@ -1193,8 +1162,6 @@ final class MPP8Reader implements MPPVariantReader
 
    /**
     * This method extracts view data from the MPP file.
-    *
-    * @throws IOException
     */
    private void processViewData() throws IOException
    {
@@ -1217,8 +1184,6 @@ final class MPP8Reader implements MPPVariantReader
 
    /**
     * This method extracts table data from the MPP file.
-    *
-    * @throws IOException
     */
    private void processTableData() throws IOException
    {
@@ -1294,25 +1259,10 @@ final class MPP8Reader implements MPPVariantReader
 
          if (loop == 0)
          {
-            if (MPPUtility.getShort(data, index) == 0)
-            {
-               table.setResourceFlag(true);
-            }
-            else
-            {
-               table.setResourceFlag(false);
-            }
+            table.setResourceFlag(MPPUtility.getShort(data, index) == 0);
          }
 
-         if (table.getResourceFlag() == false)
-         {
-            column.setFieldType(MPPTaskField.getInstance(MPPUtility.getShort(data, index)));
-         }
-         else
-         {
-            column.setFieldType(MPPResourceField.getInstance(MPPUtility.getShort(data, index)));
-         }
-
+         column.setFieldType(FieldTypeHelper.getInstance(m_file, MPPUtility.getInt(data, index)));
          column.setWidth(MPPUtility.getByte(data, index + 4));
 
          columnTitleOffset = MPPUtility.getShort(data, index + 6);
@@ -1419,13 +1369,13 @@ final class MPP8Reader implements MPPVariantReader
    //     {162, 42}
    //   };
 
-   private MPPReader m_reader;
    private ProjectFile m_file;
    private EventManager m_eventManager;
    private HashMap<Integer, ProjectCalendar> m_calendarMap;
    private DirectoryEntry m_root;
    private DirectoryEntry m_projectDir;
    private DirectoryEntry m_viewDir;
+   private Props8 m_projectProps;
 
    /**
     * Task data types.

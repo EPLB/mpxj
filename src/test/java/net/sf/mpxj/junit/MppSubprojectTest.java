@@ -23,12 +23,11 @@
 
 package net.sf.mpxj.junit;
 
-import static net.sf.mpxj.junit.MpxjAssert.*;
 import static org.junit.Assert.*;
 import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.SubProject;
 import net.sf.mpxj.Task;
-import net.sf.mpxj.mpd.MPDDatabaseReader;
+import net.sf.mpxj.mpd.MPDFileReader;
 import net.sf.mpxj.mpp.MPPReader;
 
 import org.junit.Test;
@@ -41,8 +40,6 @@ public class MppSubprojectTest
 {
    /**
     * Test subproject data read from an MPP9 file.
-    *
-    * @throws Exception
     */
    @Test public void testMpp9Subproject() throws Exception
    {
@@ -52,8 +49,6 @@ public class MppSubprojectTest
 
    /**
     * Test subproject data read from an MPP9 file saved by Project 2007.
-    *
-    * @throws Exception
     */
    @Test public void testMpp9SubprojectFrom12() throws Exception
    {
@@ -63,8 +58,6 @@ public class MppSubprojectTest
 
    /**
     * Test subproject data read from an MPP9 file saved by Project 2010.
-    *
-    * @throws Exception
     */
    @Test public void testMpp9SubprojectFrom14() throws Exception
    {
@@ -74,8 +67,6 @@ public class MppSubprojectTest
 
    /**
     * Test subproject data read from an MPP12 file.
-    *
-    * @throws Exception
     */
    @Test public void testMpp12Subproject() throws Exception
    {
@@ -85,8 +76,6 @@ public class MppSubprojectTest
 
    /**
     * Test subproject data read from an MPP12 file saved by Project 2010.
-    *
-    * @throws Exception
     */
    @Test public void testMpp12SubprojectFrom14() throws Exception
    {
@@ -96,8 +85,6 @@ public class MppSubprojectTest
 
    /**
     * Test subproject data read from an MPP14 file.
-    *
-    * @throws Exception
     */
    @Test public void testMpp14Subproject() throws Exception
    {
@@ -107,13 +94,10 @@ public class MppSubprojectTest
 
    /**
     * Test subproject data read from an MPD9 file.
-    *
-    * @throws Exception
     */
    @Test public void testMpd9Subproject() throws Exception
    {
-      assumeJvm();
-      ProjectFile mpp = new MPDDatabaseReader().read(MpxjTestData.filePath("mpp9subproject.mpd"));
+      ProjectFile mpp = new MPDFileReader().read(MpxjTestData.filePath("mpp9subproject.mpd"));
       testSubprojects(mpp, false);
    }
 
@@ -122,9 +106,8 @@ public class MppSubprojectTest
     *
     * @param mpp The ProjectFile being tested.
     * @param isMPP is the source an MPP file
-    * @throws Exception
     */
-   private void testSubprojects(ProjectFile mpp, boolean isMPP) throws Exception
+   private void testSubprojects(ProjectFile mpp, boolean isMPP)
    {
       Task taskNormal = mpp.getTaskByUniqueID(Integer.valueOf(1));
       Task taskSubprojectA = mpp.getTaskByUniqueID(Integer.valueOf(2));
@@ -139,9 +122,9 @@ public class MppSubprojectTest
       assertNotNull(subprojectA);
       final String expectedFilenameA = "\\SubprojectA-9.mpp";
       //assertEquals(expectedFilenameA, subprojectA.getDosFileName());
-      assertTrue(expectedFilenameA.indexOf(subprojectA.getFileName()) != -1);
+      assertTrue(expectedFilenameA.contains(subprojectA.getFileName()));
       //subprojectA.getDosFullPath(); don't need to test
-      assertTrue(subprojectA.getFullPath().indexOf(expectedFilenameA) != -1);
+      assertTrue(subprojectA.getFullPath().contains(expectedFilenameA));
       assertEquals(Integer.valueOf(2), subprojectA.getTaskUniqueID());
 
       //assertEquals(null, taskSubprojectA.getSubprojectName());  // TODO: why is this null?

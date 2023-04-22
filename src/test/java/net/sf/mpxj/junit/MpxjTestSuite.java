@@ -23,6 +23,9 @@
 
 package net.sf.mpxj.junit;
 
+import net.sf.mpxj.junit.assignment.EffectiveRateTest;
+import net.sf.mpxj.junit.calendar.GetStartDateTest;
+import net.sf.mpxj.mspdi.XsdDurationTest;
 import org.junit.runner.RunWith;
 import org.junit.runners.Suite;
 
@@ -104,11 +107,11 @@ import net.sf.mpxj.junit.task.TaskTextValuesTest;
    MppColumnsTest.class,
    MppBarStyleTest.class,
    MppGanttTest.class,
-   TimephasedSegmentTest.class,
+   TimephasedWorkSegmentTest.class,
    MppAssignmentTest.class,
-   TimephasedSegmentTest2.class,
-   MppTaskFlags.class,
-   MppResourceFlags.class,
+   TimephasedWorkCostSegmentTest.class,
+   MppTaskFlagsTest.class,
+   MppResourceFlagsTest.class,
    DateUtilityTest.class,
    DeletedAssignmentTest.class,
    MppResourceTypeTest.class,
@@ -151,6 +154,10 @@ import net.sf.mpxj.junit.task.TaskTextValuesTest;
    LocaleDataTest.class,
    MultiDayExceptionsTest.class,
    SemVerTest.class,
+   GetStartDateTest.class,
+   EffectiveRateTest.class,
+   CombinedCalendarTest.class,
+   XsdDurationTest.class,
    CustomerDataTest.class
 }) public class MpxjTestSuite
 {

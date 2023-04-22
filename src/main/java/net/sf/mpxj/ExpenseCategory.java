@@ -33,13 +33,13 @@ public class ExpenseCategory implements ProjectEntityWithUniqueID
     *
     * @param uniqueID expense category unique ID
     * @param name expense category name
-    * @param sequence sequence number
+    * @param sequenceNumber sequence number
     */
-   public ExpenseCategory(Integer uniqueID, String name, Integer sequence)
+   public ExpenseCategory(Integer uniqueID, String name, Integer sequenceNumber)
    {
       m_uniqueID = uniqueID;
       m_name = name;
-      m_sequence = sequence;
+      m_sequenceNumber = sequenceNumber;
    }
 
    @Override public Integer getUniqueID()
@@ -67,9 +67,9 @@ public class ExpenseCategory implements ProjectEntityWithUniqueID
     *
     * @return sequence number
     */
-   public Integer getSequence()
+   public Integer getSequenceNumber()
    {
-      return m_sequence;
+      return m_sequenceNumber;
    }
 
    @Override public String toString()
@@ -79,5 +79,5 @@ public class ExpenseCategory implements ProjectEntityWithUniqueID
 
    private final Integer m_uniqueID;
    private final String m_name;
-   private final Integer m_sequence;
+   private final Integer m_sequenceNumber;
 }

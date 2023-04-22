@@ -34,7 +34,6 @@ import net.sf.mpxj.Filter;
 import net.sf.mpxj.GenericCriteria;
 import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.common.FieldTypeHelper;
-import net.sf.mpxj.common.MPPTaskField14;
 
 /**
  * This class represents the set of properties used to define the appearance
@@ -42,35 +41,23 @@ import net.sf.mpxj.common.MPPTaskField14;
  */
 public final class GanttChartView14 extends GanttChartView
 {
-   /**
-    * {@inheritDoc}
-    */
    @Override protected Integer getPropertiesID()
    {
       return (PROPERTIES);
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override protected void processDefaultBarStyles(Props props)
    {
       GanttBarStyleFactory f = new GanttBarStyleFactory14();
-      m_barStyles = f.processDefaultStyles(props);
+      m_barStyles = f.processDefaultStyles(m_file, props);
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override protected void processExceptionBarStyles(Props props)
    {
       GanttBarStyleFactory f = new GanttBarStyleFactory14();
-      m_barStyleExceptions = f.processExceptionStyles(props);
+      m_barStyleExceptions = f.processExceptionStyles(m_file, props);
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override protected void processAutoFilters(byte[] data)
    {
       //System.out.println(ByteArrayHelper.hexdump(data, true, 16, ""));
@@ -110,7 +97,7 @@ public final class GanttChartView14 extends GanttChartView
          //System.out.println(ByteArrayHelper.hexdump(data, offset, 32, false));
 
          // may need to sort this out
-         GenericCriteria c = criteria.process(m_properties, data, offset + 12, -1, null, null, null);
+         GenericCriteria c = criteria.process(m_file, data, offset + 12, -1, null, null, null);
          //System.out.println(c);
 
          Filter filter = new Filter();
@@ -135,12 +122,9 @@ public final class GanttChartView14 extends GanttChartView
    private FieldType getFieldType(byte[] data, int offset)
    {
       int fieldIndex = MPPUtility.getInt(data, offset);
-      return FieldTypeHelper.mapTextFields(FieldTypeHelper.getInstance14(fieldIndex));
+      return FieldTypeHelper.mapTextFields(FieldTypeHelper.getInstance(m_file, fieldIndex));
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override protected void processViewProperties(Map<Integer, FontBase> fontBases, Props props)
    {
       byte[] viewPropertyData = props.getByteArray(VIEW_PROPERTIES);
@@ -256,7 +240,7 @@ public final class GanttChartView14 extends GanttChartView
     * @param ignoreBackground set background to default values
     * @return FontStyle instance
     */
-   protected FontStyle getFontStyle(byte[] data, int offset, Map<Integer, FontBase> fontBases, boolean ignoreBackground)
+   private FontStyle getFontStyle(byte[] data, int offset, Map<Integer, FontBase> fontBases, boolean ignoreBackground)
    {
       //System.out.println(ByteArrayHelper.hexdump(data, offset, 32, false));
 
@@ -283,14 +267,10 @@ public final class GanttChartView14 extends GanttChartView
       boolean underline = ((style & 0x04) != 0);
       boolean strikethrough = ((style & 0x08) != 0);
 
-      FontStyle fontStyle = new FontStyle(fontBase, italic, bold, underline, strikethrough, color, backgroundColor, backgroundPattern);
       //System.out.println(fontStyle);
-      return fontStyle;
+      return new FontStyle(fontBase, italic, bold, underline, strikethrough, color, backgroundColor, backgroundPattern);
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override protected void processTableFontStyles(Map<Integer, FontBase> fontBases, byte[] columnData)
    {
       //MPPUtility.fileDump("c:\\temp\\props.txt", ByteArrayHelper.hexdump(columnData, false, 44, "").getBytes());
@@ -299,15 +279,15 @@ public final class GanttChartView14 extends GanttChartView
       int offset = 0;
       for (int loop = 0; loop < m_tableFontStyles.length; loop++)
       {
-         m_tableFontStyles[loop] = getColumnFontStyle(columnData, offset, fontBases);
+         m_tableFontStyles[loop] = getColumnFontStyle(m_file, columnData, offset, fontBases);
          offset += 44;
       }
    }
 
-   @Override protected TableFontStyle getColumnFontStyle(byte[] data, int offset, Map<Integer, FontBase> fontBases)
+   @Override protected TableFontStyle getColumnFontStyle(ProjectFile file, byte[] data, int offset, Map<Integer, FontBase> fontBases)
    {
       int uniqueID = MPPUtility.getInt(data, offset);
-      FieldType fieldType = MPPTaskField14.getInstance(MPPUtility.getShort(data, offset + 4));
+      FieldType fieldType = FieldTypeHelper.getInstance(file, MPPUtility.getInt(data, offset + 4));
       Integer index = Integer.valueOf(MPPUtility.getByte(data, offset + 8));
       int style = MPPUtility.getByte(data, offset + 11);
       Color color = MPPUtility.getColor(data, offset + 12);
@@ -331,14 +311,10 @@ public final class GanttChartView14 extends GanttChartView
       boolean backgroundPatternChanged = ((change & 0x80) != 0);
       boolean strikethroughChanged = ((change & 0x100) != 0);
 
-      TableFontStyle tfs = new TableFontStyle(uniqueID, fieldType, fontBase, italic, bold, underline, strikethrough, color, backgroundColor, backgroundPattern, italicChanged, boldChanged, underlineChanged, strikethroughChanged, colorChanged, fontChanged, backgroundColorChanged, backgroundPatternChanged);
       //System.out.println(tfs);
-      return tfs;
+      return new TableFontStyle(uniqueID, fieldType, fontBase, italic, bold, underline, strikethrough, color, backgroundColor, backgroundPattern, italicChanged, boldChanged, underlineChanged, strikethroughChanged, colorChanged, fontChanged, backgroundColorChanged, backgroundPatternChanged);
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override protected void processProgressLines(Map<Integer, FontBase> fontBases, byte[] progressLineData)
    {
       //MPPUtility.fileDump("c:\\temp\\props.txt", ByteArrayHelper.hexdump(progressLineData, false, 16, "").getBytes());
@@ -403,7 +379,6 @@ public final class GanttChartView14 extends GanttChartView
     * @param fixedData fixed data block
     * @param varData var data block
     * @param fontBases map of font bases
-    * @throws IOException
     */
    GanttChartView14(ProjectFile parent, byte[] fixedMeta, byte[] fixedData, Var2Data varData, Map<Integer, FontBase> fontBases)
       throws IOException

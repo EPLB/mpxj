@@ -23,9 +23,11 @@
 
 package net.sf.mpxj.reader;
 
+import java.beans.Statement;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Properties;
 
 import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.listener.ProjectListener;
@@ -36,9 +38,36 @@ import net.sf.mpxj.listener.ProjectListener;
  */
 public abstract class AbstractProjectReader implements ProjectReader
 {
-   /**
-    * {@inheritDoc}
-    */
+   @Override public ProjectReader setProperties(Properties props)
+   {
+      if (props == null)
+      {
+         return this;
+      }
+
+      String className = getClass().getName() + ".";
+
+      props.entrySet().stream().filter(e -> ((String) e.getKey()).startsWith(className)).forEach(e -> {
+         String methodName = "set" + ((String) e.getKey()).substring(className.length());
+         Boolean propertyValue = Boolean.valueOf((String) e.getValue());
+
+         try
+         {
+            new Statement(this, methodName, new Object[]
+            {
+               propertyValue
+            }).execute();
+         }
+
+         catch (Exception ex)
+         {
+            // Silently ignore failures attempting to set properties
+         }
+      });
+
+      return this;
+   }
+
    @Override public void addProjectListener(ProjectListener listener)
    {
       if (m_projectListeners == null)
@@ -67,7 +96,7 @@ public abstract class AbstractProjectReader implements ProjectReader
    {
       if (m_projectListeners != null)
       {
-         m_projectListeners.forEach(l -> reader.addProjectListener(l));
+         m_projectListeners.forEach(reader::addProjectListener);
       }
    }
 
@@ -77,7 +106,7 @@ public abstract class AbstractProjectReader implements ProjectReader
     */
    @Override public void setCharset(Charset charset)
    {
-      // default implementatoin - do nothing
+      // default implementation - do nothing
    }
 
    private List<ProjectListener> m_projectListeners;

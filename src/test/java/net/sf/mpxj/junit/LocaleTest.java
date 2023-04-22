@@ -26,6 +26,7 @@ package net.sf.mpxj.junit;
 import static net.sf.mpxj.junit.MpxjAssert.*;
 
 import java.io.File;
+import java.nio.file.Files;
 import java.util.Locale;
 
 import org.junit.Test;
@@ -41,8 +42,6 @@ public class LocaleTest
 {
    /**
     * Test all supported MPX locales.
-    *
-    * @throws Exception
     */
    @Test public void testLocales() throws Exception
    {
@@ -58,7 +57,6 @@ public class LocaleTest
     * Test localisation.
     *
     * @param locale locale to test
-    * @throws Exception
     */
    private void testLocale(Locale locale) throws Exception
    {
@@ -67,7 +65,7 @@ public class LocaleTest
 
       File in = new File(MpxjTestData.filePath("legacy/sample.mpx"));
       ProjectFile mpx = reader.read(in);
-      File out = File.createTempFile("junit-" + locale.getLanguage(), ".mpx");
+      File out = Files.createTempFile("junit-" + locale.getLanguage(), ".mpx").toFile();
       writer.setLocale(locale);
       writer.write(mpx, out);
 
@@ -78,8 +76,6 @@ public class LocaleTest
 
    /**
     * Read a file created by a German version of MS Project 98.
-    *
-    * @throws Exception
     */
    @Test public void testReadGerman() throws Exception
    {

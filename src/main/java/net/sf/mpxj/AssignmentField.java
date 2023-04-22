@@ -108,7 +108,7 @@ public enum AssignmentField implements FieldType
    COST_VARIANCE(DataType.CURRENCY),
    PERCENT_WORK_COMPLETE(DataType.PERCENTAGE),
    PROJECT(DataType.STRING),
-   NOTES(DataType.ASCII_STRING),
+   NOTES(DataType.NOTES),
    CONFIRMED(DataType.BOOLEAN),
    RESPONSE_PENDING(DataType.BOOLEAN),
    UPDATE_NEEDED(DataType.BOOLEAN),
@@ -520,61 +520,17 @@ public enum AssignmentField implements FieldType
    HYPERLINK_DATA(DataType.BINARY),
    RESUME(DataType.DATE),
    STOP(DataType.DATE),
-
-   // KEEP THESE TOGETHER AND IN ORDER
-   ENTERPRISE_CUSTOM_FIELD1(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD2(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD3(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD4(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD5(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD6(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD7(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD8(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD9(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD10(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD11(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD12(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD13(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD14(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD15(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD16(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD17(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD18(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD19(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD20(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD21(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD22(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD23(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD24(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD25(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD26(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD27(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD28(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD29(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD30(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD31(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD32(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD33(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD34(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD35(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD36(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD37(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD38(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD39(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD40(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD41(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD42(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD43(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD44(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD45(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD46(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD47(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD48(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD49(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD50(DataType.STRING),
-   // KEEP THESE TOGETHER AND IN ORDER
-
-   FINISH(DataType.DATE); // Must always be last value
+   PLANNED_WORK(DataType.WORK),
+   PLANNED_COST(DataType.CURRENCY),
+   PLANNED_START(DataType.DATE),
+   PLANNED_FINISH(DataType.DATE),
+   RATE_INDEX(DataType.INTEGER),
+   ROLE_UNIQUE_ID(DataType.INTEGER),
+   OVERRIDE_RATE(DataType.RATE),
+   RATE_SOURCE(DataType.RATE_SOURCE),
+   CALCULATE_COSTS_FROM_UNITS(DataType.BOOLEAN),
+   COST_ACCOUNT_UNIQUE_ID(DataType.INTEGER),
+   FINISH(DataType.DATE);
 
    /**
     * Constructor.
@@ -582,7 +538,7 @@ public enum AssignmentField implements FieldType
     * @param dataType field data type
     * @param unitsType units type
     */
-   private AssignmentField(DataType dataType, FieldType unitsType)
+   AssignmentField(DataType dataType, FieldType unitsType)
    {
       m_dataType = dataType;
       m_unitsType = unitsType;
@@ -593,30 +549,21 @@ public enum AssignmentField implements FieldType
     *
     * @param dataType field data type
     */
-   private AssignmentField(DataType dataType)
+   AssignmentField(DataType dataType)
    {
       this(dataType, null);
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public FieldTypeClass getFieldTypeClass()
    {
       return FieldTypeClass.ASSIGNMENT;
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public String getName()
    {
       return (getName(Locale.ENGLISH));
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public String getName(Locale locale)
    {
       String[] titles = LocaleData.getStringArray(locale, LocaleData.ASSIGNMENT_COLUMNS);
@@ -630,25 +577,16 @@ public enum AssignmentField implements FieldType
       return (result);
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public int getValue()
    {
       return (m_value);
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public DataType getDataType()
    {
       return (m_dataType);
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public FieldType getUnitsType()
    {
       return m_unitsType;
@@ -696,6 +634,6 @@ public enum AssignmentField implements FieldType
    }
 
    private int m_value;
-   private DataType m_dataType;
-   private FieldType m_unitsType;
+   private final DataType m_dataType;
+   private final FieldType m_unitsType;
 }

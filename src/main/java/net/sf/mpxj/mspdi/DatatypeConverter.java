@@ -49,6 +49,7 @@ import net.sf.mpxj.Priority;
 import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.ProjectProperties;
 import net.sf.mpxj.Rate;
+import net.sf.mpxj.Resource;
 import net.sf.mpxj.ResourceType;
 import net.sf.mpxj.TaskType;
 import net.sf.mpxj.TimeUnit;
@@ -56,7 +57,11 @@ import net.sf.mpxj.WorkContour;
 import net.sf.mpxj.WorkGroup;
 import net.sf.mpxj.common.DateHelper;
 import net.sf.mpxj.common.NumberHelper;
+import net.sf.mpxj.common.RateHelper;
+import net.sf.mpxj.common.XmlHelper;
 import net.sf.mpxj.mpp.MPPUtility;
+import net.sf.mpxj.mpp.TaskTypeHelper;
+import net.sf.mpxj.mpp.WorkContourHelper;
 
 /**
  * This class contains methods used to perform the datatype conversions
@@ -65,27 +70,27 @@ import net.sf.mpxj.mpp.MPPUtility;
 public final class DatatypeConverter
 {
    /**
-    * Print an extended attribute currency value.
+    * Print a custom field currency value.
     *
     * @param value currency value
     * @return string representation
     */
-   public static final String printExtendedAttributeCurrency(Number value)
+   public static final String printCustomFieldCurrency(Number value)
    {
       return (value == null ? null : NUMBER_FORMAT.get().format(value.doubleValue() * 100));
    }
 
    /**
-    * Parse an extended attribute currency value.
+    * Parse a custom field currency value.
     *
     * @param value string representation
     * @return currency value
     */
-   public static final Number parseExtendedAttributeCurrency(String value)
+   public static final Number parseCustomFieldCurrency(String value)
    {
       Number result;
 
-      if (value == null)
+      if (value == null || value.isEmpty())
       {
          result = null;
       }
@@ -97,56 +102,56 @@ public final class DatatypeConverter
    }
 
    /**
-    * Print an extended attribute numeric value.
+    * Print a custom field numeric value.
     *
     * @param value numeric value
     * @return string representation
     */
-   public static final String printExtendedAttributeNumber(Number value)
+   public static final String printCustomFieldNumber(Number value)
    {
       return (NUMBER_FORMAT.get().format(value.doubleValue()));
    }
 
    /**
-    * Parse and extended attribute numeric value.
+    * Parse and custom field numeric value.
     *
     * @param value string representation
     * @return numeric value
     */
-   public static final Number parseExtendedAttributeNumber(String value)
+   public static final Number parseCustomFieldNumber(String value)
    {
       return (Double.valueOf(correctNumberFormat(value)));
    }
 
    /**
-    * Print an extended attribute boolean value.
+    * Print a custom field boolean value.
     *
     * @param value boolean value
     * @return string representation
     */
-   public static final String printExtendedAttributeBoolean(Boolean value)
+   public static final String printCustomFieldBoolean(Boolean value)
    {
       return (value.booleanValue() ? "1" : "0");
    }
 
    /**
-    * Parse an extended attribute boolean value.
+    * Parse a custom field boolean value.
     *
     * @param value string representation
     * @return boolean value
     */
-   public static final Boolean parseExtendedAttributeBoolean(String value)
+   public static final Boolean parseCustomFieldBoolean(String value)
    {
       return ((value.equals("1") ? Boolean.TRUE : Boolean.FALSE));
    }
 
    /**
-    * Print an extended attribute date value.
+    * Print a custom field date value.
     *
     * @param value date value
     * @return string representation
     */
-   public static final String printExtendedAttributeDate(Date value)
+   public static final String printCustomFieldDate(Date value)
    {
       return (value == null ? null : DATE_FORMAT.get().format(value));
    }
@@ -186,7 +191,7 @@ public final class DatatypeConverter
    public static final Date parseOutlineCodeValueDate(String value)
    {
       Date result = null;
-      if (value != null)
+      if (value != null && !value.isEmpty())
       {
          long rawValue = Long.parseLong(value);
          long dateMS = ((rawValue / 65536) * DateHelper.MS_PER_DAY) + MPPUtility.EPOCH;
@@ -197,12 +202,12 @@ public final class DatatypeConverter
    }
 
    /**
-    * Parse an extended attribute date value.
+    * Parse a custom field date value.
     *
     * @param value string representation
     * @return date value
     */
-   public static final Date parseExtendedAttributeDate(String value)
+   public static final Date parseCustomFieldDate(String value)
    {
       Date result = null;
 
@@ -223,26 +228,26 @@ public final class DatatypeConverter
    }
 
    /**
-    * Print an extended attribute value.
+    * Print a custom field value.
     *
     * @param writer parent MSPDIWriter instance
     * @param value attribute value
     * @param type type of the value being passed
     * @return string representation
     */
-   public static final String printExtendedAttribute(MSPDIWriter writer, Object value, DataType type)
+   public static final String printCustomField(MSPDIWriter writer, Object value, DataType type)
    {
       String result;
 
       if (type == DataType.DATE)
       {
-         result = printExtendedAttributeDate((Date) value);
+         result = printCustomFieldDate((Date) value);
       }
       else
       {
          if (value instanceof Boolean)
          {
-            result = printExtendedAttributeBoolean((Boolean) value);
+            result = printCustomFieldBoolean((Boolean) value);
          }
          else
          {
@@ -254,13 +259,13 @@ public final class DatatypeConverter
             {
                if (type == DataType.CURRENCY)
                {
-                  result = printExtendedAttributeCurrency((Number) value);
+                  result = printCustomFieldCurrency((Number) value);
                }
                else
                {
                   if (value instanceof Number)
                   {
-                     result = printExtendedAttributeNumber((Number) value);
+                     result = printCustomFieldNumber((Number) value);
                   }
                   else
                   {
@@ -275,15 +280,15 @@ public final class DatatypeConverter
    }
 
    /**
-    * Parse an extended attribute value.
+    * Parse a custom field value.
     *
     * @param file parent file
     * @param mpx parent entity
     * @param value string value
     * @param mpxFieldID field ID
-    * @param durationFormat duration format associated with the extended attribute
+    * @param durationFormat duration format associated with the custom field
     */
-   public static final void parseExtendedAttribute(ProjectFile file, FieldContainer mpx, String value, FieldType mpxFieldID, TimeUnit durationFormat)
+   public static final void parseCustomField(ProjectFile file, FieldContainer mpx, String value, FieldType mpxFieldID, TimeUnit durationFormat)
    {
       if (mpxFieldID != null)
       {
@@ -297,25 +302,25 @@ public final class DatatypeConverter
 
             case DATE:
             {
-               mpx.set(mpxFieldID, parseExtendedAttributeDate(value));
+               mpx.set(mpxFieldID, parseCustomFieldDate(value));
                break;
             }
 
             case CURRENCY:
             {
-               mpx.set(mpxFieldID, parseExtendedAttributeCurrency(value));
+               mpx.set(mpxFieldID, parseCustomFieldCurrency(value));
                break;
             }
 
             case BOOLEAN:
             {
-               mpx.set(mpxFieldID, parseExtendedAttributeBoolean(value));
+               mpx.set(mpxFieldID, parseCustomFieldBoolean(value));
                break;
             }
 
             case NUMERIC:
             {
-               mpx.set(mpxFieldID, parseExtendedAttributeNumber(value));
+               mpx.set(mpxFieldID, parseCustomFieldNumber(value));
                break;
             }
 
@@ -358,13 +363,13 @@ public final class DatatypeConverter
          {
             if (type == DataType.CURRENCY)
             {
-               result = printExtendedAttributeCurrency((Number) value);
+               result = printCustomFieldCurrency((Number) value);
             }
             else
             {
                if (value instanceof Number)
                {
-                  result = printExtendedAttributeNumber((Number) value);
+                  result = printCustomFieldNumber((Number) value);
                }
                else
                {
@@ -404,13 +409,13 @@ public final class DatatypeConverter
 
          case CURRENCY:
          {
-            result = parseExtendedAttributeCurrency(value);
+            result = parseCustomFieldCurrency(value);
             break;
          }
 
          case NUMERIC:
          {
-            result = parseExtendedAttributeNumber(value);
+            result = parseCustomFieldNumber(value);
             break;
          }
 
@@ -579,7 +584,9 @@ public final class DatatypeConverter
     */
    public static final String printWorkContour(WorkContour value)
    {
-      return (Integer.toString(value == null ? WorkContour.FLAT.getValue() : value.getValue()));
+      // TODO: mapping from custom contours (e.g. from P6) to MS Project defaults
+      Integer result = WorkContourHelper.getID(value);
+      return (result == null ? WorkContourHelper.getID(WorkContour.FLAT) : result).toString();
    }
 
    /**
@@ -590,7 +597,7 @@ public final class DatatypeConverter
     */
    public static final WorkContour parseWorkContour(String value)
    {
-      return (WorkContour.getInstance(NumberHelper.getInt(value)));
+      return (WorkContourHelper.getInstance(PARENT_FILE.get(), NumberHelper.getInt(value)));
    }
 
    /**
@@ -623,7 +630,7 @@ public final class DatatypeConverter
     */
    public static final String printTaskType(TaskType value)
    {
-      return (Integer.toString(value == null ? TaskType.FIXED_UNITS.getValue() : value.getValue()));
+      return Integer.toString(TaskTypeHelper.getValue(value));
    }
 
    /**
@@ -634,7 +641,7 @@ public final class DatatypeConverter
     */
    public static final TaskType parseTaskType(String value)
    {
-      return (TaskType.getInstance(NumberHelper.getInt(value)));
+      return TaskTypeHelper.getInstance(NumberHelper.getInt(value));
    }
 
    /**
@@ -667,7 +674,16 @@ public final class DatatypeConverter
     */
    public static final BigDecimal printUnits(Number value)
    {
-      return (value == null ? BIGDECIMAL_ONE : new BigDecimal(value.doubleValue() / 100));
+      BigDecimal result;
+      if (value == null)
+      {
+         result = BIGDECIMAL_ONE;
+      }
+      else
+      {
+         result = new BigDecimal(UNITS_NUMBER_FORMAT.get().format(value.doubleValue() / 100));
+      }
+      return result;
    }
 
    /**
@@ -690,6 +706,55 @@ public final class DatatypeConverter
    public static final BigInteger printTimeUnit(TimeUnit value)
    {
       return (BigInteger.valueOf(value == null ? TimeUnit.DAYS.getValue() + 1 : value.getValue() + 1));
+   }
+
+   /**
+    * Print a time unit derived from a Rate.
+    *
+    * @param rate Rate instance
+    * @return time unit value
+    */
+   public static final BigInteger printTimeUnit(Rate rate)
+   {
+      return printTimeUnit(rate == null ? null : rate.getUnits());
+   }
+
+   /**
+    * Print a time unit from a rate, and handle special case
+    * for non-work resources.
+    *
+    * @param resource parent resource
+    * @param rate Rate instance
+    * @return time unit value
+    */
+   public static final BigInteger printOvertimeRateFormat(Resource resource, Rate rate)
+   {
+      if (NumberHelper.getInt(resource.getUniqueID()) != 0 && resource.getType() != ResourceType.WORK)
+      {
+         // TODO: improve handling of cost and material rates
+         return printTimeUnit(TimeUnit.HOURS);
+      }
+
+      return printTimeUnit(rate);
+   }
+
+   /**
+    * Print a time unit from a rate, and handle special case
+    * for non-work resources.
+    *
+    * @param resource parent resource
+    * @param rate Rate instance
+    * @return time unit value
+    */
+   public static final BigInteger printStandardRateFormat(Resource resource, Rate rate)
+   {
+      if (NumberHelper.getInt(resource.getUniqueID()) != 0 && resource.getType() != ResourceType.WORK)
+      {
+         // TODO: improve handling of cost and material rates
+         return printTimeUnit(TimeUnit.ELAPSED_MINUTES);
+      }
+
+      return printTimeUnit(rate);
    }
 
    /**
@@ -909,20 +974,6 @@ public final class DatatypeConverter
                break;
             }
 
-            case ELAPSED_YEARS:
-            {
-               //
-               // Calculate the number of years
-               //
-               duration += xsd.getYears();
-               duration += ((double) xsd.getMonths() / 12);
-               duration += ((double) xsd.getDays() / 365);
-               duration += ((double) xsd.getHours() / (365 * 24));
-               duration += ((double) xsd.getMinutes() / (365 * 24 * 60));
-               duration += (xsd.getSeconds() / (365 * 24 * 60 * 60));
-               break;
-            }
-
             case MONTHS:
             {
                //
@@ -934,48 +985,6 @@ public final class DatatypeConverter
                duration += ((double) xsd.getHours() / (30 * 24));
                duration += ((double) xsd.getMinutes() / (30 * 24 * 60));
                duration += (xsd.getSeconds() / (30 * 24 * 60 * 60));
-               break;
-            }
-
-            case ELAPSED_MONTHS:
-            {
-               //
-               // Calculate the number of months
-               //
-               duration += (xsd.getYears() * 12);
-               duration += xsd.getMonths();
-               duration += ((double) xsd.getDays() / 30);
-               duration += ((double) xsd.getHours() / (30 * 24));
-               duration += ((double) xsd.getMinutes() / (30 * 24 * 60));
-               duration += (xsd.getSeconds() / (30 * 24 * 60 * 60));
-               break;
-            }
-
-            case WEEKS:
-            {
-               //
-               // Calculate the number of weeks
-               //
-               duration += (xsd.getYears() * 52);
-               duration += (xsd.getMonths() * 4);
-               duration += ((double) xsd.getDays() / 7);
-               duration += ((double) xsd.getHours() / (7 * 24));
-               duration += ((double) xsd.getMinutes() / (7 * 24 * 60));
-               duration += (xsd.getSeconds() / (7 * 24 * 60 * 60));
-               break;
-            }
-
-            case ELAPSED_WEEKS:
-            {
-               //
-               // Calculate the number of weeks
-               //
-               duration += (xsd.getYears() * 52);
-               duration += (xsd.getMonths() * 4);
-               duration += ((double) xsd.getDays() / 7);
-               duration += ((double) xsd.getHours() / (7 * 24));
-               duration += ((double) xsd.getMinutes() / (7 * 24 * 60));
-               duration += (xsd.getSeconds() / (7 * 24 * 60 * 60));
                break;
             }
 
@@ -993,22 +1002,7 @@ public final class DatatypeConverter
                break;
             }
 
-            case ELAPSED_DAYS:
-            {
-               //
-               // Calculate the number of days
-               //
-               duration += (xsd.getYears() * 365);
-               duration += (xsd.getMonths() * 30);
-               duration += xsd.getDays();
-               duration += ((double) xsd.getHours() / 24);
-               duration += ((double) xsd.getMinutes() / (24 * 60));
-               duration += (xsd.getSeconds() / (24 * 60 * 60));
-               break;
-            }
-
             case HOURS:
-            case ELAPSED_HOURS:
             {
                //
                // Calculate the number of hours
@@ -1162,7 +1156,16 @@ public final class DatatypeConverter
     */
    public static final BigDecimal printCurrencyMandatory(Number value)
    {
-      return value == null || value.doubleValue() == 0 ? new BigDecimal(0) : new BigDecimal(value.doubleValue() * 100);
+      BigDecimal result;
+      if (value == null || value.doubleValue() == 0)
+      {
+         result = BIGDECIMAL_ZERO;
+      }
+      else
+      {
+         result = new BigDecimal(CURRENCY_NUMBER_FORMAT.get().format(value.doubleValue() * 100));
+      }
+      return result;
    }
 
    /**
@@ -1568,7 +1571,7 @@ public final class DatatypeConverter
     * @param factor required fraction of a minute
     * @return Duration instance
     */
-   private static final Duration parseDurationInFractionsOfMinutes(ProjectProperties properties, Number value, TimeUnit targetTimeUnit, int factor)
+   private static Duration parseDurationInFractionsOfMinutes(ProjectProperties properties, Number value, TimeUnit targetTimeUnit, int factor)
    {
       Duration result = null;
 
@@ -1591,7 +1594,7 @@ public final class DatatypeConverter
     * @param factor required factor
     * @return duration represented as an arbitrary fraction of minutes
     */
-   private static final double printDurationFractionsOfMinutes(Duration duration, int factor)
+   private static double printDurationFractionsOfMinutes(Duration duration, int factor)
    {
       double result = 0;
 
@@ -1680,32 +1683,48 @@ public final class DatatypeConverter
    }
 
    /**
-    * Print rate.
+    * Print rate. Ensure the rate is converted to "per hour" before output.
     *
     * @param rate Rate instance
     * @return rate value
     */
    public static final BigDecimal printRateMandatory(Rate rate)
    {
-      return rate == null || rate.getAmount() == 0 ? new BigDecimal(0) : new BigDecimal(rate.getAmount());
+      if (rate == null || rate.getAmount() == 0)
+      {
+         return BIGDECIMAL_ZERO;
+      }
+
+      return new BigDecimal(RATE_NUMBER_FORMAT.get().format(RateHelper.convertToHours(PARENT_FILE.get(), rate)));
    }
 
    /**
     * Parse rate.
     *
-    * @param value rate value
+    * @param originalValue rate value
+    * @param targetUnits target units
     * @return Rate instance
     */
-   public static final Rate parseRate(BigDecimal value)
+   public static final Rate parseRate(BigDecimal originalValue, TimeUnit targetUnits)
    {
       Rate result = null;
 
-      if (value != null)
+      if (originalValue != null)
       {
-         result = new Rate(value, TimeUnit.HOURS);
+         // For "flat" rates (for example, for cost or material resources) where there is
+         // no time component, the MPP file stores a time unit which we recognise
+         // as elapsed minutes. If we encounter this, reset the time units to hours
+         // so we don't try to change the value.
+         // TODO: improve handling of cost and material rates
+         if (targetUnits == TimeUnit.ELAPSED_MINUTES)
+         {
+            targetUnits = TimeUnit.HOURS;
+         }
+
+         result = RateHelper.convertFromHours(PARENT_FILE.get(), originalValue, targetUnits);
       }
 
-      return (result);
+      return result;
    }
 
    /**
@@ -1747,7 +1766,7 @@ public final class DatatypeConverter
     * @param value ConstraintType instance
     * @return constraint type value
     */
-   @SuppressWarnings("deprecation") public static final BigInteger printConstraintType(ConstraintType value)
+   public static final BigInteger printConstraintType(ConstraintType value)
    {
       if (value == null)
       {
@@ -1756,14 +1775,12 @@ public final class DatatypeConverter
 
       switch (value)
       {
-         case MANDATORY_START:
          case START_ON:
          {
             value = ConstraintType.MUST_START_ON;
             break;
          }
 
-         case MANDATORY_FINISH:
          case FINISH_ON:
          {
             value = ConstraintType.MUST_FINISH_ON;
@@ -1926,7 +1943,8 @@ public final class DatatypeConverter
     */
    public static final String printString(String value)
    {
-      return (value);
+      // JAXB should do this... but doesn't
+      return XmlHelper.replaceInvalidXmlChars(value);
    }
 
    /**
@@ -1939,7 +1957,42 @@ public final class DatatypeConverter
     */
    public static final String parseString(String value)
    {
-      return (value);
+      return value;
+   }
+
+   /**
+    * Parse percent complete values. Attempts to handle the case where
+    * decimal values have been used rather than integers.
+    *
+    * @param value string value
+    * @return numeric value
+    */
+   public static final Number parsePercentComplete(String value)
+   {
+      Number result;
+
+      if (value.contains("."))
+      {
+         result = Double.valueOf(value);
+      }
+      else
+      {
+         result = Integer.valueOf(value);
+      }
+
+      return result;
+   }
+
+   /**
+    * Print a percent complete value. Ensure that we print an
+    * integer value, and apply rounding if the value is a decimal.
+    *
+    * @param value numeric value
+    * @return string representation
+    */
+   public static final String printPercentComplete(Number value)
+   {
+      return Integer.toString((int) Math.round(value.doubleValue()));
    }
 
    /**
@@ -1960,7 +2013,7 @@ public final class DatatypeConverter
     * @param value original numeric value
     * @return corrected numeric value
     */
-   private static final String correctNumberFormat(String value)
+   private static String correctNumberFormat(String value)
    {
       String result;
       int index = value.indexOf(',');
@@ -1977,38 +2030,48 @@ public final class DatatypeConverter
       return result;
    }
 
-   private static final ThreadLocal<DateFormat> DATE_FORMAT = new ThreadLocal<DateFormat>()
-   {
-      @Override protected DateFormat initialValue()
-      {
-         DateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
-         df.setLenient(false);
-         return df;
-      }
-   };
+   private static final ThreadLocal<DateFormat> DATE_FORMAT = ThreadLocal.withInitial(() -> {
+      DateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
+      df.setLenient(false);
+      return df;
+   });
 
-   private static final ThreadLocal<DateFormat> TIME_FORMAT = new ThreadLocal<DateFormat>()
-   {
-      @Override protected DateFormat initialValue()
-      {
-         DateFormat df = new SimpleDateFormat("HH:mm:ss");
-         df.setLenient(false);
-         return df;
-      }
-   };
+   private static final ThreadLocal<DateFormat> TIME_FORMAT = ThreadLocal.withInitial(() -> {
+      DateFormat df = new SimpleDateFormat("HH:mm:ss");
+      df.setLenient(false);
+      return df;
+   });
 
-   private static final ThreadLocal<NumberFormat> NUMBER_FORMAT = new ThreadLocal<NumberFormat>()
-   {
-      @Override protected NumberFormat initialValue()
-      {
-         // XML numbers should use . as decimal separator and no grouping.
-         DecimalFormat format = new DecimalFormat("#.##", new DecimalFormatSymbols(Locale.US));
-         format.setGroupingUsed(false);
-         return format;
-      }
-   };
+   private static final ThreadLocal<NumberFormat> NUMBER_FORMAT = ThreadLocal.withInitial(() -> {
+      // XML numbers should use . as decimal separator and no grouping.
+      DecimalFormat format = new DecimalFormat("#.##", new DecimalFormatSymbols(Locale.US));
+      format.setGroupingUsed(false);
+      return format;
+   });
+
+   private static final ThreadLocal<NumberFormat> UNITS_NUMBER_FORMAT = ThreadLocal.withInitial(() -> {
+      // XML numbers should use . as decimal separator and no grouping.
+      DecimalFormat format = new DecimalFormat("#.####", new DecimalFormatSymbols(Locale.US));
+      format.setGroupingUsed(false);
+      return format;
+   });
+
+   private static final ThreadLocal<NumberFormat> RATE_NUMBER_FORMAT = ThreadLocal.withInitial(() -> {
+      // XML numbers should use . as decimal separator and no grouping.
+      DecimalFormat format = new DecimalFormat("#.####", new DecimalFormatSymbols(Locale.US));
+      format.setGroupingUsed(false);
+      return format;
+   });
+
+   private static final ThreadLocal<NumberFormat> CURRENCY_NUMBER_FORMAT = ThreadLocal.withInitial(() -> {
+      // XML numbers should use . as decimal separator and no grouping.
+      DecimalFormat format = new DecimalFormat("#.####", new DecimalFormatSymbols(Locale.US));
+      format.setGroupingUsed(false);
+      return format;
+   });
 
    private static final ThreadLocal<ProjectFile> PARENT_FILE = new ThreadLocal<>();
 
+   private static final BigDecimal BIGDECIMAL_ZERO = BigDecimal.valueOf(0);
    private static final BigDecimal BIGDECIMAL_ONE = BigDecimal.valueOf(1);
 }

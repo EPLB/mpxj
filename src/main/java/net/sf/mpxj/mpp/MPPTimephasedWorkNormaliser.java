@@ -29,8 +29,11 @@ import java.util.List;
 
 import net.sf.mpxj.Duration;
 import net.sf.mpxj.ProjectCalendar;
+import net.sf.mpxj.ResourceAssignment;
+import net.sf.mpxj.ResourceType;
 import net.sf.mpxj.TimeUnit;
 import net.sf.mpxj.TimephasedWork;
+import net.sf.mpxj.common.CombinedCalendar;
 import net.sf.mpxj.common.DateHelper;
 
 /**
@@ -38,6 +41,22 @@ import net.sf.mpxj.common.DateHelper;
  */
 public class MPPTimephasedWorkNormaliser extends MPPAbstractTimephasedWorkNormaliser
 {
+   @Override protected ProjectCalendar getCalendar(ResourceAssignment assignment)
+   {
+      ProjectCalendar taskCalendar = assignment.getTask().getCalendar();
+      ProjectCalendar resourceCalendar = assignment.getResource() != null && assignment.getResource().getType() == ResourceType.WORK ? assignment.getCalendar() : null;
+      ProjectCalendar result;
+      if (taskCalendar != null && resourceCalendar != null)
+      {
+         result = new CombinedCalendar(taskCalendar, resourceCalendar);
+      }
+      else
+      {
+         result = resourceCalendar == null ? assignment.getTask().getEffectiveCalendar() : resourceCalendar;
+      }
+      return result;
+   }
+
    /**
     * This method merges together assignment data for the same day.
     *
@@ -51,12 +70,7 @@ public class MPPTimephasedWorkNormaliser extends MPPAbstractTimephasedWorkNormal
       TimephasedWork previousAssignment = null;
       for (TimephasedWork assignment : list)
       {
-         if (previousAssignment == null)
-         {
-            assignment.setAmountPerDay(assignment.getTotalAmount());
-            result.add(assignment);
-         }
-         else
+         if (previousAssignment != null)
          {
             Date previousAssignmentStart = previousAssignment.getStart();
             Date previousAssignmentStartDay = DateHelper.getDayStartDate(previousAssignmentStart);
@@ -101,9 +115,9 @@ public class MPPTimephasedWorkNormaliser extends MPPAbstractTimephasedWorkNormal
                }
             }
 
-            assignment.setAmountPerDay(assignment.getTotalAmount());
-            result.add(assignment);
          }
+         assignment.setAmountPerDay(assignment.getTotalAmount());
+         result.add(assignment);
 
          Duration calendarWork = calendar.getWork(assignment.getStart(), assignment.getFinish(), TimeUnit.MINUTES);
          Duration assignmentWork = assignment.getTotalAmount();

@@ -27,545 +27,71 @@ import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import javax.sql.DataSource;
 
-import net.sf.mpxj.MPXJException;
-import net.sf.mpxj.ProjectCalendar;
-import net.sf.mpxj.ProjectConfig;
-import net.sf.mpxj.ProjectFile;
-import net.sf.mpxj.SubProject;
-import net.sf.mpxj.Task;
 import net.sf.mpxj.common.AutoCloseableHelper;
 import net.sf.mpxj.common.NumberHelper;
-import net.sf.mpxj.listener.ProjectListener;
+import net.sf.mpxj.common.ResultSetHelper;
 
 /**
  * This class reads project data from an MPD9 format database.
  */
-public final class MPD9DatabaseReader extends MPD9AbstractReader
+final class MPD9DatabaseReader extends MPD9AbstractReader
 {
-   /**
-    * Add a listener to receive events as a project is being read.
-    *
-    * @param listener ProjectListener instance
-    */
-   public void addProjectListener(ProjectListener listener)
+   @Override protected List<Row> getRows(String table, Map<String, Integer> keys) throws MpdException
    {
-      if (m_projectListeners == null)
+      String sql = "select * from " + table;
+      if (!keys.isEmpty())
       {
-         m_projectListeners = new ArrayList<>();
+         sql = sql + " where " + keys.entrySet().stream().map(e -> e.getKey() + "=?").collect(Collectors.joining(" and "));
       }
-      m_projectListeners.add(listener);
-   }
 
-   /**
-    * Populates a Map instance representing the IDs and names of
-    * projects available in the current database.
-    *
-    * @return Map instance containing ID and name pairs
-    * @throws MPXJException
-    */
-   public Map<Integer, String> listProjects() throws MPXJException
-   {
       try
       {
-         Map<Integer, String> result = new HashMap<>();
+         allocateConnection();
 
-         List<ResultSetRow> rows = getRows("SELECT PROJ_ID, PROJ_NAME FROM MSP_PROJECTS");
-         for (ResultSetRow row : rows)
+         try (PreparedStatement ps = m_connection.prepareStatement(sql))
          {
-            processProjectListItem(result, row);
-         }
-
-         return result;
-      }
-
-      catch (SQLException ex)
-      {
-         throw new MPXJException(MPXJException.READ_ERROR, ex);
-      }
-   }
-
-   /**
-    * Read a project from the current data source.
-    *
-    * @return ProjectFile instance
-    * @throws MPXJException
-    */
-   public ProjectFile read() throws MPXJException
-   {
-      try
-      {
-         m_project = new ProjectFile();
-         m_eventManager = m_project.getEventManager();
-
-         ProjectConfig config = m_project.getProjectConfig();
-         config.setAutoTaskID(false);
-         config.setAutoTaskUniqueID(false);
-         config.setAutoResourceID(false);
-         config.setAutoResourceUniqueID(false);
-         config.setAutoOutlineLevel(false);
-         config.setAutoOutlineNumber(false);
-         config.setAutoWBS(false);
-         config.setAutoCalendarUniqueID(false);
-         config.setAutoAssignmentUniqueID(false);
-
-         m_project.getProjectProperties().setFileApplication("Microsoft");
-         m_project.getProjectProperties().setFileType("MPD");
-
-         m_project.getEventManager().addProjectListeners(m_projectListeners);
-
-         processProjectProperties();
-         processCalendars();
-         processResources();
-         processResourceBaselines();
-         processTasks();
-         processTaskBaselines();
-         processLinks();
-         processAssignments();
-         processAssignmentBaselines();
-         processExtendedAttributes();
-         processSubProjects();
-         postProcessing();
-
-         return (m_project);
-      }
-
-      catch (SQLException ex)
-      {
-         throw new MPXJException(MPXJException.READ_ERROR, ex);
-      }
-
-      finally
-      {
-         reset();
-
-         if (m_allocatedConnection)
-         {
-            AutoCloseableHelper.closeQuietly(m_connection);
-            m_connection = null;
-         }
-      }
-   }
-
-   /**
-    * Select the project properties from the database.
-    *
-    * @throws SQLException
-    */
-   private void processProjectProperties() throws SQLException
-   {
-      List<ResultSetRow> rows = getRows("SELECT * FROM MSP_PROJECTS WHERE PROJ_ID=?", m_projectID);
-      if (rows.isEmpty() == false)
-      {
-         processProjectProperties(rows.get(0));
-      }
-   }
-
-   /**
-    * Select calendar data from the database.
-    *
-    * @throws SQLException
-    */
-   private void processCalendars() throws SQLException
-   {
-      for (ResultSetRow row : getRows("SELECT * FROM MSP_CALENDARS WHERE PROJ_ID=?", m_projectID))
-      {
-         processCalendar(row);
-      }
-
-      updateBaseCalendarNames();
-
-      processCalendarData(m_project.getCalendars());
-   }
-
-   /**
-    * Process calendar hours and exception data from the database.
-    *
-    * @param calendars all calendars for the project
-    */
-   private void processCalendarData(List<ProjectCalendar> calendars) throws SQLException
-   {
-      for (ProjectCalendar calendar : calendars)
-      {
-         processCalendarData(calendar, getRows("SELECT * FROM MSP_CALENDAR_DATA WHERE PROJ_ID=? AND CAL_UID=?", m_projectID, calendar.getUniqueID()));
-      }
-   }
-
-   /**
-    * Process the hours and exceptions for an individual calendar.
-    *
-    * @param calendar project calendar
-    * @param calendarData hours and exception rows for this calendar
-    */
-   private void processCalendarData(ProjectCalendar calendar, List<ResultSetRow> calendarData)
-   {
-      for (ResultSetRow row : calendarData)
-      {
-         processCalendarData(calendar, row);
-      }
-   }
-
-   /**
-    * Process resources.
-    *
-    * @throws SQLException
-    */
-   private void processResources() throws SQLException
-   {
-      for (ResultSetRow row : getRows("SELECT * FROM MSP_RESOURCES WHERE PROJ_ID=?", m_projectID))
-      {
-         processResource(row);
-      }
-   }
-
-   /**
-    * Process resource baseline values.
-    *
-    * @throws SQLException
-    */
-   private void processResourceBaselines() throws SQLException
-   {
-      if (m_hasResourceBaselines)
-      {
-         for (ResultSetRow row : getRows("SELECT * FROM MSP_RESOURCE_BASELINES WHERE PROJ_ID=?", m_projectID))
-         {
-            processResourceBaseline(row);
-         }
-      }
-   }
-
-   /**
-    * Process tasks.
-    *
-    * @throws SQLException
-    */
-   private void processTasks() throws SQLException
-   {
-      for (ResultSetRow row : getRows("SELECT * FROM MSP_TASKS WHERE PROJ_ID=?", m_projectID))
-      {
-         processTask(row);
-      }
-   }
-
-   /**
-    * Process task baseline values.
-    *
-    * @throws SQLException
-    */
-   private void processTaskBaselines() throws SQLException
-   {
-      if (m_hasTaskBaselines)
-      {
-         for (ResultSetRow row : getRows("SELECT * FROM MSP_TASK_BASELINES WHERE PROJ_ID=?", m_projectID))
-         {
-            processTaskBaseline(row);
-         }
-      }
-   }
-
-   /**
-    * Process links.
-    *
-    * @throws SQLException
-    */
-   private void processLinks() throws SQLException
-   {
-      for (ResultSetRow row : getRows("SELECT * FROM MSP_LINKS WHERE PROJ_ID=?", m_projectID))
-      {
-         processLink(row);
-      }
-   }
-
-   /**
-    * Process resource assignments.
-    *
-    * @throws SQLException
-    */
-   private void processAssignments() throws SQLException
-   {
-      for (ResultSetRow row : getRows("SELECT * FROM MSP_ASSIGNMENTS WHERE PROJ_ID=?", m_projectID))
-      {
-         processAssignment(row);
-      }
-   }
-
-   /**
-    * Process resource assignment baseline values.
-    *
-    * @throws SQLException
-    */
-   private void processAssignmentBaselines() throws SQLException
-   {
-      if (m_hasAssignmentBaselines)
-      {
-         for (ResultSetRow row : getRows("SELECT * FROM MSP_ASSIGNMENT_BASELINES WHERE PROJ_ID=?", m_projectID))
-         {
-            processAssignmentBaseline(row);
-         }
-      }
-   }
-
-   /**
-    * This method reads the extended task and resource attributes.
-    *
-    * @throws SQLException
-    */
-   private void processExtendedAttributes() throws SQLException
-   {
-      processTextFields();
-      processNumberFields();
-      processFlagFields();
-      processDurationFields();
-      processDateFields();
-      processOutlineCodeFields();
-   }
-
-   /**
-    * The only indication that a task is a SubProject is the contents
-    * of the subproject file name field. We test these here then add a skeleton
-    * subproject structure to match the way we do things with MPP files.
-    */
-   private void processSubProjects()
-   {
-      int subprojectIndex = 1;
-      for (Task task : m_project.getTasks())
-      {
-         String subProjectFileName = task.getSubprojectName();
-         if (subProjectFileName != null)
-         {
-            String fileName = subProjectFileName;
-            int offset = 0x01000000 + (subprojectIndex * 0x00400000);
-            int index = subProjectFileName.lastIndexOf('\\');
-            if (index != -1)
+            int index = 1;
+            for (Map.Entry<String, Integer> entry : keys.entrySet())
             {
-               fileName = subProjectFileName.substring(index + 1);
+               ps.setInt(index++, NumberHelper.getInt(entry.getValue()));
             }
 
-            SubProject sp = new SubProject();
-            sp.setFileName(fileName);
-            sp.setFullPath(subProjectFileName);
-            sp.setUniqueIDOffset(Integer.valueOf(offset));
-            sp.setTaskUniqueID(task.getUniqueID());
-            task.setSubProject(sp);
-
-            ++subprojectIndex;
+            try (ResultSet rs = ps.executeQuery())
+            {
+               List<Row> result = new ArrayList<>();
+               Map<String, Integer> meta = ResultSetHelper.populateMetaData(rs);
+               while (rs.next())
+               {
+                  result.add(new MpdResultSetRow(rs, meta));
+               }
+               return result;
+            }
          }
       }
-   }
 
-   /**
-    * Reads text field extended attributes.
-    *
-    * @throws SQLException
-    */
-   private void processTextFields() throws SQLException
-   {
-      for (ResultSetRow row : getRows("SELECT * FROM MSP_TEXT_FIELDS WHERE PROJ_ID=?", m_projectID))
+      catch (SQLException ex)
       {
-         processTextField(row);
+         throw new MpdException(ex);
       }
    }
 
-   /**
-    * Reads number field extended attributes.
-    *
-    * @throws SQLException
-    */
-   private void processNumberFields() throws SQLException
+   @Override protected void releaseResources()
    {
-      for (ResultSetRow row : getRows("SELECT * FROM MSP_NUMBER_FIELDS WHERE PROJ_ID=?", m_projectID))
-      {
-         processNumberField(row);
-      }
-   }
-
-   /**
-    * Reads flag field extended attributes.
-    *
-    * @throws SQLException
-    */
-   private void processFlagFields() throws SQLException
-   {
-      for (ResultSetRow row : getRows("SELECT * FROM MSP_FLAG_FIELDS WHERE PROJ_ID=?", m_projectID))
-      {
-         processFlagField(row);
-      }
-   }
-
-   /**
-    * Reads duration field extended attributes.
-    *
-    * @throws SQLException
-    */
-   private void processDurationFields() throws SQLException
-   {
-      for (ResultSetRow row : getRows("SELECT * FROM MSP_DURATION_FIELDS WHERE PROJ_ID=?", m_projectID))
-      {
-         processDurationField(row);
-      }
-   }
-
-   /**
-    * Reads date field extended attributes.
-    *
-    * @throws SQLException
-    */
-   private void processDateFields() throws SQLException
-   {
-      for (ResultSetRow row : getRows("SELECT * FROM MSP_DATE_FIELDS WHERE PROJ_ID=?", m_projectID))
-      {
-         processDateField(row);
-      }
-   }
-
-   /**
-    * Process outline code fields.
-    *
-    * @throws SQLException
-    */
-   private void processOutlineCodeFields() throws SQLException
-   {
-      for (ResultSetRow row : getRows("SELECT * FROM MSP_CODE_FIELDS WHERE PROJ_ID=?", m_projectID))
-      {
-         processOutlineCodeFields(row);
-      }
-   }
-
-   /**
-    * Process a single outline code.
-    *
-    * @param parentRow outline code to task mapping table
-    * @throws SQLException
-    */
-   private void processOutlineCodeFields(Row parentRow) throws SQLException
-   {
-      Integer entityID = parentRow.getInteger("CODE_REF_UID");
-      Integer outlineCodeEntityID = parentRow.getInteger("CODE_UID");
-
-      for (ResultSetRow row : getRows("SELECT * FROM MSP_OUTLINE_CODES WHERE CODE_UID=?", outlineCodeEntityID))
-      {
-         processOutlineCodeField(entityID, row);
-      }
-   }
-
-   /**
-    * Retrieve a number of rows matching the supplied query.
-    *
-    * @param sql query statement
-    * @return result set
-    * @throws SQLException
-    */
-   private List<ResultSetRow> getRows(String sql) throws SQLException
-   {
-      allocateConnection();
-
-      try
-      {
-         List<ResultSetRow> result = new ArrayList<>();
-
-         m_ps = m_connection.prepareStatement(sql);
-         m_rs = m_ps.executeQuery();
-         populateMetaData();
-         while (m_rs.next())
-         {
-            result.add(new ResultSetRow(m_rs, m_meta));
-         }
-
-         return (result);
-      }
-
-      finally
-      {
-         releaseConnection();
-      }
-   }
-
-   /**
-    * Retrieve a number of rows matching the supplied query
-    * which takes a single parameter.
-    *
-    * @param sql query statement
-    * @param var bind variable value
-    * @return result set
-    * @throws SQLException
-    */
-   private List<ResultSetRow> getRows(String sql, Integer var) throws SQLException
-   {
-      allocateConnection();
-
-      try
-      {
-         List<ResultSetRow> result = new ArrayList<>();
-
-         m_ps = m_connection.prepareStatement(sql);
-         m_ps.setInt(1, NumberHelper.getInt(var));
-         m_rs = m_ps.executeQuery();
-         populateMetaData();
-         while (m_rs.next())
-         {
-            result.add(new ResultSetRow(m_rs, m_meta));
-         }
-
-         return (result);
-      }
-
-      finally
-      {
-         releaseConnection();
-      }
-   }
-
-   /**
-    * Retrieve a number of rows matching the supplied query
-    * which takes two parameters.
-    *
-    * @param sql query statement
-    * @param var1 bind variable value
-    * @param var2 bind variable value
-    * @return result set
-    * @throws SQLException
-    */
-   private List<ResultSetRow> getRows(String sql, Integer var1, Integer var2) throws SQLException
-   {
-      allocateConnection();
-
-      try
-      {
-         List<ResultSetRow> result = new ArrayList<>();
-
-         m_ps = m_connection.prepareStatement(sql);
-         m_ps.setInt(1, NumberHelper.getInt(var1));
-         m_ps.setInt(2, NumberHelper.getInt(var2));
-         m_rs = m_ps.executeQuery();
-         populateMetaData();
-         while (m_rs.next())
-         {
-            result.add(new ResultSetRow(m_rs, m_meta));
-         }
-
-         return (result);
-      }
-
-      finally
-      {
-         releaseConnection();
-      }
+      releaseConnection();
    }
 
    /**
     * Allocates a database connection.
-    *
-    * @throws SQLException
     */
    private void allocateConnection() throws SQLException
    {
@@ -577,35 +103,12 @@ public final class MPD9DatabaseReader extends MPD9AbstractReader
       }
    }
 
-   /**
-    * Releases a database connection, and cleans up any resources
-    * associated with that connection.
-    */
    private void releaseConnection()
    {
-      AutoCloseableHelper.closeQuietly(m_rs);
-      m_rs = null;
-
-      AutoCloseableHelper.closeQuietly(m_ps);
-      m_ps = null;
-   }
-
-   /**
-    * Retrieves basic meta data from the result set.
-    *
-    * @throws SQLException
-    */
-   private void populateMetaData() throws SQLException
-   {
-      m_meta.clear();
-
-      ResultSetMetaData meta = m_rs.getMetaData();
-      int columnCount = meta.getColumnCount() + 1;
-      for (int loop = 1; loop < columnCount; loop++)
+      if (m_allocatedConnection)
       {
-         String name = meta.getColumnName(loop);
-         Integer type = Integer.valueOf(meta.getColumnType(loop));
-         m_meta.put(name, type);
+         AutoCloseableHelper.closeQuietly(m_connection);
+         m_connection = null;
       }
    }
 
@@ -631,23 +134,22 @@ public final class MPD9DatabaseReader extends MPD9AbstractReader
    }
 
    /**
-    * Queries database meta data to check for the existence of
+    * Queries database metadata to check for the existence of
     * specific tables.
     */
    private void queryDatabaseMetaData()
    {
-      ResultSet rs = null;
-
       try
       {
          Set<String> tables = new HashSet<>();
          DatabaseMetaData dmd = m_connection.getMetaData();
-         rs = dmd.getTables(null, null, null, null);
-         while (rs.next())
+         try (ResultSet rs = dmd.getTables(null, null, null, null))
          {
-            tables.add(rs.getString("TABLE_NAME"));
+            while (rs.next())
+            {
+               tables.add(rs.getString("TABLE_NAME"));
+            }
          }
-
          m_hasResourceBaselines = tables.contains("MSP_RESOURCE_BASELINES");
          m_hasTaskBaselines = tables.contains("MSP_TASK_BASELINES");
          m_hasAssignmentBaselines = tables.contains("MSP_ASSIGNMENT_BASELINES");
@@ -655,24 +157,11 @@ public final class MPD9DatabaseReader extends MPD9AbstractReader
 
       catch (Exception ex)
       {
-         // Ignore errors when reading meta data
-      }
-
-      finally
-      {
-         AutoCloseableHelper.closeQuietly(rs);
-         rs = null;
+         // Ignore errors when reading metadata
       }
    }
 
    private DataSource m_dataSource;
    private boolean m_allocatedConnection;
    private Connection m_connection;
-   private PreparedStatement m_ps;
-   private ResultSet m_rs;
-   private Map<String, Integer> m_meta = new HashMap<>();
-   private List<ProjectListener> m_projectListeners;
-   private boolean m_hasResourceBaselines;
-   private boolean m_hasTaskBaselines;
-   private boolean m_hasAssignmentBaselines;
 }

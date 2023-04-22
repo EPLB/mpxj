@@ -24,15 +24,14 @@
 package net.sf.mpxj.primavera.p3;
 
 import java.io.File;
-import java.io.FilenameFilter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 
 import net.sf.mpxj.ChildTaskContainer;
 import net.sf.mpxj.ConstraintType;
@@ -41,6 +40,7 @@ import net.sf.mpxj.EventManager;
 import net.sf.mpxj.FieldContainer;
 import net.sf.mpxj.FieldType;
 import net.sf.mpxj.MPXJException;
+import net.sf.mpxj.ProjectCalendar;
 import net.sf.mpxj.ProjectConfig;
 import net.sf.mpxj.ProjectField;
 import net.sf.mpxj.ProjectFile;
@@ -53,6 +53,7 @@ import net.sf.mpxj.Task;
 import net.sf.mpxj.TaskField;
 import net.sf.mpxj.common.AlphanumComparator;
 import net.sf.mpxj.common.DateHelper;
+import net.sf.mpxj.common.SlackHelper;
 import net.sf.mpxj.primavera.common.MapRow;
 import net.sf.mpxj.primavera.common.Table;
 import net.sf.mpxj.reader.AbstractProjectFileReader;
@@ -71,11 +72,25 @@ public final class P3DatabaseReader extends AbstractProjectFileReader
     */
    public static final ProjectFile setProjectNameAndRead(File directory) throws MPXJException
    {
+      return setProjectNameAndRead(directory, null);
+   }
+
+   /**
+    * Convenience method which locates the first P3 database in a directory
+    * and opens it.
+    *
+    * @param directory directory containing a P3 database
+    * @param properties optional properties to pass to reader's setProperties method
+    * @return ProjectFile instance
+    */
+   public static final ProjectFile setProjectNameAndRead(File directory, Properties properties) throws MPXJException
+   {
       List<String> projects = listProjectNames(directory);
 
       if (!projects.isEmpty())
       {
          P3DatabaseReader reader = new P3DatabaseReader();
+         reader.setProperties(properties);
          reader.setProjectName(projects.get(0));
          return reader.read(directory);
       }
@@ -104,13 +119,7 @@ public final class P3DatabaseReader extends AbstractProjectFileReader
    {
       List<String> result = new ArrayList<>();
 
-      File[] files = directory.listFiles(new FilenameFilter()
-      {
-         @Override public boolean accept(File dir, String name)
-         {
-            return name.toUpperCase().endsWith("STR.P3");
-         }
-      });
+      File[] files = directory.listFiles((dir, name) -> name.toUpperCase().endsWith("STR.P3"));
 
       if (files != null)
       {
@@ -159,9 +168,6 @@ public final class P3DatabaseReader extends AbstractProjectFileReader
          config.setAutoOutlineNumber(true);
          config.setAutoWBS(false);
 
-         // Activity ID
-         m_projectFile.getCustomFields().getCustomField(TaskField.TEXT1).setAlias("Code").setUserDefined(false);
-
          m_projectFile.getProjectProperties().setFileApplication("P3");
          m_projectFile.getProjectProperties().setFileType("BTRIEVE");
 
@@ -199,9 +205,6 @@ public final class P3DatabaseReader extends AbstractProjectFileReader
       }
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public List<ProjectFile> readAll(File directory) throws MPXJException
    {
       List<ProjectFile> projects = new ArrayList<>();
@@ -236,6 +239,8 @@ public final class P3DatabaseReader extends AbstractProjectFileReader
    private void readCalendars()
    {
       // TODO: understand the calendar data representation.
+      ProjectCalendar defaultCalendar = m_projectFile.addDefaultBaseCalendar();
+      m_projectFile.getProjectProperties().setDefaultCalendar(defaultCalendar);
    }
 
    /**
@@ -270,12 +275,7 @@ public final class P3DatabaseReader extends AbstractProjectFileReader
       for (MapRow row : m_tables.get("STR"))
       {
          Integer level = row.getInteger("LEVEL_NUMBER");
-         List<MapRow> items = levelMap.get(level);
-         if (items == null)
-         {
-            items = new ArrayList<>();
-            levelMap.put(level, items);
-         }
+         List<MapRow> items = levelMap.computeIfAbsent(level, k -> new ArrayList<>());
          items.add(row);
       }
 
@@ -298,13 +298,7 @@ public final class P3DatabaseReader extends AbstractProjectFileReader
          }
 
          final AlphanumComparator comparator = new AlphanumComparator();
-         Collections.sort(items, new Comparator<MapRow>()
-         {
-            @Override public int compare(MapRow o1, MapRow o2)
-            {
-               return comparator.compare(o1.getString("WBS"), o2.getString("WBS"));
-            }
-         });
+         items.sort((o1, o2) -> comparator.compare(o1.getString("WBS"), o2.getString("WBS")));
 
          for (MapRow row : items)
          {
@@ -358,13 +352,7 @@ public final class P3DatabaseReader extends AbstractProjectFileReader
          items.add(row);
       }
       final AlphanumComparator comparator = new AlphanumComparator();
-      Collections.sort(items, new Comparator<MapRow>()
-      {
-         @Override public int compare(MapRow o1, MapRow o2)
-         {
-            return comparator.compare(o1.getString("ACTIVITY_ID"), o2.getString("ACTIVITY_ID"));
-         }
-      });
+      items.sort((o1, o2) -> comparator.compare(o1.getString("ACTIVITY_ID"), o2.getString("ACTIVITY_ID")));
 
       for (MapRow row : items)
       {
@@ -452,6 +440,11 @@ public final class P3DatabaseReader extends AbstractProjectFileReader
                }
             }
          }
+
+         //
+         // The schedule only includes total slack. We'll assume this value is correct and backfill start and finish slack values.
+         //
+         SlackHelper.inferSlack(task);
 
          m_activityMap.put(activityID, task);
          m_eventManager.fireTaskReadEvent(task);
@@ -590,25 +583,7 @@ public final class P3DatabaseReader extends AbstractProjectFileReader
     */
    private static void defineField(Map<String, FieldType> container, String name, FieldType type)
    {
-      defineField(container, name, type, null);
-   }
-
-   /**
-    * Configure the mapping between a database column and a field, including definition of
-    * an alias.
-    *
-    * @param container column to field map
-    * @param name column name
-    * @param type field type
-    * @param alias field alias
-    */
-   private static void defineField(Map<String, FieldType> container, String name, FieldType type, String alias)
-   {
       container.put(name, type);
-      //      if (alias != null)
-      //      {
-      //         ALIASES.put(type, alias);
-      //      }
    }
 
    private String m_projectName;
@@ -636,7 +611,7 @@ public final class P3DatabaseReader extends AbstractProjectFileReader
       defineField(RESOURCE_FIELDS, "RES_ID", ResourceField.CODE);
 
       defineField(TASK_FIELDS, "ACTIVITY_TITLE", TaskField.NAME);
-      defineField(TASK_FIELDS, "ACTIVITY_ID", TaskField.TEXT1);
+      defineField(TASK_FIELDS, "ACTIVITY_ID", TaskField.ACTIVITY_ID);
       defineField(TASK_FIELDS, "ORIGINAL_DURATION", TaskField.DURATION);
       defineField(TASK_FIELDS, "REMAINING_DURATION", TaskField.REMAINING_DURATION);
       defineField(TASK_FIELDS, "PERCENT_COMPLETE", TaskField.PERCENT_COMPLETE);
@@ -647,5 +622,4 @@ public final class P3DatabaseReader extends AbstractProjectFileReader
       defineField(TASK_FIELDS, "FREE_FLOAT", TaskField.FREE_SLACK);
       defineField(TASK_FIELDS, "TOTAL_FLOAT", TaskField.TOTAL_SLACK);
    }
-
 }

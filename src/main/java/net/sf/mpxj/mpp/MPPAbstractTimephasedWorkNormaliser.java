@@ -29,6 +29,7 @@ import java.util.List;
 
 import net.sf.mpxj.Duration;
 import net.sf.mpxj.ProjectCalendar;
+import net.sf.mpxj.ResourceAssignment;
 import net.sf.mpxj.TimeUnit;
 import net.sf.mpxj.TimephasedWork;
 import net.sf.mpxj.common.AbstractTimephasedWorkNormaliser;
@@ -45,24 +46,35 @@ public abstract class MPPAbstractTimephasedWorkNormaliser extends AbstractTimeph
     * resource assignment data used by MS Project into a standardised
     * format to make it easy to work with.
     *
-    * @param calendar current calendar
+    * @param assignment resource assignment
     * @param list list of assignment data
     */
-   @Override public void normalise(ProjectCalendar calendar, List<TimephasedWork> list)
+   @Override public void normalise(ResourceAssignment assignment, List<TimephasedWork> list)
    {
-      if (!list.isEmpty())
+      if (list.isEmpty())
       {
-         //dumpList(list);
-         splitDays(calendar, list);
-         //dumpList(list);
-         mergeSameDay(calendar, list);
-         //dumpList(list);
-         mergeSameWork(list);
-         //dumpList(list);
-         convertToHours(list);
-         //dumpList(list);
+         return;
       }
+
+      ProjectCalendar calendar = getCalendar(assignment);
+      //dumpList(list);
+      splitDays(calendar, list);
+      //dumpList(list);
+      mergeSameDay(calendar, list);
+      //dumpList(list);
+      mergeSameWork(calendar, assignment, list);
+      //dumpList(list);
+      convertToHours(list);
+      //dumpList(list);
    }
+
+   /**
+    * Retrieve the calendar to be used by this normaliser.
+    *
+    * @param assignment resource assignment
+    * @return calendar to use when normalising
+    */
+   protected abstract ProjectCalendar getCalendar(ResourceAssignment assignment);
 
    /**
     * This method breaks down spans of time into individual days.
@@ -82,6 +94,8 @@ public abstract class MPPAbstractTimephasedWorkNormaliser extends AbstractTimeph
             assignment.setStart(DateHelper.addDays(assignment.getStart(), 1));
             remainderInserted = false;
          }
+
+         Duration calendarWork = calendar.getWork(assignment.getStart(), assignment.getFinish(), TimeUnit.MINUTES);
 
          while (assignment != null)
          {
@@ -122,10 +136,13 @@ public abstract class MPPAbstractTimephasedWorkNormaliser extends AbstractTimeph
                break;
             }
 
-            TimephasedWork[] split = splitFirstDay(calendar, assignment);
+            TimephasedWork[] split = splitFirstDay(calendar, assignment, calendarWork);
             if (split[0] != null)
             {
-               result.add(split[0]);
+               TimephasedWork firstDayAssignment = split[0];
+               result.add(firstDayAssignment);
+               Duration firstDayCalendarWork = calendar.getWork(firstDayAssignment.getStart(), firstDayAssignment.getFinish(), TimeUnit.MINUTES);
+               calendarWork = Duration.getInstance((calendarWork.getDuration() - firstDayCalendarWork.getDuration()), TimeUnit.MINUTES);
             }
 
             if (assignment.equals(split[1]))
@@ -146,9 +163,10 @@ public abstract class MPPAbstractTimephasedWorkNormaliser extends AbstractTimeph
     *
     * @param calendar current calendar
     * @param assignment timephased assignment span
+    * @param calendarWork working hours for assignment from the calendar
     * @return first day and remainder assignments
     */
-   private TimephasedWork[] splitFirstDay(ProjectCalendar calendar, TimephasedWork assignment)
+   private TimephasedWork[] splitFirstDay(ProjectCalendar calendar, TimephasedWork assignment, Duration calendarWork)
    {
       TimephasedWork[] result = new TimephasedWork[2];
 
@@ -157,7 +175,6 @@ public abstract class MPPAbstractTimephasedWorkNormaliser extends AbstractTimeph
       //
       Date assignmentStart = assignment.getStart();
       Date assignmentFinish = assignment.getFinish();
-      Duration calendarWork = calendar.getWork(assignmentStart, assignmentFinish, TimeUnit.MINUTES);
       Duration assignmentWork = assignment.getTotalAmount();
 
       if (calendarWork.getDuration() != 0)
@@ -169,42 +186,20 @@ public abstract class MPPAbstractTimephasedWorkNormaliser extends AbstractTimeph
          double splitMinutes;
          if (calendar.isWorkingDate(assignmentStart))
          {
-            Date splitStart = assignmentStart;
-            Date splitFinishTime = calendar.getFinishTime(splitStart);
-            splitFinish = DateHelper.setTime(splitStart, splitFinishTime);
+            Date splitFinishTime = calendar.getFinishTime(assignmentStart);
+            splitFinish = DateHelper.setTime(assignmentStart, splitFinishTime);
 
-            Duration calendarSplitWork = calendar.getWork(splitStart, splitFinish, TimeUnit.MINUTES);
-            Duration calendarWorkPerDay = calendar.getWork(splitStart, TimeUnit.MINUTES);
+            Duration calendarSplitWork = calendar.getWork(assignmentStart, splitFinish, TimeUnit.MINUTES);
             Duration assignmentWorkPerDay = assignment.getAmountPerDay();
             Duration splitWork;
 
-            if (calendarSplitWork.durationComponentEquals(calendarWorkPerDay))
-            {
-               {
-                  if (calendarSplitWork.durationComponentEquals(assignmentWorkPerDay))
-                  {
-                     splitWork = assignmentWorkPerDay;
-                     splitMinutes = splitWork.getDuration();
-                  }
-                  else
-                  {
-                     splitMinutes = assignmentWorkPerDay.getDuration();
-                     splitMinutes *= calendarSplitWork.getDuration();
-                     splitMinutes /= (8 * 60); // this appears to be a fixed value
-                     splitWork = Duration.getInstance(splitMinutes, TimeUnit.MINUTES);
-                  }
-               }
-            }
-            else
-            {
-               splitMinutes = assignmentWorkPerDay.getDuration();
-               splitMinutes *= calendarSplitWork.getDuration();
-               splitMinutes /= (8 * 60); // this appears to be a fixed value
-               splitWork = Duration.getInstance(splitMinutes, TimeUnit.MINUTES);
-            }
+            splitMinutes = assignmentWorkPerDay.getDuration();
+            splitMinutes *= calendarSplitWork.getDuration();
+            splitMinutes /= (8 * 60); // this appears to be a fixed value
+            splitWork = Duration.getInstance(splitMinutes, TimeUnit.MINUTES);
 
             TimephasedWork split = new TimephasedWork();
-            split.setStart(splitStart);
+            split.setStart(assignmentStart);
             split.setFinish(splitFinish);
             split.setTotalAmount(splitWork);
 
@@ -260,13 +255,11 @@ public abstract class MPPAbstractTimephasedWorkNormaliser extends AbstractTimeph
     */
    private Duration getAssignmentWork(ProjectCalendar calendar, TimephasedWork assignment)
    {
-      Date assignmentStart = assignment.getStart();
 
-      Date splitStart = assignmentStart;
-      Date splitFinishTime = calendar.getFinishTime(splitStart);
-      Date splitFinish = DateHelper.setTime(splitStart, splitFinishTime);
+      Date splitFinishTime = calendar.getFinishTime(assignment.getStart());
+      Date splitFinish = DateHelper.setTime(assignment.getStart(), splitFinishTime);
 
-      Duration calendarSplitWork = calendar.getWork(splitStart, splitFinish, TimeUnit.MINUTES);
+      Duration calendarSplitWork = calendar.getWork(assignment.getStart(), splitFinish, TimeUnit.MINUTES);
       Duration assignmentWorkPerDay = assignment.getAmountPerDay();
       Duration splitWork;
 
@@ -288,5 +281,5 @@ public abstract class MPPAbstractTimephasedWorkNormaliser extends AbstractTimeph
       }
    */
 
-   private static final double EQUALITY_DELTA = 0.1;
+   private static final double EQUALITY_DELTA = 0.2;
 }

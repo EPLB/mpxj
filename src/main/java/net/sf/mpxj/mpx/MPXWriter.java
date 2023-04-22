@@ -27,10 +27,16 @@ import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
+import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Comparator;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 
 import net.sf.mpxj.AccrueType;
 import net.sf.mpxj.ConstraintType;
@@ -40,6 +46,7 @@ import net.sf.mpxj.Day;
 import net.sf.mpxj.DayType;
 import net.sf.mpxj.Duration;
 import net.sf.mpxj.EventManager;
+import net.sf.mpxj.FieldType;
 import net.sf.mpxj.Priority;
 import net.sf.mpxj.ProjectCalendar;
 import net.sf.mpxj.ProjectCalendarException;
@@ -54,13 +61,14 @@ import net.sf.mpxj.RelationType;
 import net.sf.mpxj.Resource;
 import net.sf.mpxj.ResourceAssignment;
 import net.sf.mpxj.ResourceAssignmentWorkgroupFields;
-import net.sf.mpxj.ResourceField;
 import net.sf.mpxj.Task;
-import net.sf.mpxj.TaskField;
 import net.sf.mpxj.TaskType;
 import net.sf.mpxj.TimeUnit;
+import net.sf.mpxj.UserDefinedField;
 import net.sf.mpxj.common.DateHelper;
 import net.sf.mpxj.common.NumberHelper;
+import net.sf.mpxj.common.ProjectCalendarHelper;
+import net.sf.mpxj.mpp.UserDefinedFieldMap;
 import net.sf.mpxj.writer.AbstractProjectWriter;
 
 /**
@@ -69,15 +77,12 @@ import net.sf.mpxj.writer.AbstractProjectWriter;
  */
 public final class MPXWriter extends AbstractProjectWriter
 {
-   /**
-    * {@inheritDoc}
-    */
    @Override public void write(ProjectFile projectFile, OutputStream out) throws IOException
    {
       m_projectFile = projectFile;
       m_eventManager = projectFile.getEventManager();
 
-      if (m_useLocaleDefaults == true)
+      if (m_useLocaleDefaults)
       {
          LocaleUtility.setLocale(m_projectFile.getProjectProperties(), m_locale);
       }
@@ -86,6 +91,10 @@ public final class MPXWriter extends AbstractProjectWriter
       m_writer = new OutputStreamWriter(new BufferedOutputStream(out), projectFile.getProjectProperties().getMpxCodePage().getCharset());
       m_buffer = new StringBuilder();
       m_formats = new MPXJFormats(m_locale, LocaleData.getString(m_locale, LocaleData.NA), m_projectFile);
+      m_calendarNameSet = new HashSet<>();
+      m_calendarNameMap = new HashMap<>();
+      m_userDefinedFieldMap = new UserDefinedFieldMap(projectFile, MAPPING_TARGET_CUSTOM_FIELDS);
+      projectFile.getUserDefinedFields().stream().sorted(Comparator.comparing(UserDefinedField::getUniqueID)).forEach(m_userDefinedFieldMap::generateMapping);
 
       try
       {
@@ -101,13 +110,13 @@ public final class MPXWriter extends AbstractProjectWriter
          m_buffer = null;
          m_locale = null;
          m_formats = null;
+         m_calendarNameSet = null;
+         m_calendarNameMap = null;
       }
    }
 
    /**
     * Writes the contents of the project file as MPX records.
-    *
-    * @throws IOException
     */
    private void write() throws IOException
    {
@@ -116,9 +125,9 @@ public final class MPXWriter extends AbstractProjectWriter
       writeFileCreationRecord();
       writeProjectHeader(m_projectFile.getProjectProperties());
 
-      if (m_projectFile.getResources().isEmpty() == false)
+      if (!m_projectFile.getResources().isEmpty())
       {
-         m_resourceModel = new ResourceModel(m_projectFile, m_locale);
+         m_resourceModel = new ResourceModel(m_projectFile, m_locale, m_userDefinedFieldMap);
          m_writer.write(m_resourceModel.toString());
          for (Resource resource : m_projectFile.getResources())
          {
@@ -126,9 +135,9 @@ public final class MPXWriter extends AbstractProjectWriter
          }
       }
 
-      if (m_projectFile.getTasks().isEmpty() == false)
+      if (!m_projectFile.getTasks().isEmpty())
       {
-         m_taskModel = new TaskModel(m_projectFile, m_locale);
+         m_taskModel = new TaskModel(m_projectFile, m_locale, m_userDefinedFieldMap);
          m_writer.write(m_taskModel.toString());
          writeTasks(m_projectFile.getChildTasks());
       }
@@ -138,8 +147,6 @@ public final class MPXWriter extends AbstractProjectWriter
 
    /**
     * Write file creation record.
-    *
-    * @throws IOException
     */
    private void writeFileCreationRecord() throws IOException
    {
@@ -161,7 +168,6 @@ public final class MPXWriter extends AbstractProjectWriter
     * Write project header.
     *
     * @param properties project properties
-    * @throws IOException
     */
    private void writeProjectHeader(ProjectProperties properties) throws IOException
    {
@@ -240,11 +246,14 @@ public final class MPXWriter extends AbstractProjectWriter
       //
       for (ProjectCalendar cal : m_projectFile.getCalendars())
       {
-         if (cal.getResource() == null)
+         if (!isResourceCalendar(cal))
          {
-            writeCalendar(cal);
+            writeBaseCalendar(normalizeBaseCalendar(cal));
          }
       }
+
+      ProjectCalendar defaultCalendar = m_projectFile.getDefaultCalendar();
+      String defaultCalendarName = defaultCalendar == null ? null : m_calendarNameMap.get(defaultCalendar.getUniqueID());
 
       //
       // Project Header Record
@@ -258,7 +267,7 @@ public final class MPXWriter extends AbstractProjectWriter
       m_buffer.append(m_delimiter);
       m_buffer.append(format(properties.getManager()));
       m_buffer.append(m_delimiter);
-      m_buffer.append(format(properties.getDefaultCalendarName()));
+      m_buffer.append(format(defaultCalendarName));
       m_buffer.append(m_delimiter);
 
       m_buffer.append(format(formatDateTime(properties.getStartDate())));
@@ -317,84 +326,87 @@ public final class MPXWriter extends AbstractProjectWriter
    }
 
    /**
-    * Write a calendar.
+    * Write a base calendar.
     *
     * @param record calendar instance
-    * @throws IOException
     */
-   private void writeCalendar(ProjectCalendar record) throws IOException
+   private void writeBaseCalendar(ProjectCalendar record) throws IOException
    {
-      //
-      // Test used to ensure that we don't write the default calendar used for the "Unassigned" resource
-      //
-      if (record.getParent() == null || record.getResource() != null)
+      writeCalendarDetail(MPXConstants.BASE_CALENDAR_RECORD_NUMBER, record);
+   }
+
+   /**
+    * Write a resource calendar.
+    *
+    * @param record calendar instance
+    */
+   private void writeResourceCalendar(ProjectCalendar record) throws IOException
+   {
+      writeCalendarDetail(MPXConstants.RESOURCE_CALENDAR_RECORD_NUMBER, record);
+   }
+
+   /**
+    * Write a calendar.
+    *
+    * @param recordNumber record number rep[resenting calendar type
+    * @param record calendar data
+    */
+   private void writeCalendarDetail(int recordNumber, ProjectCalendar record) throws IOException
+   {
+      String name = m_calendarNameMap.get(record.getParent() == null ? record.getUniqueID() : record.getParent().getUniqueID());
+
+      m_buffer.setLength(0);
+      m_buffer.append(recordNumber);
+      m_buffer.append(m_delimiter);
+      m_buffer.append(format(name));
+
+      for (Day day : Day.values())
       {
-         m_buffer.setLength(0);
-
-         if (record.getParent() == null)
+         DayType type = record.getCalendarDayType(day);
+         if (type == null)
          {
-            m_buffer.append(MPXConstants.BASE_CALENDAR_RECORD_NUMBER);
-            m_buffer.append(m_delimiter);
-            if (record.getName() != null)
-            {
-               m_buffer.append(record.getName());
-            }
+            type = DayType.DEFAULT;
          }
-         else
-         {
-            m_buffer.append(MPXConstants.RESOURCE_CALENDAR_RECORD_NUMBER);
-            m_buffer.append(m_delimiter);
-            m_buffer.append(record.getParent().getName());
-         }
-
-         for (DayType day : record.getDays())
-         {
-            if (day == null)
-            {
-               day = DayType.DEFAULT;
-            }
-            m_buffer.append(m_delimiter);
-            m_buffer.append(day.getValue());
-         }
-
-         m_buffer.append(MPXConstants.EOL);
-         m_writer.write(m_buffer.toString());
-
-         ProjectCalendarHours[] hours = record.getHours();
-         for (int loop = 0; loop < hours.length; loop++)
-         {
-            if (hours[loop] != null)
-            {
-               writeCalendarHours(record, hours[loop]);
-            }
-         }
-
-         if (!record.getCalendarExceptions().isEmpty())
-         {
-            //
-            // A quirk of MS Project is that these exceptions must be
-            // in date order in the file, otherwise they are ignored.
-            // The getCalendarExceptions method now guarantees that
-            // the exceptions list is sorted when retrieved.
-            //
-            for (ProjectCalendarException ex : record.getCalendarExceptions())
-            {
-               writeCalendarException(record, ex);
-            }
-         }
-
-         m_eventManager.fireCalendarWrittenEvent(record);
+         m_buffer.append(m_delimiter);
+         m_buffer.append(type.getValue());
       }
+
+      m_buffer.append(MPXConstants.EOL);
+      m_writer.write(m_buffer.toString());
+
+      for (Day day : Day.values())
+      {
+         ProjectCalendarHours hours = record.getCalendarHours(day);
+         if (hours != null)
+         {
+            writeCalendarHours(record, day, hours);
+         }
+      }
+
+      List<ProjectCalendarException> expandedExceptions = ProjectCalendarHelper.getExpandedExceptionsWithWorkWeeks(record);
+      if (!expandedExceptions.isEmpty())
+      {
+         //
+         // A quirk of MS Project is that these exceptions must be
+         // in date order in the file, otherwise they are ignored.
+         //
+         for (ProjectCalendarException ex : expandedExceptions)
+         {
+            writeCalendarException(record, ex);
+         }
+      }
+
+      m_eventManager.fireCalendarWrittenEvent(record);
    }
 
    /**
     * Write calendar hours.
     *
     * @param parentCalendar parent calendar instance
+    * @param day day to which these hours are attached
     * @param record calendar hours instance
-    * @throws IOException
     */
-   private void writeCalendarHours(ProjectCalendar parentCalendar, ProjectCalendarHours record) throws IOException
+   private void writeCalendarHours(ProjectCalendar parentCalendar, Day day, ProjectCalendarHours record) throws IOException
    {
       m_buffer.setLength(0);
 
@@ -409,19 +421,19 @@ public final class MPXWriter extends AbstractProjectWriter
          recordNumber = MPXConstants.RESOURCE_CALENDAR_HOURS_RECORD_NUMBER;
       }
 
-      DateRange range1 = record.getRange(0);
+      DateRange range1 = record.get(0);
       if (range1 == null)
       {
          range1 = DateRange.EMPTY_RANGE;
       }
 
-      DateRange range2 = record.getRange(1);
+      DateRange range2 = record.get(1);
       if (range2 == null)
       {
          range2 = DateRange.EMPTY_RANGE;
       }
 
-      DateRange range3 = record.getRange(2);
+      DateRange range3 = record.get(2);
       if (range3 == null)
       {
          range3 = DateRange.EMPTY_RANGE;
@@ -429,7 +441,7 @@ public final class MPXWriter extends AbstractProjectWriter
 
       m_buffer.append(recordNumber);
       m_buffer.append(m_delimiter);
-      m_buffer.append(format(record.getDay()));
+      m_buffer.append(format(day));
       m_buffer.append(m_delimiter);
       m_buffer.append(format(formatTime(range1.getStart())));
       m_buffer.append(m_delimiter);
@@ -453,7 +465,6 @@ public final class MPXWriter extends AbstractProjectWriter
     *
     * @param parentCalendar parent calendar instance
     * @param record calendar exception instance
-    * @throws IOException
     */
    private void writeCalendarException(ProjectCalendar parentCalendar, ProjectCalendarException record) throws IOException
    {
@@ -474,17 +485,17 @@ public final class MPXWriter extends AbstractProjectWriter
       m_buffer.append(m_delimiter);
       m_buffer.append(record.getWorking() ? "1" : "0");
       m_buffer.append(m_delimiter);
-      m_buffer.append(format(formatTime(record.getRange(0).getStart())));
+      m_buffer.append(format(formatTime(record.get(0).getStart())));
       m_buffer.append(m_delimiter);
-      m_buffer.append(format(formatTime(record.getRange(0).getEnd())));
+      m_buffer.append(format(formatTime(record.get(0).getEnd())));
       m_buffer.append(m_delimiter);
-      m_buffer.append(format(formatTime(record.getRange(1).getStart())));
+      m_buffer.append(format(formatTime(record.get(1).getStart())));
       m_buffer.append(m_delimiter);
-      m_buffer.append(format(formatTime(record.getRange(1).getEnd())));
+      m_buffer.append(format(formatTime(record.get(1).getEnd())));
       m_buffer.append(m_delimiter);
-      m_buffer.append(format(formatTime(record.getRange(2).getStart())));
+      m_buffer.append(format(formatTime(record.get(2).getStart())));
       m_buffer.append(m_delimiter);
-      m_buffer.append(format(formatTime(record.getRange(2).getEnd())));
+      m_buffer.append(format(formatTime(record.get(2).getEnd())));
       stripTrailingDelimiters(m_buffer);
       m_buffer.append(MPXConstants.EOL);
 
@@ -495,7 +506,6 @@ public final class MPXWriter extends AbstractProjectWriter
     * Write a resource.
     *
     * @param record resource instance
-    * @throws IOException
     */
    private void writeResource(Resource record) throws IOException
    {
@@ -507,16 +517,15 @@ public final class MPXWriter extends AbstractProjectWriter
       int[] fields = m_resourceModel.getModel();
 
       m_buffer.append(MPXConstants.RESOURCE_RECORD_NUMBER);
-      for (int loop = 0; loop < fields.length; loop++)
+      for (int mpxFieldType : fields)
       {
-         int mpxFieldType = fields[loop];
          if (mpxFieldType == -1)
          {
             break;
          }
 
-         ResourceField resourceField = MPXResourceField.getMpxjField(mpxFieldType);
-         Object value = record.getCachedValue(resourceField);
+         FieldType resourceField = m_userDefinedFieldMap.getSource(MPXResourceField.getMpxjField(mpxFieldType));
+         Object value = record.get(resourceField);
          value = formatType(resourceField.getDataType(), value);
 
          m_buffer.append(m_delimiter);
@@ -539,12 +548,107 @@ public final class MPXWriter extends AbstractProjectWriter
       //
       // Write the resource calendar
       //
-      if (record.getResourceCalendar() != null)
+      if (record.getCalendar() != null)
       {
-         writeCalendar(record.getResourceCalendar());
+         writeResourceCalendar(normalizeResourceCalendar(record, record.getCalendar()));
       }
 
       m_eventManager.fireResourceWrittenEvent(record);
+   }
+
+   /**
+    * Determine if this is a valid resource calendar.
+    *
+    * @param calendar calendar to test
+    * @return true if this is a valid resource calendar
+    */
+   private boolean isResourceCalendar(ProjectCalendar calendar)
+   {
+      // We treat this as a resource calendar if:
+      // 1. It is a derived calendar
+      // 2. It's not the base calendar for any other derived calendars
+      // 3. It is associated with exactly one resource
+      return calendar != null && calendar.isDerived() && calendar.getDerivedCalendars().isEmpty() && calendar.getResourceCount() == 1;
+   }
+
+   /**
+    * A base calendar cannot be derived from another calendar.
+    * If the current calendar is derived, create a temporary flattened
+    * version which is functionally equivalent.
+    *
+    * @param calendar base calendar
+    * @return normalized base calendar
+    */
+   private ProjectCalendar normalizeBaseCalendar(ProjectCalendar calendar)
+   {
+      //
+      // Ensure all base calendars have a name
+      //
+      String name = calendar.getName();
+      if (name == null || name.isEmpty())
+      {
+         name = "Calendar";
+      }
+
+      //
+      // Ensure all base calendar names are unique
+      //
+      if (m_calendarNameSet.contains(name))
+      {
+         int index = 1;
+         String newName;
+         do
+         {
+            newName = name + " " + (index++);
+         }
+         while (m_calendarNameSet.contains(newName));
+
+         name = newName;
+      }
+
+      m_calendarNameSet.add(name);
+      m_calendarNameMap.put(calendar.getUniqueID(), name);
+
+      //
+      // Flatten calendar if required
+      //
+      ProjectCalendar result;
+      if (calendar.isDerived())
+      {
+         result = ProjectCalendarHelper.createTemporaryFlattenedCalendar(calendar);
+         m_calendarNameMap.put(result.getUniqueID(), name);
+      }
+      else
+      {
+         result = calendar;
+      }
+
+      return result;
+   }
+
+   /**
+    * If we have a resource which shares a calendar with other resources,
+    * * or the resource uses a base calendar directly, then
+    * we need to create a temporary derived calendar to ensure the generated
+    * MPX file conforms to MS Project's expectations.
+    *
+    * @param resource Resource instance
+    * @param calendar calendar linked to the resource
+    * @return normalized resource calendar
+    */
+   private ProjectCalendar normalizeResourceCalendar(Resource resource, ProjectCalendar calendar)
+   {
+      ProjectCalendar result;
+      if (isResourceCalendar(calendar))
+      {
+         // We have a derived calendar associated with just one resource
+         result = calendar;
+      }
+      else
+      {
+         result = ProjectCalendarHelper.createTemporaryDerivedCalendar(calendar, resource);
+      }
+      return result;
    }
 
    /**
@@ -552,7 +656,6 @@ public final class MPXWriter extends AbstractProjectWriter
     *
     * @param recordNumber record number
     * @param text note text
-    * @throws IOException
     */
    private void writeNotes(int recordNumber, String text) throws IOException
    {
@@ -568,7 +671,7 @@ public final class MPXWriter extends AbstractProjectWriter
          int length = note.length();
          char c;
 
-         if (quote == true)
+         if (quote)
          {
             m_buffer.append('"');
          }
@@ -577,23 +680,17 @@ public final class MPXWriter extends AbstractProjectWriter
          {
             c = note.charAt(loop);
 
-            switch (c)
+            if (c == '"')
             {
-               case '"':
-               {
-                  m_buffer.append("\"\"");
-                  break;
-               }
-
-               default:
-               {
-                  m_buffer.append(c);
-                  break;
-               }
+               m_buffer.append("\"\"");
+            }
+            else
+            {
+               m_buffer.append(c);
             }
          }
 
-         if (quote == true)
+         if (quote)
          {
             m_buffer.append('"');
          }
@@ -608,7 +705,6 @@ public final class MPXWriter extends AbstractProjectWriter
     * Write a task.
     *
     * @param record task instance
-    * @throws IOException
     */
    private void writeTask(Task record) throws IOException
    {
@@ -621,16 +717,16 @@ public final class MPXWriter extends AbstractProjectWriter
       int field;
 
       m_buffer.append(MPXConstants.TASK_RECORD_NUMBER);
-      for (int loop = 0; loop < fields.length; loop++)
+      for (int i : fields)
       {
-         field = fields[loop];
+         field = i;
          if (field == -1)
          {
             break;
          }
 
-         TaskField taskField = MPXTaskField.getMpxjField(field);
-         Object value = record.getCachedValue(taskField);
+         FieldType taskField = m_userDefinedFieldMap.getSource(MPXTaskField.getMpxjField(field));
+         Object value = record.get(taskField);
          value = formatType(taskField.getDataType(), value);
 
          m_buffer.append(m_delimiter);
@@ -661,11 +757,24 @@ public final class MPXWriter extends AbstractProjectWriter
       //
       // Write any resource assignments
       //
-      if (record.getResourceAssignments().isEmpty() == false)
+      if (!record.getResourceAssignments().isEmpty())
       {
+         Set<Integer> resources = new HashSet<>();
          for (ResourceAssignment assignment : record.getResourceAssignments())
          {
-            writeResourceAssignment(assignment);
+            if (assignment.getResource() != null)
+            {
+               // As we now allow a resource to be assigned multiple times to a task
+               // we need to handle this for file formats which allow a resource to be
+               // assigned only once. The code below attempts to preserve the original
+               // behaviour when we ignored multiple assignments of the same resource.
+               // TODO: implement more intelligent rollup of multiple resource assignments
+               if (!resources.add(assignment.getResourceUniqueID()))
+               {
+                  continue;
+               }
+               writeResourceAssignment(assignment);
+            }
          }
       }
 
@@ -676,7 +785,6 @@ public final class MPXWriter extends AbstractProjectWriter
     * Write a recurring task.
     *
     * @param record recurring task instance
-    * @throws IOException
     */
    private void writeRecurringTask(RecurringTask record) throws IOException
    {
@@ -751,7 +859,6 @@ public final class MPXWriter extends AbstractProjectWriter
     * Write resource assignment.
     *
     * @param record resource assignment instance
-    * @throws IOException
     */
    private void writeResourceAssignment(ResourceAssignment record) throws IOException
    {
@@ -759,7 +866,7 @@ public final class MPXWriter extends AbstractProjectWriter
 
       m_buffer.append(MPXConstants.RESOURCE_ASSIGNMENT_RECORD_NUMBER);
       m_buffer.append(m_delimiter);
-      m_buffer.append(formatResource(record.getResource()));
+      m_buffer.append(record.getResource().getID());
       m_buffer.append(m_delimiter);
       m_buffer.append(format(formatUnits(record.getUnits())));
       m_buffer.append(m_delimiter);
@@ -783,7 +890,7 @@ public final class MPXWriter extends AbstractProjectWriter
       m_buffer.append(m_delimiter);
       m_buffer.append(format(formatDuration(record.getDelay())));
       m_buffer.append(m_delimiter);
-      m_buffer.append(format(record.getResourceUniqueID()));
+      m_buffer.append(record.getResource().getUniqueID());
       stripTrailingDelimiters(m_buffer);
       m_buffer.append(MPXConstants.EOL);
       m_writer.write(m_buffer.toString());
@@ -802,7 +909,6 @@ public final class MPXWriter extends AbstractProjectWriter
     * Write resource assignment workgroup.
     *
     * @param record resource assignment workgroup instance
-    * @throws IOException
     */
    private void writeResourceAssignmentWorkgroupFields(ResourceAssignmentWorkgroupFields record) throws IOException
    {
@@ -832,7 +938,6 @@ public final class MPXWriter extends AbstractProjectWriter
     * Recursively write tasks.
     *
     * @param tasks list of tasks
-    * @throws IOException
     */
    private void writeTasks(List<Task> tasks) throws IOException
    {
@@ -954,13 +1059,13 @@ public final class MPXWriter extends AbstractProjectWriter
       }
       else
       {
-         if (o instanceof Boolean == true)
+         if ((o instanceof Boolean))
          {
-            result = LocaleData.getString(m_locale, (((Boolean) o).booleanValue() == true ? LocaleData.YES : LocaleData.NO));
+            result = LocaleData.getString(m_locale, (((Boolean) o).booleanValue() ? LocaleData.YES : LocaleData.NO));
          }
          else
          {
-            if (o instanceof Float == true || o instanceof Double == true)
+            if ((o instanceof Float) || (o instanceof Double))
             {
                result = (m_formats.getDecimalFormat().format(((Number) o).doubleValue()));
             }
@@ -984,7 +1089,7 @@ public final class MPXWriter extends AbstractProjectWriter
          result = stripLineBreaks(result, MPXConstants.EOL_PLACEHOLDER_STRING);
 
          //
-         // Finally we check to ensure that there are no embedded
+         // Finally, we check to ensure that there are no embedded
          // quotes or separator characters in the value. If there are, then
          // we quote the value and escape any existing quote characters.
          //
@@ -1007,7 +1112,7 @@ public final class MPXWriter extends AbstractProjectWriter
    /**
     * This method removes trailing delimiter characters.
     *
-    * @param buffer input sring buffer
+    * @param buffer input string buffer
     */
    private void stripTrailingDelimiters(StringBuilder buffer)
    {
@@ -1121,7 +1226,7 @@ public final class MPXWriter extends AbstractProjectWriter
     * @param type constraint type
     * @return formatted constraint type
     */
-   @SuppressWarnings("deprecation") private String formatConstraintType(ConstraintType type)
+   private String formatConstraintType(ConstraintType type)
    {
       if (type == null)
       {
@@ -1130,14 +1235,12 @@ public final class MPXWriter extends AbstractProjectWriter
 
       switch (type)
       {
-         case MANDATORY_START:
          case START_ON:
          {
             type = ConstraintType.MUST_START_ON;
             break;
          }
 
-         case MANDATORY_FINISH:
          case FINISH_ON:
          {
             type = ConstraintType.MUST_FINISH_ON;
@@ -1181,10 +1284,7 @@ public final class MPXWriter extends AbstractProjectWriter
       String result = null;
       if (value != null)
       {
-         StringBuilder buffer = new StringBuilder(m_formats.getCurrencyFormat().format(value.getAmount()));
-         buffer.append("/");
-         buffer.append(formatTimeUnit(value.getUnits()));
-         result = buffer.toString();
+         result = m_formats.getCurrencyFormat().format(value.getAmount()) + "/" + formatTimeUnit(value.getUnits());
       }
       return (result);
    }
@@ -1231,7 +1331,7 @@ public final class MPXWriter extends AbstractProjectWriter
     */
    private String formatTaskType(TaskType value)
    {
-      return (LocaleData.getString(m_locale, (value == TaskType.FIXED_DURATION ? LocaleData.YES : LocaleData.NO)));
+      return (LocaleData.getString(m_locale, (value == TaskType.FIXED_DURATION || value == TaskType.FIXED_DURATION_AND_UNITS ? LocaleData.YES : LocaleData.NO)));
    }
 
    /**
@@ -1427,18 +1527,6 @@ public final class MPXWriter extends AbstractProjectWriter
    }
 
    /**
-    * Formats a resource, taking into account that the resource reference
-    * may be null.
-    *
-    * @param resource Resource instance
-    * @return formatted value
-    */
-   private String formatResource(Resource resource)
-   {
-      return (resource == null ? "-65535" : format(resource.getID()));
-   }
-
-   /**
     * This method returns the locale used by this MPX file.
     *
     * @return current locale
@@ -1500,4 +1588,15 @@ public final class MPXWriter extends AbstractProjectWriter
    private boolean m_useLocaleDefaults = true;
    private StringBuilder m_buffer;
    private MPXJFormats m_formats;
+
+   private Set<String> m_calendarNameSet;
+   private Map<Integer, String> m_calendarNameMap;
+   private UserDefinedFieldMap m_userDefinedFieldMap;
+
+   private static final List<FieldType> MAPPING_TARGET_CUSTOM_FIELDS = new ArrayList<>();
+   static
+   {
+      MAPPING_TARGET_CUSTOM_FIELDS.addAll(MPXTaskField.CUSTOM_FIELDS);
+      MAPPING_TARGET_CUSTOM_FIELDS.addAll(MPXResourceField.CUSTOM_FIELDS);
+   }
 }

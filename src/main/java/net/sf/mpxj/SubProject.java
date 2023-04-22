@@ -25,6 +25,7 @@ package net.sf.mpxj;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * This class represents a sub project.
@@ -123,7 +124,7 @@ public final class SubProject
    }
 
    /**
-    * Set the the offset applied to task unique IDs
+    * Set the offset applied to task unique IDs
     * from the sub project.
     *
     * @param uniqueIDOffset unique ID offset
@@ -152,6 +153,26 @@ public final class SubProject
    public void setTaskUniqueID(Integer taskUniqueID)
    {
       m_taskUniqueID = taskUniqueID;
+   }
+
+   /**
+    * Set the subproject GUID.
+    *
+    * @param guid subproject GUID
+    */
+   public void setProjectGUID(UUID guid)
+   {
+      m_projectGUID = guid;
+   }
+
+   /**
+    * Retrieve the subproject GUID.
+    *
+    * @return subproject GUID
+    */
+   public UUID getProjectGUID()
+   {
+      return m_projectGUID;
    }
 
    /**
@@ -185,19 +206,17 @@ public final class SubProject
       return (m_externalTaskUniqueIDs);
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public String toString()
    {
-      return ("[SubProject taskUniqueID=" + m_taskUniqueID + " uniqueIDOffset=" + m_uniqueIDOffset + " path=" + m_fullPath + "]");
+      return ("[SubProject taskUniqueID=" + m_taskUniqueID + " uniqueIDOffset=" + m_uniqueIDOffset + " path=" + m_fullPath + " externalTaskUniqueIDs=" + m_externalTaskUniqueIDs + "]");
    }
 
    private Integer m_taskUniqueID;
    private Integer m_uniqueIDOffset;
-   private List<Integer> m_externalTaskUniqueIDs = new ArrayList<>();
+   private final List<Integer> m_externalTaskUniqueIDs = new ArrayList<>();
    private String m_dosFullPath;
    private String m_fullPath;
    private String m_dosFileName;
    private String m_fileName;
+   private UUID m_projectGUID;
 }

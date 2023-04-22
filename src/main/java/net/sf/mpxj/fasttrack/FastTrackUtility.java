@@ -69,14 +69,24 @@ final class FastTrackUtility
     */
    public static String getString(byte[] buffer, int offset, int length)
    {
-      try
-      {
-         return new String(buffer, offset, length, FastTrackData.getInstance().getCharset());
-      }
-      catch (StringIndexOutOfBoundsException ex)
+      if (offset > buffer.length - length)
       {
          throw new UnexpectedStructureException();
       }
+
+      String result = new String(buffer, offset, length, FastTrackData.getInstance().getCharset());
+
+      // Strip trailing invalid characters
+      while (!result.isEmpty() && isInvalidCharacter(result.charAt(result.length() - 1)))
+      {
+         result = result.substring(0, result.length() - 1);
+      }
+      return result;
+   }
+
+   private static boolean isInvalidCharacter(char c)
+   {
+      return Character.isISOControl(c) && c != '\r' && c != '\n' && c != '\t';
    }
 
    /**
@@ -167,13 +177,12 @@ final class FastTrackUtility
     * Retrieve a single byte from an input array.
     *
     * @param data input array
-    * @param offset offset into inut array
+    * @param offset offset into input array
     * @return byte value
     */
    public static final int getByte(byte[] data, int offset)
    {
-      int result = (data[offset] & 0xFF);
-      return result;
+      return (data[offset] & 0xFF);
    }
 
    /**
@@ -320,7 +329,7 @@ final class FastTrackUtility
             sb.append(HEX_DIGITS[buffer[loop] & 0x0F]);
          }
 
-         if (ascii == true)
+         if (ascii)
          {
             sb.append("   ");
 

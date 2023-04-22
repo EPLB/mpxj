@@ -41,14 +41,18 @@ import net.sf.mpxj.Duration;
 import net.sf.mpxj.EarnedValueMethod;
 import net.sf.mpxj.FieldContainer;
 import net.sf.mpxj.FieldType;
+import net.sf.mpxj.FieldTypeClass;
 import net.sf.mpxj.Priority;
+import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.ProjectProperties;
 import net.sf.mpxj.Rate;
 import net.sf.mpxj.ResourceRequestType;
-import net.sf.mpxj.TaskType;
+import net.sf.mpxj.RtfNotes;
 import net.sf.mpxj.TimeUnit;
+import net.sf.mpxj.UserDefinedField;
 import net.sf.mpxj.WorkGroup;
 import net.sf.mpxj.common.ByteArrayHelper;
+import net.sf.mpxj.common.FieldTypeHelper;
 import net.sf.mpxj.common.NumberHelper;
 
 /**
@@ -60,15 +64,16 @@ abstract class FieldMap
    /**
     * Constructor.
     *
-    * @param properties project properties
-    * @param customFields custom field values
+    * @param file project file
     */
-   public FieldMap(ProjectProperties properties, CustomFieldContainer customFields)
+   public FieldMap(ProjectFile file)
    {
-      m_properties = properties;
-      m_stringVarDataReader = new StringVarDataFieldReader(customFields);
-      m_doubleVarDataReader = new DoubleVarDataFieldReader(customFields);
-      m_timestampVarDataReader = new TimestampVarDataFieldReader(customFields);
+      m_file = file;
+      m_properties = file.getProjectProperties();
+      m_customFields = file.getCustomFields();
+      m_stringVarDataReader = new StringVarDataFieldReader(m_customFields);
+      m_doubleVarDataReader = new DoubleVarDataFieldReader(m_customFields);
+      m_timestampVarDataReader = new TimestampVarDataFieldReader(m_customFields);
    }
 
    /**
@@ -94,12 +99,13 @@ abstract class FieldMap
 
       while (index < data.length)
       {
-         long mask = MPPUtility.getInt(data, index + 0);
+         long mask = MPPUtility.getInt(data, index);
          //mask = mask << 4;
 
          int dataBlockOffset = MPPUtility.getShort(data, index + 4);
          //int metaFlags = MPPUtility.getByte(data, index + 8);
-         FieldType type = getFieldType(MPPUtility.getInt(data, index + 12));
+         int typeValue = MPPUtility.getInt(data, index + 12);
+         FieldType type = getFieldType(typeValue);
          int category = MPPUtility.getShort(data, index + 20);
          //int sizeInBytes = MPPUtility.getShort(data, index + 22);
          //int metaIndex = MPPUtility.getInt(data, index + 24);
@@ -125,7 +131,7 @@ abstract class FieldMap
             Integer substitute = substituteVarDataKey(type);
             if (substitute == null)
             {
-               varDataKey = (MPPUtility.getInt(data, index + 12) & 0x0000FFFF);
+               varDataKey = typeValue & 0x0000FFFF;
             }
             else
             {
@@ -241,7 +247,10 @@ abstract class FieldMap
     * @param fieldID field ID
     * @return field type
     */
-   protected abstract FieldType getFieldType(int fieldID);
+   protected FieldType getFieldType(int fieldID)
+   {
+      return FieldTypeHelper.getInstance(m_file, fieldID);
+   }
 
    /**
     * In some circumstances the var data key used in the file
@@ -312,9 +321,9 @@ abstract class FieldMap
     * Create a field map for enterprise custom fields.
     *
     * @param props props data
-    * @param c target class
+    * @param fieldTypeClass target class
     */
-   public void createEnterpriseCustomFieldMap(Props props, Class<?> c)
+   public void createEnterpriseCustomFieldMap(Props props, FieldTypeClass fieldTypeClass)
    {
       byte[] fieldMapData = null;
       for (Integer key : ENTERPRISE_CUSTOM_KEYS)
@@ -331,11 +340,9 @@ abstract class FieldMap
          int index = 4;
          while (index < fieldMapData.length)
          {
-            //Looks like the custom fields have varying types, it may be that the last byte of the four represents the type?
-            //System.out.println(ByteArrayHelper.hexdump(fieldMapData, index, 4, false));
             int typeValue = MPPUtility.getInt(fieldMapData, index);
             FieldType type = getFieldType(typeValue);
-            if (type != null && type.getClass() == c && type.toString().startsWith("Enterprise Custom Field"))
+            if (type != null && type.getFieldTypeClass() == fieldTypeClass && type instanceof UserDefinedField)
             {
                int varDataKey = (typeValue & 0xFFFF);
                FieldItem item = new FieldItem(type, FieldLocation.VAR_DATA, 0, 0, varDataKey, 0, 0);
@@ -422,18 +429,18 @@ abstract class FieldMap
     * Given a container, and a set of raw data blocks, this method extracts
     * the field data and writes it into the container.
     *
-    * @param type expected type
+    * @param fieldTypeClass expected type
     * @param container field container
     * @param id entity ID
     * @param fixedData fixed data block
     * @param varData var data block
     */
-   public void populateContainer(Class<? extends FieldType> type, FieldContainer container, Integer id, byte[][] fixedData, Var2Data varData)
+   public void populateContainer(FieldTypeClass fieldTypeClass, FieldContainer container, Integer id, byte[][] fixedData, Var2Data varData)
    {
       //System.out.println(container.getClass().getSimpleName()+": " + id);
       for (FieldItem item : m_map.values())
       {
-         if (item.getType().getClass().equals(type))
+         if (item.getType().getFieldTypeClass() == fieldTypeClass)
          {
             //System.out.println(item.m_type);
             Object value = item.read(id, fixedData, varData);
@@ -587,7 +594,7 @@ abstract class FieldMap
          {
             System.out.println("KEY: " + key);
             createFieldMap(fieldMapData);
-            System.out.println(toString());
+            System.out.println(this);
             clear();
          }
       }
@@ -665,9 +672,6 @@ abstract class FieldMap
       return result;
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public String toString()
    {
       StringWriter sw = new StringWriter();
@@ -758,7 +762,7 @@ abstract class FieldMap
 
             case VAR_DATA:
             {
-               result = readVarData(id, fixedData, varData);
+               result = readVarData(m_type.getDataType(), id, fixedData, varData);
                break;
             }
 
@@ -854,7 +858,7 @@ abstract class FieldMap
 
                   case TASK_TYPE:
                   {
-                     result = TaskType.getInstance(MPPUtility.getShort(data, m_fixedDataOffset));
+                     result = TaskTypeHelper.getInstance(MPPUtility.getShort(data, m_fixedDataOffset));
                      break;
                   }
 
@@ -964,16 +968,17 @@ abstract class FieldMap
       /**
        * Read a field value from a var data block.
        *
+       * @param dataType target data type
        * @param id parent entity ID
        * @param fixedData fixed data block
        * @param varData var data block
        * @return field value
        */
-      private Object readVarData(Integer id, byte[][] fixedData, Var2Data varData)
+      private Object readVarData(DataType dataType, Integer id, byte[][] fixedData, Var2Data varData)
       {
          Object result = null;
 
-         switch (m_type.getDataType())
+         switch (dataType)
          {
             case DURATION:
             {
@@ -1035,9 +1040,10 @@ abstract class FieldMap
                break;
             }
 
-            case ASCII_STRING:
+            case NOTES:
             {
-               result = varData.getString(id, m_varDataKey);
+               String notes = varData.getString(id, m_varDataKey);
+               result = notes == null ? null : new RtfNotes(notes);
                break;
             }
 
@@ -1078,6 +1084,7 @@ abstract class FieldMap
                break;
             }
 
+            case PERCENTAGE:
             case SHORT:
             {
                result = Integer.valueOf(varData.getShort(id, m_varDataKey));
@@ -1247,9 +1254,6 @@ abstract class FieldMap
          return result;
       }
 
-      /**
-       * {@inheritDoc}
-       */
       @Override public String toString()
       {
          StringBuilder buffer = new StringBuilder();
@@ -1298,21 +1302,23 @@ abstract class FieldMap
 
          return buffer.toString();
       }
-      private FieldType m_type;
-      private FieldLocation m_location;
-      private int m_fixedDataBlockIndex;
-      private int m_fixedDataOffset;
-      private Integer m_varDataKey;
-      private long m_mask;
-      private int m_metaBlock;
+      private final FieldType m_type;
+      private final FieldLocation m_location;
+      private final int m_fixedDataBlockIndex;
+      private final int m_fixedDataOffset;
+      private final Integer m_varDataKey;
+      private final long m_mask;
+      private final int m_metaBlock;
    }
 
+   protected final ProjectFile m_file;
    private final ProjectProperties m_properties;
+   final CustomFieldContainer m_customFields;
    final VarDataFieldReader m_stringVarDataReader;
    final VarDataFieldReader m_doubleVarDataReader;
    final VarDataFieldReader m_timestampVarDataReader;
-   private Map<FieldType, FieldItem> m_map = new HashMap<>();
-   private int[] m_maxFixedDataSize = new int[MAX_FIXED_DATA_BLOCKS];
+   private final Map<FieldType, FieldItem> m_map = new HashMap<>();
+   private final int[] m_maxFixedDataSize = new int[MAX_FIXED_DATA_BLOCKS];
    private boolean m_debug;
 
    private static final Integer[] TASK_KEYS =

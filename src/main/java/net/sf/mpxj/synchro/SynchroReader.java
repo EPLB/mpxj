@@ -26,9 +26,7 @@ package net.sf.mpxj.synchro;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -38,20 +36,17 @@ import java.util.UUID;
 
 import net.sf.mpxj.ChildTaskContainer;
 import net.sf.mpxj.ConstraintType;
-import net.sf.mpxj.CustomFieldContainer;
 import net.sf.mpxj.DateRange;
 import net.sf.mpxj.Day;
 import net.sf.mpxj.EventManager;
 import net.sf.mpxj.MPXJException;
 import net.sf.mpxj.ProjectCalendar;
-import net.sf.mpxj.ProjectCalendarDateRanges;
+import net.sf.mpxj.ProjectCalendarHours;
 import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.Relation;
 import net.sf.mpxj.Resource;
 import net.sf.mpxj.ResourceAssignment;
-import net.sf.mpxj.ResourceField;
 import net.sf.mpxj.Task;
-import net.sf.mpxj.TaskField;
 import net.sf.mpxj.common.DateHelper;
 import net.sf.mpxj.reader.AbstractProjectStreamReader;
 
@@ -60,14 +55,10 @@ import net.sf.mpxj.reader.AbstractProjectStreamReader;
  */
 public final class SynchroReader extends AbstractProjectStreamReader
 {
-   /**
-    * {@inheritDoc}
-    */
    @Override public ProjectFile read(InputStream inputStream) throws MPXJException
    {
       try
       {
-         //SynchroLogger.setLogFile("c:/temp/project1.txt");
          SynchroLogger.openLogFile();
 
          m_calendarMap = new HashMap<>();
@@ -97,12 +88,9 @@ public final class SynchroReader extends AbstractProjectStreamReader
       }
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public List<ProjectFile> readAll(InputStream inputStream) throws MPXJException
    {
-      return Arrays.asList(read(inputStream));
+      return Collections.singletonList(read(inputStream));
    }
 
    /**
@@ -117,11 +105,6 @@ public final class SynchroReader extends AbstractProjectStreamReader
 
       m_project.getProjectProperties().setFileApplication("Synchro");
       m_project.getProjectProperties().setFileType("SP");
-
-      CustomFieldContainer fields = m_project.getCustomFields();
-      fields.getCustomField(TaskField.TEXT1).setAlias("Code").setUserDefined(false);
-      fields.getCustomField(ResourceField.TEXT1).setAlias("Description").setUserDefined(false);
-      fields.getCustomField(ResourceField.TEXT2).setAlias("Supply Reference").setUserDefined(false);
 
       addListenersToProject(m_project);
 
@@ -146,7 +129,12 @@ public final class SynchroReader extends AbstractProjectStreamReader
          processCalendar(row);
       }
 
-      m_project.setDefaultCalendar(m_calendarMap.get(reader.getDefaultCalendarUUID()));
+      ProjectCalendar calendar = m_calendarMap.get(reader.getDefaultCalendarUUID());
+      if (calendar == null)
+      {
+         calendar = m_project.getCalendars().findOrCreateDefaultCalendar();
+      }
+      m_project.setDefaultCalendar(calendar);
    }
 
    /**
@@ -170,10 +158,15 @@ public final class SynchroReader extends AbstractProjectStreamReader
       processRanges(dayTypeMap.get(row.getUUID("FRIDAY_DAY_TYPE")), calendar.addCalendarHours(Day.FRIDAY));
       processRanges(dayTypeMap.get(row.getUUID("SATURDAY_DAY_TYPE")), calendar.addCalendarHours(Day.SATURDAY));
 
+      for (Day day : Day.values())
+      {
+         calendar.setWorkingDay(day, calendar.getCalendarHours(day).size() > 0);
+      }
+
       for (MapRow assignment : row.getRows("DAY_TYPE_ASSIGNMENTS"))
       {
          Date date = assignment.getDate("DATE");
-         processRanges(dayTypeMap.get(assignment.getUUID("DAY_TYPE_UUID")), calendar.addCalendarException(date, date));
+         processRanges(dayTypeMap.get(assignment.getUUID("DAY_TYPE_UUID")), calendar.addCalendarException(date));
       }
 
       m_calendarMap.put(row.getUUID("UUID"), calendar);
@@ -186,14 +179,11 @@ public final class SynchroReader extends AbstractProjectStreamReader
     * @param ranges time ranges from a Synchro table
     * @param container time range container
     */
-   private void processRanges(List<DateRange> ranges, ProjectCalendarDateRanges container)
+   private void processRanges(List<DateRange> ranges, ProjectCalendarHours container)
    {
       if (ranges != null)
       {
-         for (DateRange range : ranges)
-         {
-            container.addRange(range);
-         }
+         container.addAll(ranges);
       }
    }
 
@@ -265,7 +255,7 @@ public final class SynchroReader extends AbstractProjectStreamReader
     *
     * @param row Synchro resource data
     */
-   private void processResource(MapRow row) throws IOException
+   private void processResource(MapRow row)
    {
       Resource resource = m_project.addResource();
       resource.setName(row.getString("NAME"));
@@ -273,8 +263,8 @@ public final class SynchroReader extends AbstractProjectStreamReader
       resource.setEmailAddress(row.getString("EMAIL"));
       resource.setHyperlink(row.getString("URL"));
       resource.setNotes(getNotes(row.getRows("COMMENTARY")));
-      resource.setText(1, row.getString("DESCRIPTION"));
-      resource.setText(2, row.getString("SUPPLY_REFERENCE"));
+      resource.setDescription(row.getString("DESCRIPTION"));
+      resource.setSupplyReference(row.getString("SUPPLY_REFERENCE"));
       resource.setActive(true);
 
       List<MapRow> resources = row.getRows("RESOURCES");
@@ -315,7 +305,7 @@ public final class SynchroReader extends AbstractProjectStreamReader
       Task task = parent.addTask();
       task.setName(row.getString("NAME"));
       task.setGUID(row.getUUID("UUID"));
-      task.setText(1, row.getString("ID"));
+      task.setActivityID(row.getString("ID"));
       task.setDuration(row.getDuration("PLANNED_DURATION"));
       task.setRemainingDuration(row.getDuration("REMAINING_DURATION"));
       task.setHyperlink(row.getString("URL"));
@@ -558,7 +548,7 @@ public final class SynchroReader extends AbstractProjectStreamReader
    }
 
    /**
-    * Common mechanism to convert Synchro commentary recorss into notes.
+    * Common mechanism to convert Synchro commentary records into notes.
     *
     * @param rows commentary table rows
     * @return note text
@@ -590,14 +580,10 @@ public final class SynchroReader extends AbstractProjectStreamReader
     */
    private List<MapRow> sort(List<MapRow> rows, final String attribute)
    {
-      Collections.sort(rows, new Comparator<MapRow>()
-      {
-         @Override public int compare(MapRow o1, MapRow o2)
-         {
-            String value1 = o1.getString(attribute);
-            String value2 = o2.getString(attribute);
-            return value1.compareTo(value2);
-         }
+      rows.sort((o1, o2) -> {
+         String value1 = o1.getString(attribute);
+         String value2 = o2.getString(attribute);
+         return value1.compareTo(value2);
       });
       return rows;
    }

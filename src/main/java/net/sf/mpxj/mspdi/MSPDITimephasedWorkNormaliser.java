@@ -29,9 +29,12 @@ import java.util.List;
 
 import net.sf.mpxj.Duration;
 import net.sf.mpxj.ProjectCalendar;
+import net.sf.mpxj.ResourceAssignment;
+import net.sf.mpxj.ResourceType;
 import net.sf.mpxj.TimeUnit;
 import net.sf.mpxj.TimephasedWork;
 import net.sf.mpxj.common.AbstractTimephasedWorkNormaliser;
+import net.sf.mpxj.common.CombinedCalendar;
 import net.sf.mpxj.common.DateHelper;
 import net.sf.mpxj.common.NumberHelper;
 
@@ -46,20 +49,38 @@ public class MSPDITimephasedWorkNormaliser extends AbstractTimephasedWorkNormali
     * resource assignment data used by MS Project into a standardised
     * format to make it easy to work with.
     *
-    * @param calendar current calendar
+    * @param assignment resource assignment
     * @param list list of assignment data
     */
-   @Override public void normalise(ProjectCalendar calendar, List<TimephasedWork> list)
+   @Override public void normalise(ResourceAssignment assignment, List<TimephasedWork> list)
    {
+      ProjectCalendar calendar = getCalendar(assignment);
+
       //dumpList("raw", result);
       splitDays(calendar, list);
       //dumpList("split days", result);
       mergeSameDay(calendar, list);
       //dumpList("mergeSameDay", result);
-      mergeSameWork(list);
+      mergeSameWork(calendar, assignment, list);
       //dumpList("mergeSameWork", result);
       validateSameDay(calendar, list);
       convertToHours(list);
+   }
+
+   private ProjectCalendar getCalendar(ResourceAssignment assignment)
+   {
+      ProjectCalendar taskCalendar = assignment.getTask().getCalendar();
+      ProjectCalendar resourceCalendar = assignment.getResource() != null && assignment.getResource().getType() == ResourceType.WORK ? assignment.getCalendar() : null;
+      ProjectCalendar result;
+      if (taskCalendar != null && resourceCalendar != null)
+      {
+         result = new CombinedCalendar(taskCalendar, resourceCalendar);
+      }
+      else
+      {
+         result = resourceCalendar == null ? assignment.getTask().getEffectiveCalendar() : resourceCalendar;
+      }
+      return result;
    }
 
    /*
@@ -84,6 +105,7 @@ public class MSPDITimephasedWorkNormaliser extends AbstractTimephasedWorkNormali
       List<TimephasedWork> result = new ArrayList<>();
       for (TimephasedWork assignment : list)
       {
+         Duration calendarWork = calendar.getWork(assignment.getStart(), assignment.getFinish(), TimeUnit.MINUTES);
          while (assignment != null)
          {
             Date startDay = DateHelper.getDayStartDate(assignment.getStart());
@@ -101,10 +123,13 @@ public class MSPDITimephasedWorkNormaliser extends AbstractTimephasedWorkNormali
                break;
             }
 
-            TimephasedWork[] split = splitFirstDay(calendar, assignment);
+            TimephasedWork[] split = splitFirstDay(calendar, assignment, calendarWork);
             if (split[0] != null)
             {
-               result.add(split[0]);
+               TimephasedWork firstDayAssignment = split[0];
+               result.add(firstDayAssignment);
+               Duration firstDayCalendarWork = calendar.getWork(firstDayAssignment.getStart(), firstDayAssignment.getFinish(), TimeUnit.MINUTES);
+               calendarWork = Duration.getInstance((calendarWork.getDuration() - firstDayCalendarWork.getDuration()), TimeUnit.MINUTES);
             }
             assignment = split[1];
          }
@@ -119,9 +144,10 @@ public class MSPDITimephasedWorkNormaliser extends AbstractTimephasedWorkNormali
     *
     * @param calendar current calendar
     * @param assignment timephased assignment span
+    * @param calendarWork working hours for assignment from the calendar
     * @return first day and remainder assignments
     */
-   private TimephasedWork[] splitFirstDay(ProjectCalendar calendar, TimephasedWork assignment)
+   private TimephasedWork[] splitFirstDay(ProjectCalendar calendar, TimephasedWork assignment, Duration calendarWork)
    {
       TimephasedWork[] result = new TimephasedWork[2];
 
@@ -130,7 +156,6 @@ public class MSPDITimephasedWorkNormaliser extends AbstractTimephasedWorkNormali
       //
       Date assignmentStart = assignment.getStart();
       Date assignmentFinish = assignment.getFinish();
-      Duration calendarWork = calendar.getWork(assignmentStart, assignmentFinish, TimeUnit.MINUTES);
       Duration assignmentWork = assignment.getTotalAmount();
 
       if (calendarWork.getDuration() != 0)
@@ -142,10 +167,9 @@ public class MSPDITimephasedWorkNormaliser extends AbstractTimephasedWorkNormali
          double splitMinutes;
          if (calendar.isWorkingDate(assignmentStart))
          {
-            Date splitStart = assignmentStart;
-            Date splitFinishTime = calendar.getFinishTime(splitStart);
-            splitFinish = DateHelper.setTime(splitStart, splitFinishTime);
-            splitMinutes = calendar.getWork(splitStart, splitFinish, TimeUnit.MINUTES).getDuration();
+            Date splitFinishTime = calendar.getFinishTime(assignmentStart);
+            splitFinish = DateHelper.setTime(assignmentStart, splitFinishTime);
+            splitMinutes = calendar.getWork(assignmentStart, splitFinish, TimeUnit.MINUTES).getDuration();
 
             splitMinutes *= assignmentWork.getDuration();
             splitMinutes /= calendarWork.getDuration();
@@ -154,7 +178,7 @@ public class MSPDITimephasedWorkNormaliser extends AbstractTimephasedWorkNormali
             Duration splitWork = Duration.getInstance(splitMinutes, TimeUnit.MINUTES);
 
             TimephasedWork split = new TimephasedWork();
-            split.setStart(splitStart);
+            split.setStart(assignmentStart);
             split.setFinish(splitFinish);
             split.setTotalAmount(splitWork);
 
@@ -205,12 +229,7 @@ public class MSPDITimephasedWorkNormaliser extends AbstractTimephasedWorkNormali
       TimephasedWork previousAssignment = null;
       for (TimephasedWork assignment : list)
       {
-         if (previousAssignment == null)
-         {
-            assignment.setAmountPerDay(assignment.getTotalAmount());
-            result.add(assignment);
-         }
-         else
+         if (previousAssignment != null)
          {
             Date previousAssignmentStart = previousAssignment.getStart();
             Date previousAssignmentStartDay = DateHelper.getDayStartDate(previousAssignmentStart);
@@ -250,9 +269,9 @@ public class MSPDITimephasedWorkNormaliser extends AbstractTimephasedWorkNormali
                }
             }
 
-            assignment.setAmountPerDay(assignment.getTotalAmount());
-            result.add(assignment);
          }
+         assignment.setAmountPerDay(assignment.getTotalAmount());
+         result.add(assignment);
 
          Duration calendarWork = calendar.getWork(assignment.getStart(), assignment.getFinish(), TimeUnit.MINUTES);
          Duration assignmentWork = assignment.getTotalAmount();

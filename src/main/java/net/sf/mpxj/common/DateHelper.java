@@ -114,6 +114,34 @@ public final class DateHelper
    }
 
    /**
+    * Assuming two timestamps representing a time range on a single day,
+    * convert the timestamps to a canonical date, and adjust the end
+    * timestamp to handle the case where the time range ends at midnight.
+    *
+    * @param rangeStart start timestamp
+    * @param rangeFinish finish timestamp
+    * @return canonical end date
+    */
+   public static Date getCanonicalEndTime(Date rangeStart, Date rangeFinish)
+   {
+      Date startDay = DateHelper.getDayStartDate(rangeStart);
+      Date finishDay = DateHelper.getDayStartDate(rangeFinish);
+
+      Date result = DateHelper.getCanonicalTime(rangeFinish);
+
+      //
+      // Handle the case where the end of the range is at midnight -
+      // this will show up as the start and end days not matching
+      //
+      if (startDay != null && finishDay != null && startDay.getTime() != finishDay.getTime())
+      {
+         result = DateHelper.addDays(result, 1);
+      }
+
+      return result;
+   }
+
+   /**
     * This method compares a target date with a date range. The method will
     * return 0 if the date is within the range, less than zero if the date
     * is before the range starts, and greater than zero if the date is after
@@ -279,6 +307,19 @@ public final class DateHelper
    }
 
    /**
+    * Generates a long from a Date instance.
+    * This conversion takes account of the time zone.
+    *
+    * @param date Date instance
+    * @return date expressed as a long integer
+    */
+   public static long getLongFromDate(Date date)
+   {
+      TimeZone tz = TimeZone.getDefault();
+      return date.getTime() + tz.getRawOffset();
+   }
+
+   /**
     * Creates a timestamp from the equivalent long value. This conversion
     * takes account of the time zone and any daylight savings time.
     *
@@ -294,7 +335,7 @@ public final class DateHelper
       {
          int savings;
 
-         if (HAS_DST_SAVINGS == true)
+         if (HAS_DST_SAVINGS)
          {
             savings = tz.getDSTSavings();
          }
@@ -323,7 +364,7 @@ public final class DateHelper
       {
          int savings;
 
-         if (HAS_DST_SAVINGS == true)
+         if (HAS_DST_SAVINGS)
          {
             savings = tz.getDSTSavings();
          }
@@ -398,7 +439,7 @@ public final class DateHelper
          // the "start of day" date (midnight) for the required day
          // then added the milliseconds from the canonical time
          // to move the time forward to the required point. Unfortunately
-         // if the date we'e trying to do this for is the entry or
+         // if the date we're trying to do this for is the entry or
          // exit from DST, the result is wrong, hence I've switched to
          // the approach below.
          //
@@ -579,13 +620,7 @@ public final class DateHelper
     */
    private static boolean HAS_DST_SAVINGS;
 
-   private static final ThreadLocal<Deque<Calendar>> CALENDARS = new ThreadLocal<Deque<Calendar>>()
-   {
-      @Override protected Deque<Calendar> initialValue()
-      {
-         return new ArrayDeque<>();
-      }
-   };
+   private static final ThreadLocal<Deque<Calendar>> CALENDARS = ThreadLocal.withInitial(ArrayDeque::new);
 
    static
    {
@@ -593,7 +628,7 @@ public final class DateHelper
 
       try
       {
-         tz.getMethod("getDSTSavings", (Class[]) null);
+         tz.getMethod("getDSTSavings", (Class<?>[]) null);
          HAS_DST_SAVINGS = true;
       }
 

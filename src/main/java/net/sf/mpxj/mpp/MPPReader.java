@@ -23,14 +23,20 @@
 
 package net.sf.mpxj.mpp;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import net.sf.mpxj.CalendarType;
+import net.sf.mpxj.ProjectCalendar;
+import net.sf.mpxj.Resource;
+import net.sf.mpxj.TaskField;
+import net.sf.mpxj.common.AutoCloseableHelper;
 import org.apache.poi.poifs.filesystem.DirectoryEntry;
 import org.apache.poi.poifs.filesystem.DocumentEntry;
 import org.apache.poi.poifs.filesystem.DocumentInputStream;
@@ -50,35 +56,47 @@ import net.sf.mpxj.reader.AbstractProjectStreamReader;
  */
 public final class MPPReader extends AbstractProjectStreamReader
 {
-   /**
-    * {@inheritDoc}
-    */
    @Override public ProjectFile read(InputStream is) throws MPXJException
    {
       try
       {
-         //
-         // Open the file system
-         //
-         POIFSFileSystem fs = new POIFSFileSystem(is);
-
-         return read(fs);
-
+         return read(new POIFSFileSystem(is));
       }
+
       catch (IOException ex)
       {
-
          throw new MPXJException(MPXJException.READ_ERROR, ex);
-
       }
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public List<ProjectFile> readAll(InputStream inputStream) throws MPXJException
    {
-      return Arrays.asList(read(inputStream));
+      return Collections.singletonList(read(inputStream));
+   }
+
+   @Override public ProjectFile read(File file) throws MPXJException
+   {
+      POIFSFileSystem fs = null;
+
+      try
+      {
+         // Note we provide this version of the read method rather than using
+         // the AbstractProjectStreamReader version as we can work with the File
+         // instance directly for reduced memory consumption and the ability
+         // to open larger MPP files.
+         fs = new POIFSFileSystem(file);
+         return read(fs);
+      }
+
+      catch (IOException ex)
+      {
+         throw new MPXJException(MPXJException.READ_ERROR, ex);
+      }
+
+      finally
+      {
+         AutoCloseableHelper.closeQuietly(fs);
+      }
    }
 
    /**
@@ -88,7 +106,6 @@ public final class MPPReader extends AbstractProjectStreamReader
     *
     * @param fs POIFSFileSystem instance
     * @return file format name
-    * @throws IOException
     */
    public static String getFileFormat(POIFSFileSystem fs) throws IOException
    {
@@ -108,7 +125,6 @@ public final class MPPReader extends AbstractProjectStreamReader
     *
     * @param fs POI file stream
     * @return ProjectFile instance
-    * @throws MPXJException
     */
    public ProjectFile read(POIFSFileSystem fs) throws MPXJException
    {
@@ -126,6 +142,7 @@ public final class MPPReader extends AbstractProjectStreamReader
          config.setAutoWBS(false);
          config.setAutoCalendarUniqueID(false);
          config.setAutoAssignmentUniqueID(false);
+         config.setAutoRelationUniqueID(false);
 
          addListenersToProject(projectFile);
 
@@ -172,6 +189,40 @@ public final class MPPReader extends AbstractProjectStreamReader
                task.setSplits(null);
             }
             validationRelations(task);
+            copyEstimatedBaselineFields(task);
+         }
+
+         //
+         // Prune unused resource calendars
+         //
+         projectFile.getCalendars().removeIf(c -> c.isDerived() && c.getResourceCount() == 0);
+
+         //
+         // Resource calendar post processing
+         //
+         for (Resource resource : projectFile.getResources())
+         {
+            ProjectCalendar calendar = resource.getCalendar();
+            if (calendar != null)
+            {
+               // Configure the calendar type
+               if (calendar.isDerived())
+               {
+                  calendar.setType(CalendarType.RESOURCE);
+                  calendar.setPersonal(calendar.getResourceCount() == 1);
+               }
+
+               // Resource calendars without names inherit the resource name
+               if (calendar.getName() == null || calendar.getName().isEmpty())
+               {
+                  String name = resource.getName();
+                  if (name == null || name.isEmpty())
+                  {
+                     name = "Unnamed Resource";
+                  }
+                  calendar.setName(name);
+               }
+            }
          }
 
          //
@@ -196,17 +247,7 @@ public final class MPPReader extends AbstractProjectStreamReader
          return (projectFile);
       }
 
-      catch (IOException ex)
-      {
-         throw new MPXJException(MPXJException.READ_ERROR, ex);
-      }
-
-      catch (IllegalAccessException ex)
-      {
-         throw new MPXJException(MPXJException.READ_ERROR, ex);
-      }
-
-      catch (InstantiationException ex)
+      catch (IOException | InstantiationException | IllegalAccessException ex)
       {
          throw new MPXJException(MPXJException.READ_ERROR, ex);
       }
@@ -247,25 +288,25 @@ public final class MPPReader extends AbstractProjectStreamReader
    }
 
    /**
-    * This method retrieves the state of the preserve note formatting flag.
+    * If a baseline field is not populate, but the estimated version of that field is populated
+    * then we fall back on using the estimated field.
     *
-    * @return boolean flag
+    * @param task task to update
     */
-   public boolean getPreserveNoteFormatting()
+   private void copyEstimatedBaselineFields(Task task)
    {
-      return (m_preserveNoteFormatting);
-   }
-
-   /**
-    * This method sets a flag to indicate whether the RTF formatting associated
-    * with notes should be preserved or removed. By default the formatting
-    * is removed.
-    *
-    * @param preserveNoteFormatting boolean flag
-    */
-   public void setPreserveNoteFormatting(boolean preserveNoteFormatting)
-   {
-      m_preserveNoteFormatting = preserveNoteFormatting;
+      for (Map.Entry<TaskField, TaskField> entry : TASK_ESTIMATED_BASELINE_FIELDS.entrySet())
+      {
+         Object value = task.getCachedValue(entry.getKey());
+         if (value == null)
+         {
+            value = task.getCachedValue(entry.getValue());
+            if (value != null)
+            {
+               task.set(entry.getKey(), value);
+            }
+         }
+      }
    }
 
    /**
@@ -381,12 +422,6 @@ public final class MPPReader extends AbstractProjectStreamReader
    }
 
    /**
-    * Flag used to indicate whether RTF formatting in notes should
-    * be preserved. The default value for this flag is false.
-    */
-   private boolean m_preserveNoteFormatting;
-
-   /**
     * Setting this flag to true allows raw timephased data to be retrieved.
     */
    private boolean m_useRawTimephasedData;
@@ -422,5 +457,53 @@ public final class MPPReader extends AbstractProjectStreamReader
       FILE_CLASS_MAP.put("MSProject.MPP14", MPP14Reader.class);
       FILE_CLASS_MAP.put("MSProject.MPT14", MPP14Reader.class);
       FILE_CLASS_MAP.put("MSProject.GLOBAL14", MPP14Reader.class);
+   }
+
+   private static final Map<TaskField, TaskField> TASK_ESTIMATED_BASELINE_FIELDS = new HashMap<>();
+   static
+   {
+      TASK_ESTIMATED_BASELINE_FIELDS.put(TaskField.BASELINE_DURATION, TaskField.BASELINE_ESTIMATED_DURATION);
+      TASK_ESTIMATED_BASELINE_FIELDS.put(TaskField.BASELINE_START, TaskField.BASELINE_ESTIMATED_START);
+      TASK_ESTIMATED_BASELINE_FIELDS.put(TaskField.BASELINE_FINISH, TaskField.BASELINE_ESTIMATED_FINISH);
+
+      TASK_ESTIMATED_BASELINE_FIELDS.put(TaskField.BASELINE1_DURATION, TaskField.BASELINE1_ESTIMATED_DURATION);
+      TASK_ESTIMATED_BASELINE_FIELDS.put(TaskField.BASELINE1_START, TaskField.BASELINE1_ESTIMATED_START);
+      TASK_ESTIMATED_BASELINE_FIELDS.put(TaskField.BASELINE1_FINISH, TaskField.BASELINE1_ESTIMATED_FINISH);
+
+      TASK_ESTIMATED_BASELINE_FIELDS.put(TaskField.BASELINE2_DURATION, TaskField.BASELINE2_ESTIMATED_DURATION);
+      TASK_ESTIMATED_BASELINE_FIELDS.put(TaskField.BASELINE2_START, TaskField.BASELINE2_ESTIMATED_START);
+      TASK_ESTIMATED_BASELINE_FIELDS.put(TaskField.BASELINE2_FINISH, TaskField.BASELINE2_ESTIMATED_FINISH);
+
+      TASK_ESTIMATED_BASELINE_FIELDS.put(TaskField.BASELINE3_DURATION, TaskField.BASELINE3_ESTIMATED_DURATION);
+      TASK_ESTIMATED_BASELINE_FIELDS.put(TaskField.BASELINE3_START, TaskField.BASELINE3_ESTIMATED_START);
+      TASK_ESTIMATED_BASELINE_FIELDS.put(TaskField.BASELINE3_FINISH, TaskField.BASELINE3_ESTIMATED_FINISH);
+
+      TASK_ESTIMATED_BASELINE_FIELDS.put(TaskField.BASELINE4_DURATION, TaskField.BASELINE4_ESTIMATED_DURATION);
+      TASK_ESTIMATED_BASELINE_FIELDS.put(TaskField.BASELINE4_START, TaskField.BASELINE4_ESTIMATED_START);
+      TASK_ESTIMATED_BASELINE_FIELDS.put(TaskField.BASELINE4_FINISH, TaskField.BASELINE4_ESTIMATED_FINISH);
+
+      TASK_ESTIMATED_BASELINE_FIELDS.put(TaskField.BASELINE5_DURATION, TaskField.BASELINE5_ESTIMATED_DURATION);
+      TASK_ESTIMATED_BASELINE_FIELDS.put(TaskField.BASELINE5_START, TaskField.BASELINE5_ESTIMATED_START);
+      TASK_ESTIMATED_BASELINE_FIELDS.put(TaskField.BASELINE5_FINISH, TaskField.BASELINE5_ESTIMATED_FINISH);
+
+      TASK_ESTIMATED_BASELINE_FIELDS.put(TaskField.BASELINE6_DURATION, TaskField.BASELINE6_ESTIMATED_DURATION);
+      TASK_ESTIMATED_BASELINE_FIELDS.put(TaskField.BASELINE6_START, TaskField.BASELINE6_ESTIMATED_START);
+      TASK_ESTIMATED_BASELINE_FIELDS.put(TaskField.BASELINE6_FINISH, TaskField.BASELINE6_ESTIMATED_FINISH);
+
+      TASK_ESTIMATED_BASELINE_FIELDS.put(TaskField.BASELINE7_DURATION, TaskField.BASELINE7_ESTIMATED_DURATION);
+      TASK_ESTIMATED_BASELINE_FIELDS.put(TaskField.BASELINE7_START, TaskField.BASELINE7_ESTIMATED_START);
+      TASK_ESTIMATED_BASELINE_FIELDS.put(TaskField.BASELINE7_FINISH, TaskField.BASELINE7_ESTIMATED_FINISH);
+
+      TASK_ESTIMATED_BASELINE_FIELDS.put(TaskField.BASELINE8_DURATION, TaskField.BASELINE8_ESTIMATED_DURATION);
+      TASK_ESTIMATED_BASELINE_FIELDS.put(TaskField.BASELINE8_START, TaskField.BASELINE8_ESTIMATED_START);
+      TASK_ESTIMATED_BASELINE_FIELDS.put(TaskField.BASELINE8_FINISH, TaskField.BASELINE8_ESTIMATED_FINISH);
+
+      TASK_ESTIMATED_BASELINE_FIELDS.put(TaskField.BASELINE9_DURATION, TaskField.BASELINE9_ESTIMATED_DURATION);
+      TASK_ESTIMATED_BASELINE_FIELDS.put(TaskField.BASELINE9_START, TaskField.BASELINE9_ESTIMATED_START);
+      TASK_ESTIMATED_BASELINE_FIELDS.put(TaskField.BASELINE9_FINISH, TaskField.BASELINE9_ESTIMATED_FINISH);
+
+      TASK_ESTIMATED_BASELINE_FIELDS.put(TaskField.BASELINE10_DURATION, TaskField.BASELINE10_ESTIMATED_DURATION);
+      TASK_ESTIMATED_BASELINE_FIELDS.put(TaskField.BASELINE10_START, TaskField.BASELINE10_ESTIMATED_START);
+      TASK_ESTIMATED_BASELINE_FIELDS.put(TaskField.BASELINE10_FINISH, TaskField.BASELINE10_ESTIMATED_FINISH);
    }
 }

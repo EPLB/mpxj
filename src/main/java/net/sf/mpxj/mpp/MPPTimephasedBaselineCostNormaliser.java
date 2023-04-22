@@ -29,37 +29,43 @@ import java.util.List;
 
 import net.sf.mpxj.Duration;
 import net.sf.mpxj.ProjectCalendar;
+import net.sf.mpxj.ResourceAssignment;
 import net.sf.mpxj.TimeUnit;
 import net.sf.mpxj.TimephasedCost;
 import net.sf.mpxj.common.DateHelper;
 import net.sf.mpxj.common.NumberHelper;
-import net.sf.mpxj.common.TimephasedCostNormaliser;
+import net.sf.mpxj.common.TimephasedNormaliser;
 
 /**
  * Common implementation detail for normalisation.
  */
-public class MPPTimephasedBaselineCostNormaliser implements TimephasedCostNormaliser
+public class MPPTimephasedBaselineCostNormaliser implements TimephasedNormaliser<TimephasedCost>
 {
    /**
     * This method converts the internal representation of timephased
     * resource assignment data used by MS Project into a standardised
     * format to make it easy to work with.
     *
-    * @param calendar current calendar
+    * @param assignment current resource assignment
     * @param list list of assignment data
     */
-   @Override public void normalise(ProjectCalendar calendar, List<TimephasedCost> list)
+   @Override public void normalise(ResourceAssignment assignment, List<TimephasedCost> list)
    {
       if (!list.isEmpty())
       {
          //dumpList(list);
-         splitDays(calendar, list);
+         splitDays(getCalendar(assignment), list);
          //dumpList(list);
          mergeSameDay(list);
          //dumpList(list);
          mergeSameCost(list);
          //dumpList(list);
       }
+   }
+
+   protected ProjectCalendar getCalendar(ResourceAssignment assignment)
+   {
+      return assignment.getParentFile().getBaselineCalendar();
    }
 
    /**
@@ -144,14 +150,13 @@ public class MPPTimephasedBaselineCostNormaliser implements TimephasedCostNormal
          double splitCost;
          if (calendar.isWorkingDate(assignmentStart))
          {
-            Date splitStart = assignmentStart;
-            Date splitFinishTime = calendar.getFinishTime(splitStart);
-            splitFinish = DateHelper.setTime(splitStart, splitFinishTime);
-            Duration calendarSplitWork = calendar.getWork(splitStart, splitFinish, TimeUnit.MINUTES);
+            Date splitFinishTime = calendar.getFinishTime(assignmentStart);
+            splitFinish = DateHelper.setTime(assignmentStart, splitFinishTime);
+            Duration calendarSplitWork = calendar.getWork(assignmentStart, splitFinish, TimeUnit.MINUTES);
             splitCost = (assignment.getTotalAmount().doubleValue() * calendarSplitWork.getDuration()) / calendarWork.getDuration();
 
             TimephasedCost split = new TimephasedCost();
-            split.setStart(splitStart);
+            split.setStart(assignmentStart);
             split.setFinish(splitFinish);
             split.setTotalAmount(Double.valueOf(splitCost));
 
@@ -201,12 +206,7 @@ public class MPPTimephasedBaselineCostNormaliser implements TimephasedCostNormal
       TimephasedCost previousAssignment = null;
       for (TimephasedCost assignment : list)
       {
-         if (previousAssignment == null)
-         {
-            assignment.setAmountPerDay(assignment.getTotalAmount());
-            result.add(assignment);
-         }
-         else
+         if (previousAssignment != null)
          {
             Date previousAssignmentStart = previousAssignment.getStart();
             Date previousAssignmentStartDay = DateHelper.getDayStartDate(previousAssignmentStart);
@@ -227,9 +227,9 @@ public class MPPTimephasedBaselineCostNormaliser implements TimephasedCostNormal
                assignment = merged;
             }
 
-            assignment.setAmountPerDay(assignment.getTotalAmount());
-            result.add(assignment);
          }
+         assignment.setAmountPerDay(assignment.getTotalAmount());
+         result.add(assignment);
 
          previousAssignment = assignment;
       }

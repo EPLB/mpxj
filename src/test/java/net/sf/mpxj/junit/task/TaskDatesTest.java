@@ -23,7 +23,6 @@
 
 package net.sf.mpxj.junit.task;
 
-import static net.sf.mpxj.junit.MpxjAssert.*;
 import static org.junit.Assert.*;
 
 import java.io.File;
@@ -32,14 +31,12 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
+import net.sf.mpxj.reader.UniversalProjectReader;
 import org.junit.Test;
 
 import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.Task;
 import net.sf.mpxj.junit.MpxjTestData;
-import net.sf.mpxj.mpd.MPDDatabaseReader;
-import net.sf.mpxj.reader.ProjectReader;
-import net.sf.mpxj.reader.ProjectReaderUtility;
 
 /**
  * Tests to ensure task custom dates are correctly handled.
@@ -64,13 +61,7 @@ public class TaskDatesTest
     */
    private void testTaskDates(File file) throws Exception
    {
-      ProjectReader reader = ProjectReaderUtility.getProjectReader(file.getName());
-      if (reader instanceof MPDDatabaseReader)
-      {
-         assumeJvm();
-      }
-
-      ProjectFile project = reader.read(file);
+      ProjectFile project = new UniversalProjectReader().read(file);
       int maxIndex = 10;
       for (int index = 1; index <= maxIndex; index++)
       {
@@ -99,7 +90,7 @@ public class TaskDatesTest
       }
    }
 
-   private DateFormat m_dateFormat = new SimpleDateFormat("dd/MM/yyyy HH:mm");
+   private final DateFormat m_dateFormat = new SimpleDateFormat("dd/MM/yyyy HH:mm");
 
    private static final String[] DATES = new String[]
    {

@@ -30,6 +30,7 @@ import net.sf.mpxj.Duration;
 import net.sf.mpxj.FieldType;
 import net.sf.mpxj.GraphicalIndicator;
 import net.sf.mpxj.GraphicalIndicatorCriteria;
+import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.ProjectProperties;
 import net.sf.mpxj.TestOperator;
 import net.sf.mpxj.common.FieldTypeHelper;
@@ -43,14 +44,14 @@ public final class GraphicalIndicatorReader
    /**
     * The main entry point for processing graphical indicator definitions.
     *
-    * @param indicators graphical indicators container
-    * @param properties project properties
+    * @param file project file
     * @param props properties data
     */
-   public void process(CustomFieldContainer indicators, ProjectProperties properties, Props props)
+   public void process(ProjectFile file, Props props)
    {
-      m_container = indicators;
-      m_properties = properties;
+      m_file = file;
+      m_container = file.getCustomFields();
+      m_properties = file.getProjectProperties();
       m_data = props.getByteArray(Props.TASK_FIELD_ATTRIBUTES);
 
       if (m_data != null)
@@ -75,7 +76,7 @@ public final class GraphicalIndicatorReader
       m_dataOffset = MPPUtility.getInt(m_data, m_headerOffset);
       m_headerOffset += 4;
 
-      FieldType type = FieldTypeHelper.getInstance(fieldID);
+      FieldType type = FieldTypeHelper.getInstance(m_file, fieldID);
       if (type.getDataType() != null)
       {
          processKnownType(type);
@@ -91,10 +92,14 @@ public final class GraphicalIndicatorReader
    {
       //System.out.println("Header: " + type);
       //System.out.println(ByteArrayHelper.hexdump(m_data, m_dataOffset, 36, false, 16, ""));
-
-      GraphicalIndicator indicator = m_container.getCustomField(type).getGraphicalIndicator();
-      indicator.setFieldType(type);
       int flags = m_data[m_dataOffset];
+      if ((flags & 0x02) == 0)
+      {
+         return;
+      }
+
+      GraphicalIndicator indicator = m_container.getOrCreate(type).getGraphicalIndicator();
+      indicator.setFieldType(type);
       indicator.setProjectSummaryInheritsFromSummaryRows((flags & 0x08) != 0);
       indicator.setSummaryRowsInheritFromNonSummaryRows((flags & 0x04) != 0);
       indicator.setDisplayGraphicalIndicators((flags & 0x02) != 0);
@@ -187,10 +192,10 @@ public final class GraphicalIndicatorReader
       boolean valueFlag = (MPPUtility.getInt(m_data, m_dataOffset) == 1);
       m_dataOffset += 4;
 
-      if (valueFlag == false)
+      if (!valueFlag)
       {
          int fieldID = MPPUtility.getInt(m_data, m_dataOffset);
-         criteria.setRightValue(index, FieldTypeHelper.getInstance(fieldID));
+         criteria.setRightValue(index, FieldTypeHelper.getInstance(m_file, fieldID));
          m_dataOffset += 4;
       }
       else
@@ -260,5 +265,6 @@ public final class GraphicalIndicatorReader
    private int m_headerOffset;
    private int m_dataOffset;
    private CustomFieldContainer m_container;
+   private ProjectFile m_file;
    private ProjectProperties m_properties;
 }

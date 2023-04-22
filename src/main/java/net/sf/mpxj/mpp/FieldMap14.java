@@ -27,12 +27,10 @@ import java.util.HashMap;
 import java.util.Map;
 
 import net.sf.mpxj.AssignmentField;
-import net.sf.mpxj.CustomFieldContainer;
 import net.sf.mpxj.FieldType;
-import net.sf.mpxj.ProjectProperties;
+import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.ResourceField;
 import net.sf.mpxj.TaskField;
-import net.sf.mpxj.common.FieldTypeHelper;
 
 /**
  * MPP14 field map.
@@ -42,44 +40,26 @@ class FieldMap14 extends FieldMap
    /**
     * Constructor.
     *
-    * @param properties project properties
-    * @param customFields custom field values
+    * @param file project file
     */
-   public FieldMap14(ProjectProperties properties, CustomFieldContainer customFields)
+   public FieldMap14(ProjectFile file)
    {
-      super(properties, customFields);
+      super(file);
    }
 
-   /**
-    * {@inheritDoc}
-    */
-   @Override protected FieldType getFieldType(int fieldID)
-   {
-      return FieldTypeHelper.getInstance14(fieldID);
-   }
-
-   /**
-    * {@inheritDoc}
-    */
    @Override protected boolean useTypeAsVarDataKey()
    {
       return true;
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override protected Integer substituteVarDataKey(FieldType type)
    {
       return VAR_DATA_MAP.get(type);
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override protected FieldItem[] getDefaultTaskData()
    {
-      FieldItem[] result = new FieldItem[]
+      return new FieldItem[]
       {
          new FieldItem(TaskField.UNIQUE_ID, FieldLocation.FIXED_DATA, 0, 0, 86, 0, 0),
          new FieldItem(TaskField.ID, FieldLocation.FIXED_DATA, 0, 4, 23, 0, 0),
@@ -718,15 +698,11 @@ class FieldMap14 extends FieldMap
          new FieldItem(TaskField.BASELINE10_FINISH, FieldLocation.VAR_DATA, 1, 65535, 1330, 0, 0),
          new FieldItem(TaskField.BASELINE10_DURATION, FieldLocation.VAR_DATA, 1, 65535, 1331, 0, 0)
       };
-      return result;
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override protected FieldItem[] getDefaultResourceData()
    {
-      FieldItem[] result = new FieldItem[]
+      return new FieldItem[]
       {
          new FieldItem(ResourceField.UNIQUE_ID, FieldLocation.FIXED_DATA, 0, 0, 27, 0, 0),
          new FieldItem(ResourceField.ID, FieldLocation.FIXED_DATA, 0, 4, 0, 0, 0),
@@ -1086,15 +1062,11 @@ class FieldMap14 extends FieldMap
          new FieldItem(ResourceField.ENTERPRISE_UNIQUE_ID, FieldLocation.VAR_DATA, 1, 65535, 443, 0, 0),
 
       };
-      return result;
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override protected FieldItem[] getDefaultAssignmentData()
    {
-      FieldItem[] result = new FieldItem[]
+      return new FieldItem[]
       {
          new FieldItem(AssignmentField.UNIQUE_ID, FieldLocation.FIXED_DATA, 0, 0, 0, 0, 0),
          new FieldItem(AssignmentField.TASK_UNIQUE_ID, FieldLocation.FIXED_DATA, 0, 4, 1, 0, 0),
@@ -1428,12 +1400,8 @@ class FieldMap14 extends FieldMap
          new FieldItem(AssignmentField.BASELINE10_COST, FieldLocation.VAR_DATA, 1, 65535, 371, 0, 0),
          new FieldItem(AssignmentField.OWNER, FieldLocation.VAR_DATA, 1, 65535, 668, 0, 0)
       };
-      return result;
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override protected FieldItem[] getDefaultRelationData()
    {
       return new FieldItem[0];

@@ -23,10 +23,9 @@
 
 package net.sf.mpxj.mpp;
 
-import java.io.IOException;
-
 import net.sf.mpxj.CustomFieldContainer;
 import net.sf.mpxj.CustomFieldValueDataType;
+import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.ProjectProperties;
 import net.sf.mpxj.TimeUnit;
 import net.sf.mpxj.common.ByteArrayHelper;
@@ -39,18 +38,18 @@ public abstract class CustomFieldValueReader
    /**
     * Constructor.
     *
-    * @param properties project properties
-    * @param container custom field config
+    * @param file project file
     * @param outlineCodeVarMeta raw mpp data
     * @param outlineCodeVarData raw mpp data
     * @param outlineCodeFixedData raw mpp data
     * @param outlineCodeFixedData2 raw mpp data
     * @param taskProps raw mpp data
     */
-   public CustomFieldValueReader(ProjectProperties properties, CustomFieldContainer container, VarMeta outlineCodeVarMeta, Var2Data outlineCodeVarData, FixedData outlineCodeFixedData, FixedData outlineCodeFixedData2, Props taskProps)
+   public CustomFieldValueReader(ProjectFile file, VarMeta outlineCodeVarMeta, Var2Data outlineCodeVarData, FixedData outlineCodeFixedData, FixedData outlineCodeFixedData2, Props taskProps)
    {
-      m_properties = properties;
-      m_container = container;
+      m_file = file;
+      m_properties = file.getProjectProperties();
+      m_container = file.getCustomFields();
       m_outlineCodeVarMeta = outlineCodeVarMeta;
       m_outlineCodeVarData = outlineCodeVarData;
       m_outlineCodeFixedData = outlineCodeFixedData;
@@ -59,9 +58,9 @@ public abstract class CustomFieldValueReader
    }
 
    /**
-    * Method implement by subclasses to read custom field values.
+    * Method implemented by subclasses to read custom field values.
     */
-   public abstract void process() throws IOException;
+   public abstract void process();
 
    /**
     * Convert raw value as read from the MPP file into a Java type.
@@ -126,7 +125,7 @@ public abstract class CustomFieldValueReader
    }
 
    /**
-    * Try to convert a bute array into a string. In the event of a
+    * Try to convert a byte array into a string. In the event of a
     * failure, fall back to dumping the byte array contents as
     * as string of hex bytes.
     *
@@ -155,13 +154,14 @@ public abstract class CustomFieldValueReader
       return result;
    }
 
-   protected ProjectProperties m_properties;
-   protected CustomFieldContainer m_container;
-   protected VarMeta m_outlineCodeVarMeta;
-   protected Var2Data m_outlineCodeVarData;
-   protected FixedData m_outlineCodeFixedData;
-   protected FixedData m_outlineCodeFixedData2;
-   protected Props m_taskProps;
+   protected final ProjectFile m_file;
+   protected final ProjectProperties m_properties;
+   protected final CustomFieldContainer m_container;
+   protected final VarMeta m_outlineCodeVarMeta;
+   protected final Var2Data m_outlineCodeVarData;
+   protected final FixedData m_outlineCodeFixedData;
+   protected final FixedData m_outlineCodeFixedData2;
+   protected final Props m_taskProps;
 
    public static final Integer VALUE_LIST_VALUE = Integer.valueOf(22);
    public static final Integer VALUE_LIST_DESCRIPTION = Integer.valueOf(8);

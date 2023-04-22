@@ -53,15 +53,12 @@ public class TaskContainer extends ProjectEntityWithIDContainer<Task>
     */
    public Task add()
    {
-      Task task = new Task(m_projectFile, (Task) null);
+      Task task = new Task(m_projectFile, null);
       add(task);
       m_projectFile.getChildTasks().add(task);
       return task;
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public void removed(Task task)
    {
       //
@@ -84,7 +81,7 @@ public class TaskContainer extends ProjectEntityWithIDContainer<Task>
       // Remove all resource assignments
       //
       Iterator<ResourceAssignment> iter = m_projectFile.getResourceAssignments().iterator();
-      while (iter.hasNext() == true)
+      while (iter.hasNext())
       {
          ResourceAssignment assignment = iter.next();
          if (assignment.getTask() == task)
@@ -104,7 +101,7 @@ public class TaskContainer extends ProjectEntityWithIDContainer<Task>
       while (true)
       {
          List<Task> childTaskList = task.getChildTasks();
-         if (childTaskList.isEmpty() == true)
+         if (childTaskList.isEmpty())
          {
             break;
          }
@@ -123,15 +120,8 @@ public class TaskContainer extends ProjectEntityWithIDContainer<Task>
     */
    public void synchronizeTaskIDToHierarchy()
    {
-      clear();
-
       int currentID = (getByID(Integer.valueOf(0)) == null ? 1 : 0);
-      for (Task task : m_projectFile.getChildTasks())
-      {
-         task.setID(Integer.valueOf(currentID++));
-         add(task);
-         currentID = synchroizeTaskIDToHierarchy(task, currentID);
-      }
+      synchroizeTaskIDToHierarchy(m_projectFile, currentID);
    }
 
    /**
@@ -141,12 +131,11 @@ public class TaskContainer extends ProjectEntityWithIDContainer<Task>
     * @param currentID current task ID
     * @return updated current task ID
     */
-   private int synchroizeTaskIDToHierarchy(Task parentTask, int currentID)
+   private int synchroizeTaskIDToHierarchy(ChildTaskContainer parentTask, int currentID)
    {
       for (Task task : parentTask.getChildTasks())
       {
          task.setID(Integer.valueOf(currentID++));
-         add(task);
          currentID = synchroizeTaskIDToHierarchy(task, currentID);
       }
       return currentID;
@@ -240,9 +229,30 @@ public class TaskContainer extends ProjectEntityWithIDContainer<Task>
     *
     * @return set of populated fields
     */
-   public Set<TaskField> getPopulatedFields()
+   public Set<FieldType> getPopulatedFields()
    {
-      return new PopulatedFields<>(m_projectFile, TaskField.class, this).getPopulatedFields();
+      return new PopulatedFields<>(m_projectFile, TaskField.class, m_projectFile.getUserDefinedFields().getTaskFields(), this).getPopulatedFields();
+   }
+
+   /**
+    * Retrieve a list of task custom fields.
+    *
+    * @return task custom fields
+    */
+   public List<CustomField> getCustomFields()
+   {
+      return m_projectFile.getCustomFields().getCustomFieldsByFieldTypeClass(FieldTypeClass.TASK);
+   }
+
+   /**
+    * Retrieve the type of a field by its alias.
+    *
+    * @param alias field alias
+    * @return FieldType instance
+    */
+   public FieldType getFieldTypeByAlias(String alias)
+   {
+      return m_projectFile.getCustomFields().getFieldTypeByAlias(FieldTypeClass.TASK, alias);
    }
 
    @Override protected int firstUniqueID()

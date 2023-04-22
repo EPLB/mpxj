@@ -230,6 +230,27 @@ public class ProjectConfig
    }
 
    /**
+    * Used to set whether the relation unique ID field is automatically populated.
+    *
+    * @param flag true if automatic unique ID required.
+    */
+   public void setAutoRelationUniqueID(boolean flag)
+   {
+      m_autoRelationUniqueID = flag;
+   }
+
+   /**
+    * Retrieve the flag that determines whether the relation unique ID
+    * is generated automatically.
+    *
+    * @return boolean, default is false.
+    */
+   public boolean getAutoRelationUniqueID()
+   {
+      return m_autoRelationUniqueID;
+   }
+
+   /**
     * This method is used to retrieve the next unique ID for a task.
     *
     * @return next unique ID
@@ -287,6 +308,40 @@ public class ProjectConfig
    public int getNextResourceID()
    {
       return ++m_resourceID;
+   }
+
+   /**
+    * This method is used to retrieve the next unique ID for a relation.
+    *
+    * @return next unique ID
+    */
+   public int getNextRelationUniqueID()
+   {
+      return ++m_relationUniqueID;
+   }
+
+   /**
+    * Returns true if a task's Complete Through attribute is reported as
+    * the time work can next start. Defaults to false. When set to true this
+    * matches the behaviour of MS Project versions prior to 2007.
+    *
+    * @return true if Complete Through is next work start date
+    */
+   public boolean getCompleteThroughIsNextWorkStart()
+   {
+      return m_completeThroughIsNextWorkStart;
+   }
+
+   /**
+    * When set to true a task's Complete Through attribute is reported as
+    * the time work can next start. Defaults to false. When set to true this
+    * matches the behaviour of MS Project versions prior to 2007.
+    *
+    * @param completeThroughIsNextWorkStart true if Complete Through is next work start date
+    */
+   public void setCompleteThroughIsNextWorkStart(boolean completeThroughIsNextWorkStart)
+   {
+      m_completeThroughIsNextWorkStart = completeThroughIsNextWorkStart;
    }
 
    /**
@@ -362,6 +417,26 @@ public class ProjectConfig
       }
    }
 
+   /**
+    * Retrieve the strategy used by this project to populate baseline attributes from another schedule.
+    *
+    * @return baseline strategy
+    */
+   public BaselineStrategy getBaselineStrategy()
+   {
+      return m_baselineStrategy;
+   }
+
+   /**
+    * Set the strategy used by this project to populate baseline attributes from another schedule.
+    *
+    * @param strategy baseline strategy
+    */
+   public void setBaselineStrategy(BaselineStrategy strategy)
+   {
+      m_baselineStrategy = strategy;
+   }
+
    private final ProjectFile m_parent;
 
    /**
@@ -419,6 +494,12 @@ public class ProjectConfig
    private boolean m_autoResourceID = true;
 
    /**
+    * Indicating whether the unique ID of a relation should be
+    * calculated on creation, or will be manually set.
+    */
+   private boolean m_autoRelationUniqueID = true;
+
+   /**
     * Counter used to populate the unique ID field of a task.
     */
    private int m_taskUniqueID;
@@ -448,4 +529,15 @@ public class ProjectConfig
     */
    private int m_resourceID;
 
+   /**
+    * Counter used to populate the unique ID field of a relation.
+    */
+   private int m_relationUniqueID;
+
+   /**
+    * Set to true provides compatibility with MS Project versions prior to 2007.
+    */
+   private boolean m_completeThroughIsNextWorkStart;
+
+   private BaselineStrategy m_baselineStrategy = new DefaultBaselineStrategy();
 }

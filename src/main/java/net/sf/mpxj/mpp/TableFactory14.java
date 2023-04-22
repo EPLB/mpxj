@@ -26,8 +26,7 @@ package net.sf.mpxj.mpp;
 import net.sf.mpxj.Column;
 import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.Table;
-import net.sf.mpxj.common.MPPResourceField14;
-import net.sf.mpxj.common.MPPTaskField14;
+import net.sf.mpxj.common.FieldTypeHelper;
 
 /**
  * This interface is implemented by classes which can create Table classes
@@ -111,15 +110,7 @@ final class TableFactory14
          for (int loop = 0; loop < columnCount; loop++)
          {
             column = new Column(file);
-            int fieldType = MPPUtility.getShort(data, index);
-            if (table.getResourceFlag() == false)
-            {
-               column.setFieldType(MPPTaskField14.getInstance(fieldType));
-            }
-            else
-            {
-               column.setFieldType(MPPResourceField14.getInstance(fieldType));
-            }
+            column.setFieldType(FieldTypeHelper.getInstance(file, MPPUtility.getInt(data, index)));
 
             //System.out.println(fieldType);
 
@@ -180,7 +171,7 @@ final class TableFactory14
       }
    }
 
-   private Integer m_tableColumnDataStandard;
-   private Integer m_tableColumnDataEnterprise;
-   private Integer m_tableColumnDataBaseline;
+   private final Integer m_tableColumnDataStandard;
+   private final Integer m_tableColumnDataEnterprise;
+   private final Integer m_tableColumnDataBaseline;
 }

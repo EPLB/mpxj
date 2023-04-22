@@ -29,6 +29,7 @@ import java.util.List;
 
 import net.sf.mpxj.Duration;
 import net.sf.mpxj.ProjectCalendar;
+import net.sf.mpxj.ResourceAssignment;
 import net.sf.mpxj.TimeUnit;
 import net.sf.mpxj.TimephasedWork;
 import net.sf.mpxj.common.DateHelper;
@@ -38,6 +39,11 @@ import net.sf.mpxj.common.DateHelper;
  */
 public class MPPTimephasedBaselineWorkNormaliser extends MPPAbstractTimephasedWorkNormaliser
 {
+   @Override protected ProjectCalendar getCalendar(ResourceAssignment assignment)
+   {
+      return assignment.getParentFile().getBaselineCalendar();
+   }
+
    /**
     * This method merges together assignment data for the same day.
     *
@@ -51,12 +57,7 @@ public class MPPTimephasedBaselineWorkNormaliser extends MPPAbstractTimephasedWo
       TimephasedWork previousAssignment = null;
       for (TimephasedWork assignment : list)
       {
-         if (previousAssignment == null)
-         {
-            assignment.setAmountPerDay(assignment.getTotalAmount());
-            result.add(assignment);
-         }
-         else
+         if (previousAssignment != null)
          {
             Date previousAssignmentStart = previousAssignment.getStart();
             Date previousAssignmentStartDay = DateHelper.getDayStartDate(previousAssignmentStart);
@@ -78,9 +79,9 @@ public class MPPTimephasedBaselineWorkNormaliser extends MPPAbstractTimephasedWo
                assignment = merged;
             }
 
-            assignment.setAmountPerDay(assignment.getTotalAmount());
-            result.add(assignment);
          }
+         assignment.setAmountPerDay(assignment.getTotalAmount());
+         result.add(assignment);
 
          previousAssignment = assignment;
       }

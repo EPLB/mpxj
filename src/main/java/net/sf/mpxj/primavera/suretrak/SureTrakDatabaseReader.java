@@ -24,19 +24,17 @@
 package net.sf.mpxj.primavera.suretrak;
 
 import java.io.File;
-import java.io.FilenameFilter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 
 import net.sf.mpxj.ChildTaskContainer;
-import net.sf.mpxj.CustomFieldContainer;
 import net.sf.mpxj.DateRange;
 import net.sf.mpxj.Day;
 import net.sf.mpxj.Duration;
@@ -45,7 +43,6 @@ import net.sf.mpxj.FieldContainer;
 import net.sf.mpxj.FieldType;
 import net.sf.mpxj.MPXJException;
 import net.sf.mpxj.ProjectCalendar;
-import net.sf.mpxj.ProjectCalendarException;
 import net.sf.mpxj.ProjectCalendarHours;
 import net.sf.mpxj.ProjectConfig;
 import net.sf.mpxj.ProjectFile;
@@ -79,11 +76,25 @@ public final class SureTrakDatabaseReader extends AbstractProjectFileReader
     */
    public static final ProjectFile setProjectNameAndRead(File directory) throws MPXJException
    {
+      return setProjectNameAndRead(directory, null);
+   }
+
+   /**
+    * Convenience method which locates the first SureTrak database in a directory
+    * and opens it.
+    *
+    * @param directory directory containing a SureTrak database
+    * @param properties optional properties to pass to reader's setProperties method
+    * @return ProjectFile instance
+    */
+   public static final ProjectFile setProjectNameAndRead(File directory, Properties properties) throws MPXJException
+   {
       List<String> projects = listProjectNames(directory);
 
       if (!projects.isEmpty())
       {
          SureTrakDatabaseReader reader = new SureTrakDatabaseReader();
+         reader.setProperties(properties);
          reader.setProjectName(projects.get(0));
          return reader.read(directory);
       }
@@ -112,13 +123,7 @@ public final class SureTrakDatabaseReader extends AbstractProjectFileReader
    {
       List<String> result = new ArrayList<>();
 
-      File[] files = directory.listFiles(new FilenameFilter()
-      {
-         @Override public boolean accept(File dir, String name)
-         {
-            return name.toUpperCase().endsWith(".DIR");
-         }
-      });
+      File[] files = directory.listFiles((dir, name) -> name.toUpperCase().endsWith(".DIR"));
 
       if (files != null)
       {
@@ -167,14 +172,6 @@ public final class SureTrakDatabaseReader extends AbstractProjectFileReader
          config.setAutoOutlineNumber(true);
          config.setAutoWBS(false);
 
-         // Activity ID
-         CustomFieldContainer customFields = m_projectFile.getCustomFields();
-         customFields.getCustomField(TaskField.TEXT1).setAlias("Code").setUserDefined(false);
-         customFields.getCustomField(TaskField.TEXT2).setAlias("Department").setUserDefined(false);
-         customFields.getCustomField(TaskField.TEXT3).setAlias("Manager").setUserDefined(false);
-         customFields.getCustomField(TaskField.TEXT4).setAlias("Section").setUserDefined(false);
-         customFields.getCustomField(TaskField.TEXT5).setAlias("Mail").setUserDefined(false);
-
          m_projectFile.getProjectProperties().setFileApplication("SureTrak");
          m_projectFile.getProjectProperties().setFileType("STW");
 
@@ -218,9 +215,6 @@ public final class SureTrakDatabaseReader extends AbstractProjectFileReader
       }
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public List<ProjectFile> readAll(File directory) throws MPXJException
    {
       List<ProjectFile> projects = new ArrayList<>();
@@ -251,12 +245,7 @@ public final class SureTrakDatabaseReader extends AbstractProjectFileReader
       for (MapRow row : m_tables.get("TTL"))
       {
          Integer id = row.getInteger("DEFINITION_ID");
-         List<MapRow> list = m_definitions.get(id);
-         if (list == null)
-         {
-            list = new ArrayList<>();
-            m_definitions.put(id, list);
-         }
+         List<MapRow> list = m_definitions.computeIfAbsent(id, k -> new ArrayList<>());
          list.add(row);
       }
 
@@ -324,14 +313,16 @@ public final class SureTrakDatabaseReader extends AbstractProjectFileReader
             int minutesPerMonth = 4 * minutesPerWeek;
             int minutesPerYear = 52 * minutesPerWeek;
 
-            calendar.setMinutesPerDay(Integer.valueOf(minutesPerDay));
-            calendar.setMinutesPerWeek(Integer.valueOf(minutesPerWeek));
-            calendar.setMinutesPerMonth(Integer.valueOf(minutesPerMonth));
-            calendar.setMinutesPerYear(Integer.valueOf(minutesPerYear));
+            calendar.setCalendarMinutesPerDay(Integer.valueOf(minutesPerDay));
+            calendar.setCalendarMinutesPerWeek(Integer.valueOf(minutesPerWeek));
+            calendar.setCalendarMinutesPerMonth(Integer.valueOf(minutesPerMonth));
+            calendar.setCalendarMinutesPerYear(Integer.valueOf(minutesPerYear));
          }
 
          m_eventManager.fireCalendarReadEvent(calendar);
       }
+
+      m_projectFile.setDefaultCalendar(m_projectFile.getCalendars().findOrCreateDefaultCalendar());
    }
 
    /**
@@ -346,7 +337,7 @@ public final class SureTrakDatabaseReader extends AbstractProjectFileReader
    {
       int value = hours.intValue();
       int startHour = 0;
-      ProjectCalendarHours calendarHours = null;
+      ProjectCalendarHours calendarHours = calendar.addCalendarHours(day);
 
       Calendar cal = DateHelper.popCalendar();
       cal.set(Calendar.HOUR_OF_DAY, 0);
@@ -384,12 +375,8 @@ public final class SureTrakDatabaseReader extends AbstractProjectFileReader
          cal.set(Calendar.HOUR_OF_DAY, endHour);
          Date endDate = cal.getTime();
 
-         if (calendarHours == null)
-         {
-            calendarHours = calendar.addCalendarHours(day);
-            calendar.setWorkingDay(day, true);
-         }
-         calendarHours.addRange(new DateRange(startDate, endDate));
+         calendar.setWorkingDay(day, true);
+         calendarHours.add(new DateRange(startDate, endDate));
          startHour = endHour;
       }
 
@@ -435,15 +422,19 @@ public final class SureTrakDatabaseReader extends AbstractProjectFileReader
          if (calendar != null)
          {
             Date date = row.getDate("DATE");
-            ProjectCalendarException exception = calendar.addCalendarException(date, date);
+
             if (row.getBoolean("ANNUAL"))
             {
+               // TODO set end date based on project end date?
                RecurringData recurring = new RecurringData();
                recurring.setRecurrenceType(RecurrenceType.YEARLY);
                recurring.setYearlyAbsoluteFromDate(date);
                recurring.setStartDate(date);
-               exception.setRecurring(recurring);
-               // TODO set end date based on project end date
+               calendar.addCalendarException(recurring);
+            }
+            else
+            {
+               calendar.addCalendarException(date);
             }
          }
       }
@@ -464,7 +455,7 @@ public final class SureTrakDatabaseReader extends AbstractProjectFileReader
          {
             ProjectCalendar baseCalendar = m_calendarMap.get(row.getInteger("BASE_CALENDAR_ID"));
             calendar.setParent(baseCalendar);
-            resource.setResourceCalendar(calendar);
+            resource.setCalendar(calendar);
          }
          m_resourceMap.put(resource.getCode(), resource);
          m_eventManager.fireResourceReadEvent(resource);
@@ -517,13 +508,7 @@ public final class SureTrakDatabaseReader extends AbstractProjectFileReader
             }
 
             final AlphanumComparator comparator = new AlphanumComparator();
-            Collections.sort(items, new Comparator<MapRow>()
-            {
-               @Override public int compare(MapRow o1, MapRow o2)
-               {
-                  return comparator.compare(o1.getString("WBS"), o2.getString("WBS"));
-               }
-            });
+            items.sort((o1, o2) -> comparator.compare(o1.getString("WBS"), o2.getString("WBS")));
 
             for (MapRow row : items)
             {
@@ -561,13 +546,7 @@ public final class SureTrakDatabaseReader extends AbstractProjectFileReader
          items.add(row);
       }
       final AlphanumComparator comparator = new AlphanumComparator();
-      Collections.sort(items, new Comparator<MapRow>()
-      {
-         @Override public int compare(MapRow o1, MapRow o2)
-         {
-            return comparator.compare(o1.getString("ACTIVITY_ID"), o2.getString("ACTIVITY_ID"));
-         }
-      });
+      items.sort((o1, o2) -> comparator.compare(o1.getString("ACTIVITY_ID"), o2.getString("ACTIVITY_ID")));
 
       for (MapRow row : items)
       {
@@ -736,25 +715,7 @@ public final class SureTrakDatabaseReader extends AbstractProjectFileReader
     */
    private static void defineField(Map<String, FieldType> container, String name, FieldType type)
    {
-      defineField(container, name, type, null);
-   }
-
-   /**
-    * Configure the mapping between a database column and a field, including definition of
-    * an alias.
-    *
-    * @param container column to field map
-    * @param name column name
-    * @param type field type
-    * @param alias field alias
-    */
-   private static void defineField(Map<String, FieldType> container, String name, FieldType type, String alias)
-   {
       container.put(name, type);
-      //      if (alias != null)
-      //      {
-      //         ALIASES.put(type, alias);
-      //      }
    }
 
    private String m_projectName;
@@ -780,11 +741,11 @@ public final class SureTrakDatabaseReader extends AbstractProjectFileReader
       defineField(RESOURCE_FIELDS, "CODE", ResourceField.CODE);
 
       defineField(TASK_FIELDS, "NAME", TaskField.NAME);
-      defineField(TASK_FIELDS, "ACTIVITY_ID", TaskField.TEXT1);
-      defineField(TASK_FIELDS, "DEPARTMENT", TaskField.TEXT2);
-      defineField(TASK_FIELDS, "MANAGER", TaskField.TEXT3);
-      defineField(TASK_FIELDS, "SECTION", TaskField.TEXT4);
-      defineField(TASK_FIELDS, "MAIL", TaskField.TEXT5);
+      defineField(TASK_FIELDS, "ACTIVITY_ID", TaskField.ACTIVITY_ID);
+      defineField(TASK_FIELDS, "DEPARTMENT", TaskField.DEPARTMENT);
+      defineField(TASK_FIELDS, "MANAGER", TaskField.MANAGER);
+      defineField(TASK_FIELDS, "SECTION", TaskField.SECTION);
+      defineField(TASK_FIELDS, "MAIL", TaskField.MAIL);
 
       defineField(TASK_FIELDS, "PERCENT_COMPLETE", TaskField.PERCENT_COMPLETE);
       defineField(TASK_FIELDS, "EARLY_START", TaskField.EARLY_START);

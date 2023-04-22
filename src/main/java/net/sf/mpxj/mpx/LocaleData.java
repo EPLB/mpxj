@@ -42,9 +42,6 @@ import net.sf.mpxj.TimeUnit;
  */
 public final class LocaleData extends ListResourceBundle
 {
-   /**
-    * {@inheritDoc}
-    */
    @Override public Object[][] getContents()
    {
       return (RESOURCE_DATA);
@@ -201,6 +198,7 @@ public final class LocaleData extends ListResourceBundle
       TIME_UNITS_ARRAY_DATA[TimeUnit.WEEKS.getValue()] = new String[]
       {
          "w",
+         "wk",
          "weeks"
       };
 

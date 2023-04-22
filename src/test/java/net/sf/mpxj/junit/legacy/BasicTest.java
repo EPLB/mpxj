@@ -26,6 +26,7 @@ package net.sf.mpxj.junit.legacy;
 import static org.junit.Assert.*;
 
 import java.io.File;
+import java.nio.file.Files;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Iterator;
@@ -74,7 +75,7 @@ public class BasicTest
    {
       File in = new File(MpxjTestData.filePath("legacy/sample.mpx"));
       ProjectFile mpx = new MPXReader().read(in);
-      File out = File.createTempFile("junit", ".mpx");
+      File out = Files.createTempFile("junit", ".mpx").toFile();
       MPXWriter writer = new MPXWriter();
       writer.setUseLocaleDefaults(false);
       writer.write(mpx, out);
@@ -93,7 +94,7 @@ public class BasicTest
    {
       File in = new File(MpxjTestData.filePath("legacy/sample1.xml"));
       ProjectFile xml = new MSPDIReader().read(in);
-      File out = File.createTempFile("junit", ".xml");
+      File out = Files.createTempFile("junit", ".xml").toFile();
       new MSPDIWriter().write(xml, out);
       boolean success = FileUtility.equals(in, out);
       assertTrue("Files are not identical", success);
@@ -110,7 +111,7 @@ public class BasicTest
    {
       File in = new File(MpxjTestData.filePath("legacy/sample1.mpx"));
       ProjectFile mpx = new MPXReader().read(in);
-      File out = File.createTempFile("junit", ".mpx");
+      File out = Files.createTempFile("junit", ".mpx").toFile();
       MPXWriter writer = new MPXWriter();
       writer.setUseLocaleDefaults(false);
       writer.write(mpx, out);
@@ -122,15 +123,13 @@ public class BasicTest
    /**
     * Test to ensure that files without tasks or resources generate
     * correct MPX files.
-    *
-    * @throws Exception
     */
    @Test public void testRewrite4() throws Exception
    {
       File in = new File(MpxjTestData.filePath("legacy/empty.mpp"));
       ProjectFile mpx = new MPPReader().read(in);
       mpx.getProjectProperties().setCurrentDate(new SimpleDateFormat("dd/MM/yyyy").parse("01/03/2006"));
-      File out = File.createTempFile("junit", ".mpx");
+      File out = Files.createTempFile("junit", ".mpx").toFile();
       MPXWriter writer = new MPXWriter();
       writer.setUseLocaleDefaults(false);
       writer.write(mpx, out);
@@ -141,14 +140,12 @@ public class BasicTest
 
    /**
     * Exercise PlannerWriter.
-    *
-    * @throws Exception
     */
    @Test public void testRewrite5() throws Exception
    {
       File in = new File(MpxjTestData.filePath("legacy/sample.mpx"));
       ProjectFile mpx = new MPXReader().read(in);
-      File out = File.createTempFile("junit", ".planner");
+      File out = Files.createTempFile("junit", ".planner").toFile();
       new PlannerWriter().write(mpx, out);
       //success = FileUtility.equals (in, out);
       //assertTrue ("Files are not identical", success);
@@ -158,7 +155,7 @@ public class BasicTest
    /**
     * This test exercises the automatic generation of WBS and outline levels.
     */
-   @Test public void testAutomaticGeneration() throws Exception
+   @Test public void testAutomaticGeneration()
    {
       ProjectFile file = new ProjectFile();
 
@@ -245,10 +242,8 @@ public class BasicTest
    /**
     * Test to ensure that the basic task hierarchy is
     * represented correctly.
-    *
-    * @throws Exception
     */
-   @Test public void testStructure() throws Exception
+   @Test public void testStructure()
    {
       ProjectFile file = new ProjectFile();
 
@@ -273,7 +268,7 @@ public class BasicTest
    {
       File in = new File(MpxjTestData.filePath("legacy/sample98.mpp"));
       ProjectFile mpp = new MPPReader().read(in);
-      File out = File.createTempFile("junit", ".mpx");
+      File out = Files.createTempFile("junit", ".mpx").toFile();
       new MPXWriter().write(mpp, out);
       commonTests(mpp);
       out.deleteOnExit();
@@ -286,7 +281,7 @@ public class BasicTest
    {
       File in = new File(MpxjTestData.filePath("legacy/sample.mpp"));
       ProjectFile mpp = new MPPReader().read(in);
-      File out = File.createTempFile("junit", ".mpx");
+      File out = Files.createTempFile("junit", ".mpx").toFile();
       new MPXWriter().write(mpp, out);
       commonTests(mpp);
       out.deleteOnExit();
@@ -299,7 +294,7 @@ public class BasicTest
    {
       File in = new File(MpxjTestData.filePath("legacy/sample.xml"));
       ProjectFile xml = new MSPDIReader().read(in);
-      File out = File.createTempFile("junit", ".mpx");
+      File out = Files.createTempFile("junit", ".mpx").toFile();
       new MPXWriter().write(xml, out);
       commonTests(xml);
       out.deleteOnExit();
@@ -342,7 +337,7 @@ public class BasicTest
 
             default:
             {
-               assertTrue("Unexpected resource", false);
+               fail("Unexpected resource");
                break;
             }
          }
@@ -350,31 +345,27 @@ public class BasicTest
    }
 
    /**
-    * This method tests two stages of conversion, MPP->MPX->MSPDI. This
+    * This method tests two stages of conversion, MPP to MPX to MSPDI. This
     * has been designed to exercise bug 896189, which was exhibited
     * when an MSPDI file was generated from an MPX file which did not
     * have the same set of attributes as a native MPP file.
-    *
-    * @throws Exception
     */
    @Test public void testConversion4() throws Exception
    {
       File in = new File(MpxjTestData.filePath("legacy/sample.mpp"));
       ProjectFile mpp = new MPPReader().read(in);
-      File out = File.createTempFile("junit", ".mpx");
+      File out = Files.createTempFile("junit", ".mpx").toFile();
       new MPXWriter().write(mpp, out);
 
       ProjectFile mpx = new MPXReader().read(out);
       out.deleteOnExit();
-      out = File.createTempFile("junit", ".xml");
+      out = Files.createTempFile("junit", ".xml").toFile();
       new MSPDIWriter().write(mpx, out);
       out.deleteOnExit();
    }
 
    /**
     * Simple test to exercise iterating through the task predecessors.
-    *
-    * @throws Exception
     */
    @Test public void testRelationList() throws Exception
    {
@@ -397,8 +388,6 @@ public class BasicTest
    /**
     * This method exercises task notes, ensuring that
     * embedded commas and quotes are handled correctly.
-    *
-    * @throws Exception
     */
    @Test public void testTaskNotes() throws Exception
    {
@@ -440,7 +429,7 @@ public class BasicTest
       task5.setStart(new Date());
       task5.setNotes(notes5);
 
-      File out = File.createTempFile("junit", ".mpx");
+      File out = Files.createTempFile("junit", ".mpx").toFile();
       new MPXWriter().write(file1, out);
 
       ProjectFile file2 = new MPXReader().read(out);
@@ -471,8 +460,6 @@ public class BasicTest
    /**
     * This method exercises resource notes, ensuring that
     * embedded commas and quotes are handled correctly.
-    *
-    * @throws Exception
     */
    @Test public void testResourceNotes() throws Exception
    {
@@ -504,7 +491,7 @@ public class BasicTest
       resource5.setName("Test Resource 5");
       resource5.setNotes(notes5);
 
-      File out = File.createTempFile("junit", ".mpx");
+      File out = Files.createTempFile("junit", ".mpx").toFile();
       new MPXWriter().write(file1, out);
 
       ProjectFile file2 = new MPXReader().read(out);
@@ -538,7 +525,7 @@ public class BasicTest
    {
       File in = new File(MpxjTestData.filePath("legacy/bug1.mpp"));
       ProjectFile mpp = new MPPReader().read(in);
-      File out = File.createTempFile("junit", ".mpx");
+      File out = Files.createTempFile("junit", ".mpx").toFile();
       new MPXWriter().write(mpp, out);
       out.deleteOnExit();
    }
@@ -550,7 +537,7 @@ public class BasicTest
    {
       File in = new File(MpxjTestData.filePath("legacy/bug2.mpp"));
       ProjectFile mpp = new MPPReader().read(in);
-      File out = File.createTempFile("junit", ".mpx");
+      File out = Files.createTempFile("junit", ".mpx").toFile();
       new MPXWriter().write(mpp, out);
       out.deleteOnExit();
    }
@@ -577,7 +564,7 @@ public class BasicTest
    {
       File in = new File(MpxjTestData.filePath("legacy/bug4.mpp"));
       ProjectFile mpp = new MPPReader().read(in);
-      File out = File.createTempFile("junit", ".mpx");
+      File out = Files.createTempFile("junit", ".mpx").toFile();
       new MPXWriter().write(mpp, out.getAbsolutePath());
       out.deleteOnExit();
    }
@@ -607,8 +594,6 @@ public class BasicTest
     * Ensure that we are reading MPP8 flags correctly. This test reads a
     * file where the tasks alternately have values of either all true, or
     * all false. Each pair of tasks increases by one in outline level.
-    *
-    * @throws Exception
     */
    @Test public void testMPP8Flags1() throws Exception
    {
@@ -672,8 +657,6 @@ public class BasicTest
     * This test reads flags from an MPP8 file where each set of 20 tasks has
     * a single flag from 1-20 set. The next set of 20 tasks increases by
     * one outline level.
-    *
-    * @throws Exception
     */
    @Test public void testMPP8Flags2() throws Exception
    {
@@ -684,7 +667,7 @@ public class BasicTest
 
       for (Task task : mpp.getTasks())
       {
-         if (task.getName().startsWith("Parent") == false)
+         if (!task.getName().startsWith("Parent"))
          {
             flags = getFlagArray(task);
             assertTrue("Incorrect flag set in task " + task.getName(), testSingleFlagTrue(flags, index));
@@ -701,8 +684,6 @@ public class BasicTest
     * Ensure that we are reading MPP9 flags correctly. This test reads a
     * file where the tasks alternately have values of either all true, or
     * all false. Each pair of tasks increases by one in outline level.
-    *
-    * @throws Exception
     */
    @Test public void testMPP9Flags1() throws Exception
    {
@@ -768,8 +749,6 @@ public class BasicTest
     * This test reads flags from an MPP9 file where each set of 20 tasks has
     * a single flag from 1-20 set. The next set of 20 tasks increases by
     * one outline level.
-    *
-    * @throws Exception
     */
    @Test public void testMPP9Flags2() throws Exception
    {
@@ -780,7 +759,7 @@ public class BasicTest
 
       for (Task task : mpp.getTasks())
       {
-         if (task.getUniqueID().intValue() != 0 && task.getName().startsWith("Parent") == false)
+         if (task.getUniqueID().intValue() != 0 && !task.getName().startsWith("Parent"))
          {
             flags = getFlagArray(task);
             assertTrue("Incorrect flag set in task " + task.getName(), testSingleFlagTrue(flags, index));
@@ -842,7 +821,7 @@ public class BasicTest
 
       for (int loop = 0; loop < flags.length; loop++)
       {
-         if (flags[loop] == true && loop != index)
+         if (flags[loop] && loop != index)
          {
             //System.out.println ("found flag at " + loop);
             result = false;
@@ -855,8 +834,6 @@ public class BasicTest
 
    /**
     * Test retrieval of view information.
-    *
-    * @throws Exception
     */
    @Test public void testViews() throws Exception
    {
@@ -871,8 +848,6 @@ public class BasicTest
 
    /**
     * Test retrieval of table information.
-    *
-    * @throws Exception
     */
    @Test public void testTables() throws Exception
    {
@@ -899,8 +874,6 @@ public class BasicTest
 
    /**
     * Test use of task calendars.
-    *
-    * @throws Exception
     */
    @Test public void testTaskCalendars() throws Exception
    {
@@ -924,7 +897,7 @@ public class BasicTest
       //
       // Write this out as an MSPDI file
       //
-      File out = File.createTempFile("junit", ".xml");
+      File out = Files.createTempFile("junit", ".xml").toFile();
       new MSPDIWriter().write(mpp, out);
 
       //
@@ -945,8 +918,6 @@ public class BasicTest
 
    /**
     * Exercise field alias code for MSPDI files.
-    *
-    * @throws Exception
     */
    @Test public void testMSPDIAliases() throws Exception
    {
@@ -957,7 +928,7 @@ public class BasicTest
       ProjectFile xml = reader.read(in);
       validateAliases(xml);
 
-      File out = File.createTempFile("junit", ".xml");
+      File out = Files.createTempFile("junit", ".xml").toFile();
       writer.write(xml, out);
 
       xml = reader.read(out);
@@ -967,8 +938,6 @@ public class BasicTest
 
    /**
     * Exercise field alias code for MPP9 files.
-    *
-    * @throws Exception
     */
    @Test public void testMPP9Aliases() throws Exception
    {
@@ -987,275 +956,273 @@ public class BasicTest
    {
       CustomFieldContainer fields = mpx.getCustomFields();
 
-      assertEquals("Text1t", fields.getCustomField(TaskField.TEXT1).getAlias());
-      assertEquals("Text2t", fields.getCustomField(TaskField.TEXT2).getAlias());
-      assertEquals("Text3t", fields.getCustomField(TaskField.TEXT3).getAlias());
-      assertEquals("Text4t", fields.getCustomField(TaskField.TEXT4).getAlias());
-      assertEquals("Text5t", fields.getCustomField(TaskField.TEXT5).getAlias());
-      assertEquals("Text6t", fields.getCustomField(TaskField.TEXT6).getAlias());
-      assertEquals("Text7t", fields.getCustomField(TaskField.TEXT7).getAlias());
-      assertEquals("Text8t", fields.getCustomField(TaskField.TEXT8).getAlias());
-      assertEquals("Text9t", fields.getCustomField(TaskField.TEXT9).getAlias());
-      assertEquals("Text10t", fields.getCustomField(TaskField.TEXT10).getAlias());
-      assertEquals("Text11t", fields.getCustomField(TaskField.TEXT11).getAlias());
-      assertEquals("Text12t", fields.getCustomField(TaskField.TEXT12).getAlias());
-      assertEquals("Text13t", fields.getCustomField(TaskField.TEXT13).getAlias());
-      assertEquals("Text14t", fields.getCustomField(TaskField.TEXT14).getAlias());
-      assertEquals("Text15t", fields.getCustomField(TaskField.TEXT15).getAlias());
-      assertEquals("Text16t", fields.getCustomField(TaskField.TEXT16).getAlias());
-      assertEquals("Text17t", fields.getCustomField(TaskField.TEXT17).getAlias());
-      assertEquals("Text18t", fields.getCustomField(TaskField.TEXT18).getAlias());
-      assertEquals("Text19t", fields.getCustomField(TaskField.TEXT19).getAlias());
-      assertEquals("Text20t", fields.getCustomField(TaskField.TEXT20).getAlias());
-      assertEquals("Text21t", fields.getCustomField(TaskField.TEXT21).getAlias());
-      assertEquals("Text22t", fields.getCustomField(TaskField.TEXT22).getAlias());
-      assertEquals("Text23t", fields.getCustomField(TaskField.TEXT23).getAlias());
-      assertEquals("Text24t", fields.getCustomField(TaskField.TEXT24).getAlias());
-      assertEquals("Text25t", fields.getCustomField(TaskField.TEXT25).getAlias());
-      assertEquals("Text26t", fields.getCustomField(TaskField.TEXT26).getAlias());
-      assertEquals("Text27t", fields.getCustomField(TaskField.TEXT27).getAlias());
-      assertEquals("Text28t", fields.getCustomField(TaskField.TEXT28).getAlias());
-      assertEquals("Text29t", fields.getCustomField(TaskField.TEXT29).getAlias());
-      assertEquals("Text30t", fields.getCustomField(TaskField.TEXT30).getAlias());
-      assertEquals("Start1t", fields.getCustomField(TaskField.START1).getAlias());
-      assertEquals("Start2t", fields.getCustomField(TaskField.START2).getAlias());
-      assertEquals("Start3t", fields.getCustomField(TaskField.START3).getAlias());
-      assertEquals("Start4t", fields.getCustomField(TaskField.START4).getAlias());
-      assertEquals("Start5t", fields.getCustomField(TaskField.START5).getAlias());
-      assertEquals("Start6t", fields.getCustomField(TaskField.START6).getAlias());
-      assertEquals("Start7t", fields.getCustomField(TaskField.START7).getAlias());
-      assertEquals("Start8t", fields.getCustomField(TaskField.START8).getAlias());
-      assertEquals("Start9t", fields.getCustomField(TaskField.START9).getAlias());
-      assertEquals("Start10t", fields.getCustomField(TaskField.START10).getAlias());
-      assertEquals("Finish1t", fields.getCustomField(TaskField.FINISH1).getAlias());
-      assertEquals("Finish2t", fields.getCustomField(TaskField.FINISH2).getAlias());
-      assertEquals("Finish3t", fields.getCustomField(TaskField.FINISH3).getAlias());
-      assertEquals("Finish4t", fields.getCustomField(TaskField.FINISH4).getAlias());
-      assertEquals("Finish5t", fields.getCustomField(TaskField.FINISH5).getAlias());
-      assertEquals("Finish6t", fields.getCustomField(TaskField.FINISH6).getAlias());
-      assertEquals("Finish7t", fields.getCustomField(TaskField.FINISH7).getAlias());
-      assertEquals("Finish8t", fields.getCustomField(TaskField.FINISH8).getAlias());
-      assertEquals("Finish9t", fields.getCustomField(TaskField.FINISH9).getAlias());
-      assertEquals("Finish10t", fields.getCustomField(TaskField.FINISH10).getAlias());
-      assertEquals("Cost1t", fields.getCustomField(TaskField.COST1).getAlias());
-      assertEquals("Cost2t", fields.getCustomField(TaskField.COST2).getAlias());
-      assertEquals("Cost3t", fields.getCustomField(TaskField.COST3).getAlias());
-      assertEquals("Cost4t", fields.getCustomField(TaskField.COST4).getAlias());
-      assertEquals("Cost5t", fields.getCustomField(TaskField.COST5).getAlias());
-      assertEquals("Cost6t", fields.getCustomField(TaskField.COST6).getAlias());
-      assertEquals("Cost7t", fields.getCustomField(TaskField.COST7).getAlias());
-      assertEquals("Cost8t", fields.getCustomField(TaskField.COST8).getAlias());
-      assertEquals("Cost9t", fields.getCustomField(TaskField.COST9).getAlias());
-      assertEquals("Cost10t", fields.getCustomField(TaskField.COST10).getAlias());
-      assertEquals("Date1t", fields.getCustomField(TaskField.DATE1).getAlias());
-      assertEquals("Date2t", fields.getCustomField(TaskField.DATE2).getAlias());
-      assertEquals("Date3t", fields.getCustomField(TaskField.DATE3).getAlias());
-      assertEquals("Date4t", fields.getCustomField(TaskField.DATE4).getAlias());
-      assertEquals("Date5t", fields.getCustomField(TaskField.DATE5).getAlias());
-      assertEquals("Date6t", fields.getCustomField(TaskField.DATE6).getAlias());
-      assertEquals("Date7t", fields.getCustomField(TaskField.DATE7).getAlias());
-      assertEquals("Date8t", fields.getCustomField(TaskField.DATE8).getAlias());
-      assertEquals("Date9t", fields.getCustomField(TaskField.DATE9).getAlias());
-      assertEquals("Date10t", fields.getCustomField(TaskField.DATE10).getAlias());
-      assertEquals("Flag1t", fields.getCustomField(TaskField.FLAG1).getAlias());
-      assertEquals("Flag2t", fields.getCustomField(TaskField.FLAG2).getAlias());
-      assertEquals("Flag3t", fields.getCustomField(TaskField.FLAG3).getAlias());
-      assertEquals("Flag4t", fields.getCustomField(TaskField.FLAG4).getAlias());
-      assertEquals("Flag5t", fields.getCustomField(TaskField.FLAG5).getAlias());
-      assertEquals("Flag6t", fields.getCustomField(TaskField.FLAG6).getAlias());
-      assertEquals("Flag7t", fields.getCustomField(TaskField.FLAG7).getAlias());
-      assertEquals("Flag8t", fields.getCustomField(TaskField.FLAG8).getAlias());
-      assertEquals("Flag9t", fields.getCustomField(TaskField.FLAG9).getAlias());
-      assertEquals("Flag10t", fields.getCustomField(TaskField.FLAG10).getAlias());
-      assertEquals("Flag11t", fields.getCustomField(TaskField.FLAG11).getAlias());
-      assertEquals("Flag12t", fields.getCustomField(TaskField.FLAG12).getAlias());
-      assertEquals("Flag13t", fields.getCustomField(TaskField.FLAG13).getAlias());
-      assertEquals("Flag14t", fields.getCustomField(TaskField.FLAG14).getAlias());
-      assertEquals("Flag15t", fields.getCustomField(TaskField.FLAG15).getAlias());
-      assertEquals("Flag16t", fields.getCustomField(TaskField.FLAG16).getAlias());
-      assertEquals("Flag17t", fields.getCustomField(TaskField.FLAG17).getAlias());
-      assertEquals("Flag18t", fields.getCustomField(TaskField.FLAG18).getAlias());
-      assertEquals("Flag19t", fields.getCustomField(TaskField.FLAG19).getAlias());
-      assertEquals("Flag20t", fields.getCustomField(TaskField.FLAG20).getAlias());
-      assertEquals("Number1t", fields.getCustomField(TaskField.NUMBER1).getAlias());
-      assertEquals("Number2t", fields.getCustomField(TaskField.NUMBER2).getAlias());
-      assertEquals("Number3t", fields.getCustomField(TaskField.NUMBER3).getAlias());
-      assertEquals("Number4t", fields.getCustomField(TaskField.NUMBER4).getAlias());
-      assertEquals("Number5t", fields.getCustomField(TaskField.NUMBER5).getAlias());
-      assertEquals("Number6t", fields.getCustomField(TaskField.NUMBER6).getAlias());
-      assertEquals("Number7t", fields.getCustomField(TaskField.NUMBER7).getAlias());
-      assertEquals("Number8t", fields.getCustomField(TaskField.NUMBER8).getAlias());
-      assertEquals("Number9t", fields.getCustomField(TaskField.NUMBER9).getAlias());
-      assertEquals("Number10t", fields.getCustomField(TaskField.NUMBER10).getAlias());
-      assertEquals("Number11t", fields.getCustomField(TaskField.NUMBER11).getAlias());
-      assertEquals("Number12t", fields.getCustomField(TaskField.NUMBER12).getAlias());
-      assertEquals("Number13t", fields.getCustomField(TaskField.NUMBER13).getAlias());
-      assertEquals("Number14t", fields.getCustomField(TaskField.NUMBER14).getAlias());
-      assertEquals("Number15t", fields.getCustomField(TaskField.NUMBER15).getAlias());
-      assertEquals("Number16t", fields.getCustomField(TaskField.NUMBER16).getAlias());
-      assertEquals("Number17t", fields.getCustomField(TaskField.NUMBER17).getAlias());
-      assertEquals("Number18t", fields.getCustomField(TaskField.NUMBER18).getAlias());
-      assertEquals("Number19t", fields.getCustomField(TaskField.NUMBER19).getAlias());
-      assertEquals("Number20t", fields.getCustomField(TaskField.NUMBER20).getAlias());
-      assertEquals("Duration1t", fields.getCustomField(TaskField.DURATION1).getAlias());
-      assertEquals("Duration2t", fields.getCustomField(TaskField.DURATION2).getAlias());
-      assertEquals("Duration3t", fields.getCustomField(TaskField.DURATION3).getAlias());
-      assertEquals("Duration4t", fields.getCustomField(TaskField.DURATION4).getAlias());
-      assertEquals("Duration5t", fields.getCustomField(TaskField.DURATION5).getAlias());
-      assertEquals("Duration6t", fields.getCustomField(TaskField.DURATION6).getAlias());
-      assertEquals("Duration7t", fields.getCustomField(TaskField.DURATION7).getAlias());
-      assertEquals("Duration8t", fields.getCustomField(TaskField.DURATION8).getAlias());
-      assertEquals("Duration9t", fields.getCustomField(TaskField.DURATION9).getAlias());
-      assertEquals("Duration10t", fields.getCustomField(TaskField.DURATION10).getAlias());
-      assertEquals("Outline Code1t", fields.getCustomField(TaskField.OUTLINE_CODE1).getAlias());
-      assertEquals("Outline Code2t", fields.getCustomField(TaskField.OUTLINE_CODE2).getAlias());
-      assertEquals("Outline Code3t", fields.getCustomField(TaskField.OUTLINE_CODE3).getAlias());
-      assertEquals("Outline Code4t", fields.getCustomField(TaskField.OUTLINE_CODE4).getAlias());
-      assertEquals("Outline Code5t", fields.getCustomField(TaskField.OUTLINE_CODE5).getAlias());
-      assertEquals("Outline Code6t", fields.getCustomField(TaskField.OUTLINE_CODE6).getAlias());
-      assertEquals("Outline Code7t", fields.getCustomField(TaskField.OUTLINE_CODE7).getAlias());
-      assertEquals("Outline Code8t", fields.getCustomField(TaskField.OUTLINE_CODE8).getAlias());
-      assertEquals("Outline Code9t", fields.getCustomField(TaskField.OUTLINE_CODE9).getAlias());
-      assertEquals("Outline Code10t", fields.getCustomField(TaskField.OUTLINE_CODE10).getAlias());
+      assertEquals("Text1t", fields.get(TaskField.TEXT1).getAlias());
+      assertEquals("Text2t", fields.get(TaskField.TEXT2).getAlias());
+      assertEquals("Text3t", fields.get(TaskField.TEXT3).getAlias());
+      assertEquals("Text4t", fields.get(TaskField.TEXT4).getAlias());
+      assertEquals("Text5t", fields.get(TaskField.TEXT5).getAlias());
+      assertEquals("Text6t", fields.get(TaskField.TEXT6).getAlias());
+      assertEquals("Text7t", fields.get(TaskField.TEXT7).getAlias());
+      assertEquals("Text8t", fields.get(TaskField.TEXT8).getAlias());
+      assertEquals("Text9t", fields.get(TaskField.TEXT9).getAlias());
+      assertEquals("Text10t", fields.get(TaskField.TEXT10).getAlias());
+      assertEquals("Text11t", fields.get(TaskField.TEXT11).getAlias());
+      assertEquals("Text12t", fields.get(TaskField.TEXT12).getAlias());
+      assertEquals("Text13t", fields.get(TaskField.TEXT13).getAlias());
+      assertEquals("Text14t", fields.get(TaskField.TEXT14).getAlias());
+      assertEquals("Text15t", fields.get(TaskField.TEXT15).getAlias());
+      assertEquals("Text16t", fields.get(TaskField.TEXT16).getAlias());
+      assertEquals("Text17t", fields.get(TaskField.TEXT17).getAlias());
+      assertEquals("Text18t", fields.get(TaskField.TEXT18).getAlias());
+      assertEquals("Text19t", fields.get(TaskField.TEXT19).getAlias());
+      assertEquals("Text20t", fields.get(TaskField.TEXT20).getAlias());
+      assertEquals("Text21t", fields.get(TaskField.TEXT21).getAlias());
+      assertEquals("Text22t", fields.get(TaskField.TEXT22).getAlias());
+      assertEquals("Text23t", fields.get(TaskField.TEXT23).getAlias());
+      assertEquals("Text24t", fields.get(TaskField.TEXT24).getAlias());
+      assertEquals("Text25t", fields.get(TaskField.TEXT25).getAlias());
+      assertEquals("Text26t", fields.get(TaskField.TEXT26).getAlias());
+      assertEquals("Text27t", fields.get(TaskField.TEXT27).getAlias());
+      assertEquals("Text28t", fields.get(TaskField.TEXT28).getAlias());
+      assertEquals("Text29t", fields.get(TaskField.TEXT29).getAlias());
+      assertEquals("Text30t", fields.get(TaskField.TEXT30).getAlias());
+      assertEquals("Start1t", fields.get(TaskField.START1).getAlias());
+      assertEquals("Start2t", fields.get(TaskField.START2).getAlias());
+      assertEquals("Start3t", fields.get(TaskField.START3).getAlias());
+      assertEquals("Start4t", fields.get(TaskField.START4).getAlias());
+      assertEquals("Start5t", fields.get(TaskField.START5).getAlias());
+      assertEquals("Start6t", fields.get(TaskField.START6).getAlias());
+      assertEquals("Start7t", fields.get(TaskField.START7).getAlias());
+      assertEquals("Start8t", fields.get(TaskField.START8).getAlias());
+      assertEquals("Start9t", fields.get(TaskField.START9).getAlias());
+      assertEquals("Start10t", fields.get(TaskField.START10).getAlias());
+      assertEquals("Finish1t", fields.get(TaskField.FINISH1).getAlias());
+      assertEquals("Finish2t", fields.get(TaskField.FINISH2).getAlias());
+      assertEquals("Finish3t", fields.get(TaskField.FINISH3).getAlias());
+      assertEquals("Finish4t", fields.get(TaskField.FINISH4).getAlias());
+      assertEquals("Finish5t", fields.get(TaskField.FINISH5).getAlias());
+      assertEquals("Finish6t", fields.get(TaskField.FINISH6).getAlias());
+      assertEquals("Finish7t", fields.get(TaskField.FINISH7).getAlias());
+      assertEquals("Finish8t", fields.get(TaskField.FINISH8).getAlias());
+      assertEquals("Finish9t", fields.get(TaskField.FINISH9).getAlias());
+      assertEquals("Finish10t", fields.get(TaskField.FINISH10).getAlias());
+      assertEquals("Cost1t", fields.get(TaskField.COST1).getAlias());
+      assertEquals("Cost2t", fields.get(TaskField.COST2).getAlias());
+      assertEquals("Cost3t", fields.get(TaskField.COST3).getAlias());
+      assertEquals("Cost4t", fields.get(TaskField.COST4).getAlias());
+      assertEquals("Cost5t", fields.get(TaskField.COST5).getAlias());
+      assertEquals("Cost6t", fields.get(TaskField.COST6).getAlias());
+      assertEquals("Cost7t", fields.get(TaskField.COST7).getAlias());
+      assertEquals("Cost8t", fields.get(TaskField.COST8).getAlias());
+      assertEquals("Cost9t", fields.get(TaskField.COST9).getAlias());
+      assertEquals("Cost10t", fields.get(TaskField.COST10).getAlias());
+      assertEquals("Date1t", fields.get(TaskField.DATE1).getAlias());
+      assertEquals("Date2t", fields.get(TaskField.DATE2).getAlias());
+      assertEquals("Date3t", fields.get(TaskField.DATE3).getAlias());
+      assertEquals("Date4t", fields.get(TaskField.DATE4).getAlias());
+      assertEquals("Date5t", fields.get(TaskField.DATE5).getAlias());
+      assertEquals("Date6t", fields.get(TaskField.DATE6).getAlias());
+      assertEquals("Date7t", fields.get(TaskField.DATE7).getAlias());
+      assertEquals("Date8t", fields.get(TaskField.DATE8).getAlias());
+      assertEquals("Date9t", fields.get(TaskField.DATE9).getAlias());
+      assertEquals("Date10t", fields.get(TaskField.DATE10).getAlias());
+      assertEquals("Flag1t", fields.get(TaskField.FLAG1).getAlias());
+      assertEquals("Flag2t", fields.get(TaskField.FLAG2).getAlias());
+      assertEquals("Flag3t", fields.get(TaskField.FLAG3).getAlias());
+      assertEquals("Flag4t", fields.get(TaskField.FLAG4).getAlias());
+      assertEquals("Flag5t", fields.get(TaskField.FLAG5).getAlias());
+      assertEquals("Flag6t", fields.get(TaskField.FLAG6).getAlias());
+      assertEquals("Flag7t", fields.get(TaskField.FLAG7).getAlias());
+      assertEquals("Flag8t", fields.get(TaskField.FLAG8).getAlias());
+      assertEquals("Flag9t", fields.get(TaskField.FLAG9).getAlias());
+      assertEquals("Flag10t", fields.get(TaskField.FLAG10).getAlias());
+      assertEquals("Flag11t", fields.get(TaskField.FLAG11).getAlias());
+      assertEquals("Flag12t", fields.get(TaskField.FLAG12).getAlias());
+      assertEquals("Flag13t", fields.get(TaskField.FLAG13).getAlias());
+      assertEquals("Flag14t", fields.get(TaskField.FLAG14).getAlias());
+      assertEquals("Flag15t", fields.get(TaskField.FLAG15).getAlias());
+      assertEquals("Flag16t", fields.get(TaskField.FLAG16).getAlias());
+      assertEquals("Flag17t", fields.get(TaskField.FLAG17).getAlias());
+      assertEquals("Flag18t", fields.get(TaskField.FLAG18).getAlias());
+      assertEquals("Flag19t", fields.get(TaskField.FLAG19).getAlias());
+      assertEquals("Flag20t", fields.get(TaskField.FLAG20).getAlias());
+      assertEquals("Number1t", fields.get(TaskField.NUMBER1).getAlias());
+      assertEquals("Number2t", fields.get(TaskField.NUMBER2).getAlias());
+      assertEquals("Number3t", fields.get(TaskField.NUMBER3).getAlias());
+      assertEquals("Number4t", fields.get(TaskField.NUMBER4).getAlias());
+      assertEquals("Number5t", fields.get(TaskField.NUMBER5).getAlias());
+      assertEquals("Number6t", fields.get(TaskField.NUMBER6).getAlias());
+      assertEquals("Number7t", fields.get(TaskField.NUMBER7).getAlias());
+      assertEquals("Number8t", fields.get(TaskField.NUMBER8).getAlias());
+      assertEquals("Number9t", fields.get(TaskField.NUMBER9).getAlias());
+      assertEquals("Number10t", fields.get(TaskField.NUMBER10).getAlias());
+      assertEquals("Number11t", fields.get(TaskField.NUMBER11).getAlias());
+      assertEquals("Number12t", fields.get(TaskField.NUMBER12).getAlias());
+      assertEquals("Number13t", fields.get(TaskField.NUMBER13).getAlias());
+      assertEquals("Number14t", fields.get(TaskField.NUMBER14).getAlias());
+      assertEquals("Number15t", fields.get(TaskField.NUMBER15).getAlias());
+      assertEquals("Number16t", fields.get(TaskField.NUMBER16).getAlias());
+      assertEquals("Number17t", fields.get(TaskField.NUMBER17).getAlias());
+      assertEquals("Number18t", fields.get(TaskField.NUMBER18).getAlias());
+      assertEquals("Number19t", fields.get(TaskField.NUMBER19).getAlias());
+      assertEquals("Number20t", fields.get(TaskField.NUMBER20).getAlias());
+      assertEquals("Duration1t", fields.get(TaskField.DURATION1).getAlias());
+      assertEquals("Duration2t", fields.get(TaskField.DURATION2).getAlias());
+      assertEquals("Duration3t", fields.get(TaskField.DURATION3).getAlias());
+      assertEquals("Duration4t", fields.get(TaskField.DURATION4).getAlias());
+      assertEquals("Duration5t", fields.get(TaskField.DURATION5).getAlias());
+      assertEquals("Duration6t", fields.get(TaskField.DURATION6).getAlias());
+      assertEquals("Duration7t", fields.get(TaskField.DURATION7).getAlias());
+      assertEquals("Duration8t", fields.get(TaskField.DURATION8).getAlias());
+      assertEquals("Duration9t", fields.get(TaskField.DURATION9).getAlias());
+      assertEquals("Duration10t", fields.get(TaskField.DURATION10).getAlias());
+      assertEquals("Outline Code1t", fields.get(TaskField.OUTLINE_CODE1).getAlias());
+      assertEquals("Outline Code2t", fields.get(TaskField.OUTLINE_CODE2).getAlias());
+      assertEquals("Outline Code3t", fields.get(TaskField.OUTLINE_CODE3).getAlias());
+      assertEquals("Outline Code4t", fields.get(TaskField.OUTLINE_CODE4).getAlias());
+      assertEquals("Outline Code5t", fields.get(TaskField.OUTLINE_CODE5).getAlias());
+      assertEquals("Outline Code6t", fields.get(TaskField.OUTLINE_CODE6).getAlias());
+      assertEquals("Outline Code7t", fields.get(TaskField.OUTLINE_CODE7).getAlias());
+      assertEquals("Outline Code8t", fields.get(TaskField.OUTLINE_CODE8).getAlias());
+      assertEquals("Outline Code9t", fields.get(TaskField.OUTLINE_CODE9).getAlias());
+      assertEquals("Outline Code10t", fields.get(TaskField.OUTLINE_CODE10).getAlias());
 
-      assertEquals("Text1r", fields.getCustomField(ResourceField.TEXT1).getAlias());
-      assertEquals("Text2r", fields.getCustomField(ResourceField.TEXT2).getAlias());
-      assertEquals("Text3r", fields.getCustomField(ResourceField.TEXT3).getAlias());
-      assertEquals("Text4r", fields.getCustomField(ResourceField.TEXT4).getAlias());
-      assertEquals("Text5r", fields.getCustomField(ResourceField.TEXT5).getAlias());
-      assertEquals("Text6r", fields.getCustomField(ResourceField.TEXT6).getAlias());
-      assertEquals("Text7r", fields.getCustomField(ResourceField.TEXT7).getAlias());
-      assertEquals("Text8r", fields.getCustomField(ResourceField.TEXT8).getAlias());
-      assertEquals("Text9r", fields.getCustomField(ResourceField.TEXT9).getAlias());
-      assertEquals("Text10r", fields.getCustomField(ResourceField.TEXT10).getAlias());
-      assertEquals("Text11r", fields.getCustomField(ResourceField.TEXT11).getAlias());
-      assertEquals("Text12r", fields.getCustomField(ResourceField.TEXT12).getAlias());
-      assertEquals("Text13r", fields.getCustomField(ResourceField.TEXT13).getAlias());
-      assertEquals("Text14r", fields.getCustomField(ResourceField.TEXT14).getAlias());
-      assertEquals("Text15r", fields.getCustomField(ResourceField.TEXT15).getAlias());
-      assertEquals("Text16r", fields.getCustomField(ResourceField.TEXT16).getAlias());
-      assertEquals("Text17r", fields.getCustomField(ResourceField.TEXT17).getAlias());
-      assertEquals("Text18r", fields.getCustomField(ResourceField.TEXT18).getAlias());
-      assertEquals("Text19r", fields.getCustomField(ResourceField.TEXT19).getAlias());
-      assertEquals("Text20r", fields.getCustomField(ResourceField.TEXT20).getAlias());
-      assertEquals("Text21r", fields.getCustomField(ResourceField.TEXT21).getAlias());
-      assertEquals("Text22r", fields.getCustomField(ResourceField.TEXT22).getAlias());
-      assertEquals("Text23r", fields.getCustomField(ResourceField.TEXT23).getAlias());
-      assertEquals("Text24r", fields.getCustomField(ResourceField.TEXT24).getAlias());
-      assertEquals("Text25r", fields.getCustomField(ResourceField.TEXT25).getAlias());
-      assertEquals("Text26r", fields.getCustomField(ResourceField.TEXT26).getAlias());
-      assertEquals("Text27r", fields.getCustomField(ResourceField.TEXT27).getAlias());
-      assertEquals("Text28r", fields.getCustomField(ResourceField.TEXT28).getAlias());
-      assertEquals("Text29r", fields.getCustomField(ResourceField.TEXT29).getAlias());
-      assertEquals("Text30r", fields.getCustomField(ResourceField.TEXT30).getAlias());
-      assertEquals("Start1r", fields.getCustomField(ResourceField.START1).getAlias());
-      assertEquals("Start2r", fields.getCustomField(ResourceField.START2).getAlias());
-      assertEquals("Start3r", fields.getCustomField(ResourceField.START3).getAlias());
-      assertEquals("Start4r", fields.getCustomField(ResourceField.START4).getAlias());
-      assertEquals("Start5r", fields.getCustomField(ResourceField.START5).getAlias());
-      assertEquals("Start6r", fields.getCustomField(ResourceField.START6).getAlias());
-      assertEquals("Start7r", fields.getCustomField(ResourceField.START7).getAlias());
-      assertEquals("Start8r", fields.getCustomField(ResourceField.START8).getAlias());
-      assertEquals("Start9r", fields.getCustomField(ResourceField.START9).getAlias());
-      assertEquals("Start10r", fields.getCustomField(ResourceField.START10).getAlias());
-      assertEquals("Finish1r", fields.getCustomField(ResourceField.FINISH1).getAlias());
-      assertEquals("Finish2r", fields.getCustomField(ResourceField.FINISH2).getAlias());
-      assertEquals("Finish3r", fields.getCustomField(ResourceField.FINISH3).getAlias());
-      assertEquals("Finish4r", fields.getCustomField(ResourceField.FINISH4).getAlias());
-      assertEquals("Finish5r", fields.getCustomField(ResourceField.FINISH5).getAlias());
-      assertEquals("Finish6r", fields.getCustomField(ResourceField.FINISH6).getAlias());
-      assertEquals("Finish7r", fields.getCustomField(ResourceField.FINISH7).getAlias());
-      assertEquals("Finish8r", fields.getCustomField(ResourceField.FINISH8).getAlias());
-      assertEquals("Finish9r", fields.getCustomField(ResourceField.FINISH9).getAlias());
-      assertEquals("Finish10r", fields.getCustomField(ResourceField.FINISH10).getAlias());
-      assertEquals("Cost1r", fields.getCustomField(ResourceField.COST1).getAlias());
-      assertEquals("Cost2r", fields.getCustomField(ResourceField.COST2).getAlias());
-      assertEquals("Cost3r", fields.getCustomField(ResourceField.COST3).getAlias());
-      assertEquals("Cost4r", fields.getCustomField(ResourceField.COST4).getAlias());
-      assertEquals("Cost5r", fields.getCustomField(ResourceField.COST5).getAlias());
-      assertEquals("Cost6r", fields.getCustomField(ResourceField.COST6).getAlias());
-      assertEquals("Cost7r", fields.getCustomField(ResourceField.COST7).getAlias());
-      assertEquals("Cost8r", fields.getCustomField(ResourceField.COST8).getAlias());
-      assertEquals("Cost9r", fields.getCustomField(ResourceField.COST9).getAlias());
-      assertEquals("Cost10r", fields.getCustomField(ResourceField.COST10).getAlias());
-      assertEquals("Date1r", fields.getCustomField(ResourceField.DATE1).getAlias());
-      assertEquals("Date2r", fields.getCustomField(ResourceField.DATE2).getAlias());
-      assertEquals("Date3r", fields.getCustomField(ResourceField.DATE3).getAlias());
-      assertEquals("Date4r", fields.getCustomField(ResourceField.DATE4).getAlias());
-      assertEquals("Date5r", fields.getCustomField(ResourceField.DATE5).getAlias());
-      assertEquals("Date6r", fields.getCustomField(ResourceField.DATE6).getAlias());
-      assertEquals("Date7r", fields.getCustomField(ResourceField.DATE7).getAlias());
-      assertEquals("Date8r", fields.getCustomField(ResourceField.DATE8).getAlias());
-      assertEquals("Date9r", fields.getCustomField(ResourceField.DATE9).getAlias());
-      assertEquals("Date10r", fields.getCustomField(ResourceField.DATE10).getAlias());
-      assertEquals("Flag1r", fields.getCustomField(ResourceField.FLAG1).getAlias());
-      assertEquals("Flag2r", fields.getCustomField(ResourceField.FLAG2).getAlias());
-      assertEquals("Flag3r", fields.getCustomField(ResourceField.FLAG3).getAlias());
-      assertEquals("Flag4r", fields.getCustomField(ResourceField.FLAG4).getAlias());
-      assertEquals("Flag5r", fields.getCustomField(ResourceField.FLAG5).getAlias());
-      assertEquals("Flag6r", fields.getCustomField(ResourceField.FLAG6).getAlias());
-      assertEquals("Flag7r", fields.getCustomField(ResourceField.FLAG7).getAlias());
-      assertEquals("Flag8r", fields.getCustomField(ResourceField.FLAG8).getAlias());
-      assertEquals("Flag9r", fields.getCustomField(ResourceField.FLAG9).getAlias());
-      assertEquals("Flag10r", fields.getCustomField(ResourceField.FLAG10).getAlias());
-      assertEquals("Flag11r", fields.getCustomField(ResourceField.FLAG11).getAlias());
-      assertEquals("Flag12r", fields.getCustomField(ResourceField.FLAG12).getAlias());
-      assertEquals("Flag13r", fields.getCustomField(ResourceField.FLAG13).getAlias());
-      assertEquals("Flag14r", fields.getCustomField(ResourceField.FLAG14).getAlias());
-      assertEquals("Flag15r", fields.getCustomField(ResourceField.FLAG15).getAlias());
-      assertEquals("Flag16r", fields.getCustomField(ResourceField.FLAG16).getAlias());
-      assertEquals("Flag17r", fields.getCustomField(ResourceField.FLAG17).getAlias());
-      assertEquals("Flag18r", fields.getCustomField(ResourceField.FLAG18).getAlias());
-      assertEquals("Flag19r", fields.getCustomField(ResourceField.FLAG19).getAlias());
-      assertEquals("Flag20r", fields.getCustomField(ResourceField.FLAG20).getAlias());
-      assertEquals("Number1r", fields.getCustomField(ResourceField.NUMBER1).getAlias());
-      assertEquals("Number2r", fields.getCustomField(ResourceField.NUMBER2).getAlias());
-      assertEquals("Number3r", fields.getCustomField(ResourceField.NUMBER3).getAlias());
-      assertEquals("Number4r", fields.getCustomField(ResourceField.NUMBER4).getAlias());
-      assertEquals("Number5r", fields.getCustomField(ResourceField.NUMBER5).getAlias());
-      assertEquals("Number6r", fields.getCustomField(ResourceField.NUMBER6).getAlias());
-      assertEquals("Number7r", fields.getCustomField(ResourceField.NUMBER7).getAlias());
-      assertEquals("Number8r", fields.getCustomField(ResourceField.NUMBER8).getAlias());
-      assertEquals("Number9r", fields.getCustomField(ResourceField.NUMBER9).getAlias());
-      assertEquals("Number10r", fields.getCustomField(ResourceField.NUMBER10).getAlias());
-      assertEquals("Number11r", fields.getCustomField(ResourceField.NUMBER11).getAlias());
-      assertEquals("Number12r", fields.getCustomField(ResourceField.NUMBER12).getAlias());
-      assertEquals("Number13r", fields.getCustomField(ResourceField.NUMBER13).getAlias());
-      assertEquals("Number14r", fields.getCustomField(ResourceField.NUMBER14).getAlias());
-      assertEquals("Number15r", fields.getCustomField(ResourceField.NUMBER15).getAlias());
-      assertEquals("Number16r", fields.getCustomField(ResourceField.NUMBER16).getAlias());
-      assertEquals("Number17r", fields.getCustomField(ResourceField.NUMBER17).getAlias());
-      assertEquals("Number18r", fields.getCustomField(ResourceField.NUMBER18).getAlias());
-      assertEquals("Number19r", fields.getCustomField(ResourceField.NUMBER19).getAlias());
-      assertEquals("Number20r", fields.getCustomField(ResourceField.NUMBER20).getAlias());
-      assertEquals("Duration1r", fields.getCustomField(ResourceField.DURATION1).getAlias());
-      assertEquals("Duration2r", fields.getCustomField(ResourceField.DURATION2).getAlias());
-      assertEquals("Duration3r", fields.getCustomField(ResourceField.DURATION3).getAlias());
-      assertEquals("Duration4r", fields.getCustomField(ResourceField.DURATION4).getAlias());
-      assertEquals("Duration5r", fields.getCustomField(ResourceField.DURATION5).getAlias());
-      assertEquals("Duration6r", fields.getCustomField(ResourceField.DURATION6).getAlias());
-      assertEquals("Duration7r", fields.getCustomField(ResourceField.DURATION7).getAlias());
-      assertEquals("Duration8r", fields.getCustomField(ResourceField.DURATION8).getAlias());
-      assertEquals("Duration9r", fields.getCustomField(ResourceField.DURATION9).getAlias());
-      assertEquals("Duration10r", fields.getCustomField(ResourceField.DURATION10).getAlias());
-      assertEquals("Outline Code1r", fields.getCustomField(ResourceField.OUTLINE_CODE1).getAlias());
-      assertEquals("Outline Code2r", fields.getCustomField(ResourceField.OUTLINE_CODE2).getAlias());
-      assertEquals("Outline Code3r", fields.getCustomField(ResourceField.OUTLINE_CODE3).getAlias());
-      assertEquals("Outline Code4r", fields.getCustomField(ResourceField.OUTLINE_CODE4).getAlias());
-      assertEquals("Outline Code5r", fields.getCustomField(ResourceField.OUTLINE_CODE5).getAlias());
-      assertEquals("Outline Code6r", fields.getCustomField(ResourceField.OUTLINE_CODE6).getAlias());
-      assertEquals("Outline Code7r", fields.getCustomField(ResourceField.OUTLINE_CODE7).getAlias());
-      assertEquals("Outline Code8r", fields.getCustomField(ResourceField.OUTLINE_CODE8).getAlias());
-      assertEquals("Outline Code9r", fields.getCustomField(ResourceField.OUTLINE_CODE9).getAlias());
-      assertEquals("Outline Code10r", fields.getCustomField(ResourceField.OUTLINE_CODE10).getAlias());
+      assertEquals("Text1r", fields.get(ResourceField.TEXT1).getAlias());
+      assertEquals("Text2r", fields.get(ResourceField.TEXT2).getAlias());
+      assertEquals("Text3r", fields.get(ResourceField.TEXT3).getAlias());
+      assertEquals("Text4r", fields.get(ResourceField.TEXT4).getAlias());
+      assertEquals("Text5r", fields.get(ResourceField.TEXT5).getAlias());
+      assertEquals("Text6r", fields.get(ResourceField.TEXT6).getAlias());
+      assertEquals("Text7r", fields.get(ResourceField.TEXT7).getAlias());
+      assertEquals("Text8r", fields.get(ResourceField.TEXT8).getAlias());
+      assertEquals("Text9r", fields.get(ResourceField.TEXT9).getAlias());
+      assertEquals("Text10r", fields.get(ResourceField.TEXT10).getAlias());
+      assertEquals("Text11r", fields.get(ResourceField.TEXT11).getAlias());
+      assertEquals("Text12r", fields.get(ResourceField.TEXT12).getAlias());
+      assertEquals("Text13r", fields.get(ResourceField.TEXT13).getAlias());
+      assertEquals("Text14r", fields.get(ResourceField.TEXT14).getAlias());
+      assertEquals("Text15r", fields.get(ResourceField.TEXT15).getAlias());
+      assertEquals("Text16r", fields.get(ResourceField.TEXT16).getAlias());
+      assertEquals("Text17r", fields.get(ResourceField.TEXT17).getAlias());
+      assertEquals("Text18r", fields.get(ResourceField.TEXT18).getAlias());
+      assertEquals("Text19r", fields.get(ResourceField.TEXT19).getAlias());
+      assertEquals("Text20r", fields.get(ResourceField.TEXT20).getAlias());
+      assertEquals("Text21r", fields.get(ResourceField.TEXT21).getAlias());
+      assertEquals("Text22r", fields.get(ResourceField.TEXT22).getAlias());
+      assertEquals("Text23r", fields.get(ResourceField.TEXT23).getAlias());
+      assertEquals("Text24r", fields.get(ResourceField.TEXT24).getAlias());
+      assertEquals("Text25r", fields.get(ResourceField.TEXT25).getAlias());
+      assertEquals("Text26r", fields.get(ResourceField.TEXT26).getAlias());
+      assertEquals("Text27r", fields.get(ResourceField.TEXT27).getAlias());
+      assertEquals("Text28r", fields.get(ResourceField.TEXT28).getAlias());
+      assertEquals("Text29r", fields.get(ResourceField.TEXT29).getAlias());
+      assertEquals("Text30r", fields.get(ResourceField.TEXT30).getAlias());
+      assertEquals("Start1r", fields.get(ResourceField.START1).getAlias());
+      assertEquals("Start2r", fields.get(ResourceField.START2).getAlias());
+      assertEquals("Start3r", fields.get(ResourceField.START3).getAlias());
+      assertEquals("Start4r", fields.get(ResourceField.START4).getAlias());
+      assertEquals("Start5r", fields.get(ResourceField.START5).getAlias());
+      assertEquals("Start6r", fields.get(ResourceField.START6).getAlias());
+      assertEquals("Start7r", fields.get(ResourceField.START7).getAlias());
+      assertEquals("Start8r", fields.get(ResourceField.START8).getAlias());
+      assertEquals("Start9r", fields.get(ResourceField.START9).getAlias());
+      assertEquals("Start10r", fields.get(ResourceField.START10).getAlias());
+      assertEquals("Finish1r", fields.get(ResourceField.FINISH1).getAlias());
+      assertEquals("Finish2r", fields.get(ResourceField.FINISH2).getAlias());
+      assertEquals("Finish3r", fields.get(ResourceField.FINISH3).getAlias());
+      assertEquals("Finish4r", fields.get(ResourceField.FINISH4).getAlias());
+      assertEquals("Finish5r", fields.get(ResourceField.FINISH5).getAlias());
+      assertEquals("Finish6r", fields.get(ResourceField.FINISH6).getAlias());
+      assertEquals("Finish7r", fields.get(ResourceField.FINISH7).getAlias());
+      assertEquals("Finish8r", fields.get(ResourceField.FINISH8).getAlias());
+      assertEquals("Finish9r", fields.get(ResourceField.FINISH9).getAlias());
+      assertEquals("Finish10r", fields.get(ResourceField.FINISH10).getAlias());
+      assertEquals("Cost1r", fields.get(ResourceField.COST1).getAlias());
+      assertEquals("Cost2r", fields.get(ResourceField.COST2).getAlias());
+      assertEquals("Cost3r", fields.get(ResourceField.COST3).getAlias());
+      assertEquals("Cost4r", fields.get(ResourceField.COST4).getAlias());
+      assertEquals("Cost5r", fields.get(ResourceField.COST5).getAlias());
+      assertEquals("Cost6r", fields.get(ResourceField.COST6).getAlias());
+      assertEquals("Cost7r", fields.get(ResourceField.COST7).getAlias());
+      assertEquals("Cost8r", fields.get(ResourceField.COST8).getAlias());
+      assertEquals("Cost9r", fields.get(ResourceField.COST9).getAlias());
+      assertEquals("Cost10r", fields.get(ResourceField.COST10).getAlias());
+      assertEquals("Date1r", fields.get(ResourceField.DATE1).getAlias());
+      assertEquals("Date2r", fields.get(ResourceField.DATE2).getAlias());
+      assertEquals("Date3r", fields.get(ResourceField.DATE3).getAlias());
+      assertEquals("Date4r", fields.get(ResourceField.DATE4).getAlias());
+      assertEquals("Date5r", fields.get(ResourceField.DATE5).getAlias());
+      assertEquals("Date6r", fields.get(ResourceField.DATE6).getAlias());
+      assertEquals("Date7r", fields.get(ResourceField.DATE7).getAlias());
+      assertEquals("Date8r", fields.get(ResourceField.DATE8).getAlias());
+      assertEquals("Date9r", fields.get(ResourceField.DATE9).getAlias());
+      assertEquals("Date10r", fields.get(ResourceField.DATE10).getAlias());
+      assertEquals("Flag1r", fields.get(ResourceField.FLAG1).getAlias());
+      assertEquals("Flag2r", fields.get(ResourceField.FLAG2).getAlias());
+      assertEquals("Flag3r", fields.get(ResourceField.FLAG3).getAlias());
+      assertEquals("Flag4r", fields.get(ResourceField.FLAG4).getAlias());
+      assertEquals("Flag5r", fields.get(ResourceField.FLAG5).getAlias());
+      assertEquals("Flag6r", fields.get(ResourceField.FLAG6).getAlias());
+      assertEquals("Flag7r", fields.get(ResourceField.FLAG7).getAlias());
+      assertEquals("Flag8r", fields.get(ResourceField.FLAG8).getAlias());
+      assertEquals("Flag9r", fields.get(ResourceField.FLAG9).getAlias());
+      assertEquals("Flag10r", fields.get(ResourceField.FLAG10).getAlias());
+      assertEquals("Flag11r", fields.get(ResourceField.FLAG11).getAlias());
+      assertEquals("Flag12r", fields.get(ResourceField.FLAG12).getAlias());
+      assertEquals("Flag13r", fields.get(ResourceField.FLAG13).getAlias());
+      assertEquals("Flag14r", fields.get(ResourceField.FLAG14).getAlias());
+      assertEquals("Flag15r", fields.get(ResourceField.FLAG15).getAlias());
+      assertEquals("Flag16r", fields.get(ResourceField.FLAG16).getAlias());
+      assertEquals("Flag17r", fields.get(ResourceField.FLAG17).getAlias());
+      assertEquals("Flag18r", fields.get(ResourceField.FLAG18).getAlias());
+      assertEquals("Flag19r", fields.get(ResourceField.FLAG19).getAlias());
+      assertEquals("Flag20r", fields.get(ResourceField.FLAG20).getAlias());
+      assertEquals("Number1r", fields.get(ResourceField.NUMBER1).getAlias());
+      assertEquals("Number2r", fields.get(ResourceField.NUMBER2).getAlias());
+      assertEquals("Number3r", fields.get(ResourceField.NUMBER3).getAlias());
+      assertEquals("Number4r", fields.get(ResourceField.NUMBER4).getAlias());
+      assertEquals("Number5r", fields.get(ResourceField.NUMBER5).getAlias());
+      assertEquals("Number6r", fields.get(ResourceField.NUMBER6).getAlias());
+      assertEquals("Number7r", fields.get(ResourceField.NUMBER7).getAlias());
+      assertEquals("Number8r", fields.get(ResourceField.NUMBER8).getAlias());
+      assertEquals("Number9r", fields.get(ResourceField.NUMBER9).getAlias());
+      assertEquals("Number10r", fields.get(ResourceField.NUMBER10).getAlias());
+      assertEquals("Number11r", fields.get(ResourceField.NUMBER11).getAlias());
+      assertEquals("Number12r", fields.get(ResourceField.NUMBER12).getAlias());
+      assertEquals("Number13r", fields.get(ResourceField.NUMBER13).getAlias());
+      assertEquals("Number14r", fields.get(ResourceField.NUMBER14).getAlias());
+      assertEquals("Number15r", fields.get(ResourceField.NUMBER15).getAlias());
+      assertEquals("Number16r", fields.get(ResourceField.NUMBER16).getAlias());
+      assertEquals("Number17r", fields.get(ResourceField.NUMBER17).getAlias());
+      assertEquals("Number18r", fields.get(ResourceField.NUMBER18).getAlias());
+      assertEquals("Number19r", fields.get(ResourceField.NUMBER19).getAlias());
+      assertEquals("Number20r", fields.get(ResourceField.NUMBER20).getAlias());
+      assertEquals("Duration1r", fields.get(ResourceField.DURATION1).getAlias());
+      assertEquals("Duration2r", fields.get(ResourceField.DURATION2).getAlias());
+      assertEquals("Duration3r", fields.get(ResourceField.DURATION3).getAlias());
+      assertEquals("Duration4r", fields.get(ResourceField.DURATION4).getAlias());
+      assertEquals("Duration5r", fields.get(ResourceField.DURATION5).getAlias());
+      assertEquals("Duration6r", fields.get(ResourceField.DURATION6).getAlias());
+      assertEquals("Duration7r", fields.get(ResourceField.DURATION7).getAlias());
+      assertEquals("Duration8r", fields.get(ResourceField.DURATION8).getAlias());
+      assertEquals("Duration9r", fields.get(ResourceField.DURATION9).getAlias());
+      assertEquals("Duration10r", fields.get(ResourceField.DURATION10).getAlias());
+      assertEquals("Outline Code1r", fields.get(ResourceField.OUTLINE_CODE1).getAlias());
+      assertEquals("Outline Code2r", fields.get(ResourceField.OUTLINE_CODE2).getAlias());
+      assertEquals("Outline Code3r", fields.get(ResourceField.OUTLINE_CODE3).getAlias());
+      assertEquals("Outline Code4r", fields.get(ResourceField.OUTLINE_CODE4).getAlias());
+      assertEquals("Outline Code5r", fields.get(ResourceField.OUTLINE_CODE5).getAlias());
+      assertEquals("Outline Code6r", fields.get(ResourceField.OUTLINE_CODE6).getAlias());
+      assertEquals("Outline Code7r", fields.get(ResourceField.OUTLINE_CODE7).getAlias());
+      assertEquals("Outline Code8r", fields.get(ResourceField.OUTLINE_CODE8).getAlias());
+      assertEquals("Outline Code9r", fields.get(ResourceField.OUTLINE_CODE9).getAlias());
+      assertEquals("Outline Code10r", fields.get(ResourceField.OUTLINE_CODE10).getAlias());
    }
 
    /**
     * Write a file with embedded line break (\r and \n) characters in
     * various text fields. Ensure that a valid file is written,
     * and that it can be read successfully.
-    *
-    * @throws Exception
     */
    @Test public void testEmbeddedLineBreaks() throws Exception
    {
@@ -1281,7 +1248,7 @@ public class BasicTest
       //
       // Write the file
       //
-      File out = File.createTempFile("junit", ".mpx");
+      File out = Files.createTempFile("junit", ".mpx").toFile();
       new MPXWriter().write(file, out);
 
       //
@@ -1306,8 +1273,6 @@ public class BasicTest
 
    /**
     * Exercise the code which handles password protected files.
-    *
-    * @throws Exception
     */
    @Test public void testPasswordProtection() throws Exception
    {
@@ -1321,7 +1286,7 @@ public class BasicTest
       {
          in = new File(MpxjTestData.filePath("legacy/readpassword9.mpp"));
          new MPPReader().read(in);
-         assertTrue(false);
+         fail();
       }
 
       catch (MPXJException ex)
@@ -1348,7 +1313,7 @@ public class BasicTest
       {
          in = new File(MpxjTestData.filePath("legacy/bothpassword9.mpp"));
          new MPPReader().read(in);
-         assertTrue(false);
+         fail();
       }
 
       catch (MPXJException ex)
@@ -1365,8 +1330,6 @@ public class BasicTest
    /**
     * This test ensures that the task and resource extended attributes are
     * read and written correctly for MSPDI files.
-    *
-    * @throws Exception
     */
    @Test public void testMspdiExtendedAttributes() throws Exception
    {
@@ -1376,7 +1339,7 @@ public class BasicTest
       ProjectFile xml = reader.read(MpxjTestData.filePath("legacy/mspextattr.xml"));
       commonMspdiExtendedAttributeTests(xml);
 
-      File out = File.createTempFile("junit", ".xml");
+      File out = Files.createTempFile("junit", ".xml").toFile();
       writer.write(xml, out);
 
       xml = reader.read(out);
@@ -1425,8 +1388,6 @@ public class BasicTest
    /**
     * This ensures that values in the project properties are read and written
     * as expected.
-    *
-    * @throws Exception
     */
    @Test public void testProjectProperties() throws Exception
    {
@@ -1444,7 +1405,7 @@ public class BasicTest
       // Write the file, re-read it and test to ensure that
       // the project properties have the expected values
       //
-      File out = File.createTempFile("junit", ".mpx");
+      File out = Files.createTempFile("junit", ".mpx").toFile();
       writer.write(mpx, out);
       mpx = reader.read(out);
       testProperties(mpx);
@@ -1475,7 +1436,7 @@ public class BasicTest
       // Write the file, re-read it and test to ensure that
       // the project properties have the expected values
       //
-      out = File.createTempFile("junit", ".xml");
+      out = Files.createTempFile("junit", ".xml").toFile();
       new MSPDIWriter().write(mpx, out);
 
       mpx = new MSPDIReader().read(out);
@@ -1521,8 +1482,6 @@ public class BasicTest
 
    /**
     * Test retrieval of WBS information.
-    *
-    * @throws Exception
     */
    @Test public void testWBS() throws Exception
    {
@@ -1539,8 +1498,6 @@ public class BasicTest
 
    /**
     * Test read and write of priority information.
-    *
-    * @throws Exception
     */
    @Test public void testPriority() throws Exception
    {
@@ -1556,13 +1513,13 @@ public class BasicTest
       ProjectFile xml = new MSPDIReader().read(MpxjTestData.filePath("legacy/mspdipriority.xml"));
       validatePriority(xml);
 
-      File out = File.createTempFile("junit", ".mpx");
+      File out = Files.createTempFile("junit", ".mpx").toFile();
       new MPXWriter().write(mpx, out);
       ProjectFile mpx2 = new MPXReader().read(out);
       validatePriority(mpx2);
       out.deleteOnExit();
 
-      out = File.createTempFile("junit", ".xml");
+      out = Files.createTempFile("junit", ".xml").toFile();
       new MSPDIWriter().write(mpx, out);
       ProjectFile xml3 = new MSPDIReader().read(out);
       validatePriority(xml3);
@@ -1590,8 +1547,6 @@ public class BasicTest
 
    /**
     * Tests to exercise calendar functionality.
-    *
-    * @throws Exception
     */
    @Test public void testCalendars() throws Exception
    {
@@ -1621,7 +1576,7 @@ public class BasicTest
       // Resource calendar based on standard calendar
       //
       Resource resource = mpx.getResourceByUniqueID(Integer.valueOf(1));
-      ProjectCalendar calendar = resource.getResourceCalendar();
+      ProjectCalendar calendar = resource.getCalendar();
       assertEquals("Resource One", calendar.getName());
       assertTrue(calendar.isDerived());
       assertEquals("Standard", calendar.getParent().getName());
@@ -1631,7 +1586,7 @@ public class BasicTest
       // Resource calendar based on base calendar
       //
       resource = mpx.getResourceByUniqueID(Integer.valueOf(2));
-      calendar = resource.getResourceCalendar();
+      calendar = resource.getCalendar();
       assertEquals("Resource Two", calendar.getName());
       assertTrue(calendar.isDerived());
       assertEquals("Base Calendar", calendar.getParent().getName());
@@ -1641,7 +1596,7 @@ public class BasicTest
       // Resource calendar based on modified base calendar
       //
       resource = mpx.getResourceByUniqueID(Integer.valueOf(3));
-      calendar = resource.getResourceCalendar();
+      calendar = resource.getCalendar();
       assertEquals("Resource Three", calendar.getName());
       assertTrue(calendar.isDerived());
       assertEquals("Base Calendar", calendar.getParent().getName());
@@ -1672,8 +1627,6 @@ public class BasicTest
 
    /**
     * Test to exercise task, resource, and assignment removal code.
-    *
-    * @throws Exception
     */
    @Test public void testRemoval() throws Exception
    {
@@ -1687,14 +1640,14 @@ public class BasicTest
       assertEquals(8, mpp.getResourceAssignments().size());
 
       //
-      // Remove a task with no assignments
+      // Remove a task with no explicit assignments
       //
       Task task = mpp.getTaskByUniqueID(Integer.valueOf(1));
       assertEquals("Task One", task.getName());
       task.remove();
       assertEquals(9, mpp.getTasks().size());
       assertEquals(8, mpp.getResources().size());
-      assertEquals(8, mpp.getResourceAssignments().size());
+      assertEquals(7, mpp.getResourceAssignments().size());
 
       //
       // Remove a resource with no assignments
@@ -1704,7 +1657,7 @@ public class BasicTest
       resource.remove();
       assertEquals(9, mpp.getTasks().size());
       assertEquals(7, mpp.getResources().size());
-      assertEquals(8, mpp.getResourceAssignments().size());
+      assertEquals(7, mpp.getResourceAssignments().size());
 
       //
       // Remove a task with a single assignment
@@ -1714,7 +1667,7 @@ public class BasicTest
       task.remove();
       assertEquals(8, mpp.getTasks().size());
       assertEquals(7, mpp.getResources().size());
-      assertEquals(7, mpp.getResourceAssignments().size());
+      assertEquals(6, mpp.getResourceAssignments().size());
 
       //
       // Remove a resource with a single assignment
@@ -1724,7 +1677,7 @@ public class BasicTest
       resource.remove();
       assertEquals(8, mpp.getTasks().size());
       assertEquals(6, mpp.getResources().size());
-      assertEquals(6, mpp.getResourceAssignments().size());
+      assertEquals(5, mpp.getResourceAssignments().size());
 
       //
       // Remove an assignment
@@ -1745,7 +1698,7 @@ public class BasicTest
       assertEquals(0, assignments.size());
       assertEquals(8, mpp.getTasks().size());
       assertEquals(6, mpp.getResources().size());
-      assertEquals(5, mpp.getResourceAssignments().size());
+      assertEquals(4, mpp.getResourceAssignments().size());
 
       //
       // Remove a task with child tasks - the child tasks will also be removed
@@ -1755,7 +1708,7 @@ public class BasicTest
       task.remove();
       assertEquals(6, mpp.getTasks().size());
       assertEquals(6, mpp.getResources().size());
-      assertEquals(4, mpp.getResourceAssignments().size());
+      assertEquals(3, mpp.getResourceAssignments().size());
 
       //
       // As we have removed tasks and resources, call the synchronize methods
@@ -1768,7 +1721,7 @@ public class BasicTest
       //
       // Write the file and re-read it to ensure we get consistent results.
       //
-      File out = File.createTempFile("junit", ".mpx");
+      File out = Files.createTempFile("junit", ".mpx").toFile();
       new MPXWriter().write(mpp, out);
 
       ProjectFile mpx = new MPXReader().read(out);
@@ -1780,14 +1733,12 @@ public class BasicTest
 
    /**
     * Basic rewrite test to exercise the MPX calendar exception read/write code.
-    *
-    * @throws Exception
     */
    @Test public void testProjectCalendarExceptions() throws Exception
    {
       File in = new File(MpxjTestData.filePath("legacy/calendarExceptions.mpx"));
       ProjectFile mpx = new MPXReader().read(in);
-      File out = File.createTempFile("junit", ".mpx");
+      File out = Files.createTempFile("junit", ".mpx").toFile();
       MPXWriter writer = new MPXWriter();
       writer.setUseLocaleDefaults(false);
       writer.write(mpx, out);

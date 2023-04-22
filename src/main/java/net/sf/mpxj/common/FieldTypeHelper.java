@@ -31,7 +31,10 @@ import net.sf.mpxj.DataType;
 import net.sf.mpxj.Duration;
 import net.sf.mpxj.FieldType;
 import net.sf.mpxj.FieldTypeClass;
+import net.sf.mpxj.Priority;
 import net.sf.mpxj.ProjectField;
+import net.sf.mpxj.ProjectFile;
+import net.sf.mpxj.Rate;
 import net.sf.mpxj.ResourceField;
 import net.sf.mpxj.TaskField;
 
@@ -59,25 +62,25 @@ public final class FieldTypeHelper
          {
             case TASK:
             {
-               result = MPPTaskField.TASK_FIELD_BASE | MPPTaskField.getID((TaskField) type);
+               result = MPPTaskField.TASK_FIELD_BASE | MPPTaskField.getID(type);
                break;
             }
 
             case RESOURCE:
             {
-               result = MPPResourceField.RESOURCE_FIELD_BASE | MPPResourceField.getID((ResourceField) type);
+               result = MPPResourceField.RESOURCE_FIELD_BASE | MPPResourceField.getID(type);
                break;
             }
 
             case ASSIGNMENT:
             {
-               result = MPPAssignmentField.ASSIGNMENT_FIELD_BASE | MPPAssignmentField.getID((AssignmentField) type);
+               result = MPPAssignmentField.ASSIGNMENT_FIELD_BASE | MPPAssignmentField.getID(type);
                break;
             }
 
             case PROJECT:
             {
-               result = MPPProjectField.PROJECT_FIELD_BASE | MPPProjectField.getID((ProjectField) type);
+               result = MPPProjectField.PROJECT_FIELD_BASE | MPPProjectField.getID(type);
                break;
             }
 
@@ -94,11 +97,17 @@ public final class FieldTypeHelper
     * Retrieve a FieldType instance based on an ID value from
     * an MPP9 or MPP12 file.
     *
+    * @param project parent project
     * @param fieldID field ID
     * @return FieldType instance
     */
-   public static final FieldType getInstance(int fieldID)
+   public static final FieldType getInstance(ProjectFile project, int fieldID)
    {
+      if (fieldID == -1)
+      {
+         return null;
+      }
+
       FieldType result;
       int prefix = fieldID & 0xFFFF0000;
       int index = fieldID & 0x0000FFFF;
@@ -107,7 +116,7 @@ public final class FieldTypeHelper
       {
          case MPPTaskField.TASK_FIELD_BASE:
          {
-            result = MPPTaskField.getInstance(index);
+            result = MPPTaskField.getInstance(project, index);
             if (result == null)
             {
                result = getPlaceholder(TaskField.class, index);
@@ -117,7 +126,7 @@ public final class FieldTypeHelper
 
          case MPPResourceField.RESOURCE_FIELD_BASE:
          {
-            result = MPPResourceField.getInstance(index);
+            result = MPPResourceField.getInstance(project, index);
             if (result == null)
             {
                result = getPlaceholder(ResourceField.class, index);
@@ -127,7 +136,7 @@ public final class FieldTypeHelper
 
          case MPPAssignmentField.ASSIGNMENT_FIELD_BASE:
          {
-            result = MPPAssignmentField.getInstance(index);
+            result = MPPAssignmentField.getInstance(project, index);
             if (result == null)
             {
                result = getPlaceholder(AssignmentField.class, index);
@@ -147,76 +156,10 @@ public final class FieldTypeHelper
 
          case MPPProjectField.PROJECT_FIELD_BASE:
          {
-            result = MPPProjectField.getInstance(index);
+            result = MPPProjectField.getInstance(project, index);
             if (result == null)
             {
                result = getPlaceholder(ProjectField.class, index);
-            }
-            break;
-         }
-
-         default:
-         {
-            result = getPlaceholder(null, index);
-            break;
-         }
-      }
-
-      return result;
-   }
-
-   /**
-    * Retrieve a FieldType instance based on an ID value from
-    * an MPP14 field, mapping the START_TEXT, FINISH_TEXT, and DURATION_TEXT
-    * values to START, FINISH, and DURATION respectively.
-    *
-    * @param fieldID field ID
-    * @return FieldType instance
-    */
-   public static final FieldType getInstance14(int fieldID)
-   {
-      FieldType result;
-      int prefix = fieldID & 0xFFFF0000;
-      int index = fieldID & 0x0000FFFF;
-
-      switch (prefix)
-      {
-         case MPPTaskField.TASK_FIELD_BASE:
-         {
-            result = MPPTaskField14.getInstance(index);
-            if (result == null)
-            {
-               result = getPlaceholder(TaskField.class, index);
-            }
-            break;
-         }
-
-         case MPPResourceField.RESOURCE_FIELD_BASE:
-         {
-            result = MPPResourceField14.getInstance(index);
-            if (result == null)
-            {
-               result = getPlaceholder(ResourceField.class, index);
-            }
-            break;
-         }
-
-         case MPPAssignmentField.ASSIGNMENT_FIELD_BASE:
-         {
-            result = MPPAssignmentField14.getInstance(index);
-            if (result == null)
-            {
-               result = getPlaceholder(AssignmentField.class, index);
-            }
-            break;
-         }
-
-         case MPPConstraintField.CONSTRAINT_FIELD_BASE:
-         {
-            result = MPPConstraintField.getInstance(index);
-            if (result == null)
-            {
-               result = getPlaceholder(ConstraintField.class, index);
             }
             break;
          }
@@ -259,7 +202,7 @@ public final class FieldTypeHelper
 
          @Override public String getName()
          {
-            return "Unknown " + (type == null ? "" : type.getSimpleName() + "(" + fieldID + ")");
+            return "Unknown" + (type == null ? "" : " " + type.getSimpleName() + "(" + fieldID + ")");
          }
 
          @Override public String getName(Locale locale)
@@ -285,7 +228,7 @@ public final class FieldTypeHelper
    }
 
    /**
-    * In some circumstances MS Project refers to the text version of a field (e.g. Start Text rather than Star) when we
+    * In some circumstances MS Project refers to the text version of a field (e.g. Start Text rather than Start) when we
     * actually need to process the non-text version of the field. This method performs that mapping.
     *
     * @param field field to mapped
@@ -293,33 +236,35 @@ public final class FieldTypeHelper
     */
    public static FieldType mapTextFields(FieldType field)
    {
-      if (field != null && field.getFieldTypeClass() == FieldTypeClass.TASK)
+      if (!(field instanceof TaskField))
       {
-         TaskField taskField = (TaskField) field;
-         switch (taskField)
+         return field;
+      }
+
+      TaskField taskField = (TaskField) field;
+      switch (taskField)
+      {
+         case START_TEXT:
          {
-            case START_TEXT:
-            {
-               field = TaskField.START;
-               break;
-            }
+            field = TaskField.START;
+            break;
+         }
 
-            case FINISH_TEXT:
-            {
-               field = TaskField.FINISH;
-               break;
-            }
+         case FINISH_TEXT:
+         {
+            field = TaskField.FINISH;
+            break;
+         }
 
-            case DURATION_TEXT:
-            {
-               field = TaskField.DURATION;
-               break;
-            }
+         case DURATION_TEXT:
+         {
+            field = TaskField.DURATION;
+            break;
+         }
 
-            default:
-            {
-               break;
-            }
+         default:
+         {
+            break;
          }
       }
 
@@ -346,22 +291,54 @@ public final class FieldTypeHelper
          DataType dataType = type.getDataType();
          switch (dataType)
          {
+            case STRING:
+            case NOTES:
+            {
+               result = !(value.toString()).isEmpty();
+               break;
+            }
+
+            case NUMERIC:
+            case CURRENCY:
+            case PERCENTAGE:
+            case UNITS:
+            case INTEGER:
+            case SHORT:
+            {
+               result = ((Number) value).doubleValue() != 0.0;
+               break;
+            }
+
+            case WORK:
+            case DURATION:
+            {
+               // Baseline durations can have string values
+               if (value instanceof String)
+               {
+                  result = !((String) value).isEmpty();
+               }
+               else
+               {
+                  result = ((Duration) value).getDuration() != 0.0;
+               }
+               break;
+            }
+
+            case RATE:
+            {
+               result = ((Rate) value).getAmount() != 0.0;
+               break;
+            }
+
             case BOOLEAN:
             {
                result = ((Boolean) value).booleanValue();
                break;
             }
 
-            case CURRENCY:
-            case NUMERIC:
+            case PRIORITY:
             {
-               result = !NumberHelper.equals(((Number) value).doubleValue(), 0.0, 0.00001);
-               break;
-            }
-
-            case DURATION:
-            {
-               result = (((Duration) value).getDuration() != 0);
+               result = ((Priority) value).getValue() != Priority.MEDIUM;
                break;
             }
 
@@ -374,5 +351,4 @@ public final class FieldTypeHelper
 
       return result;
    }
-
 }

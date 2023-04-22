@@ -78,7 +78,7 @@ final class Record
          if (list.size() > 0)
          {
             setRecordNumber(list);
-            m_fields = list.toArray(new String[list.size()]);
+            m_fields = list.toArray(new String[0]);
          }
       }
 
@@ -99,7 +99,13 @@ final class Record
       try
       {
          String number = list.remove(0);
-         m_recordNumber = Integer.valueOf(number);
+
+         // We expect `PX` when we read the file creation record.
+         // Don't attempt to parse this.
+         if (!"PX".equals(number))
+         {
+            m_recordNumber = Integer.valueOf(number);
+         }
       }
       catch (NumberFormatException ex)
       {
@@ -662,7 +668,7 @@ final class Record
     */
    public ProjectDateFormat getDateFormat(int field)
    {
-      ProjectDateFormat result = null;
+      ProjectDateFormat result;
 
       if ((field < m_fields.length) && (m_fields[field].length() != 0))
       {
@@ -733,7 +739,7 @@ final class Record
 
       if ((field < m_fields.length) && (m_fields[field].length() != 0))
       {
-         result = ((m_fields[field].equalsIgnoreCase(falseText) == true) ? Boolean.FALSE : Boolean.TRUE);
+         result = (m_fields[field].equalsIgnoreCase(falseText) ? Boolean.FALSE : Boolean.TRUE);
       }
       else
       {
@@ -775,9 +781,6 @@ final class Record
       return (m_fields.length);
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public String toString()
    {
       return (Arrays.toString(m_fields));
@@ -786,7 +789,7 @@ final class Record
    /**
     * Target locale.
     */
-   private Locale m_locale;
+   private final Locale m_locale;
 
    /**
     * Current record number.
@@ -798,5 +801,5 @@ final class Record
     */
    private String[] m_fields;
 
-   private MPXJFormats m_formats;
+   private final MPXJFormats m_formats;
 }

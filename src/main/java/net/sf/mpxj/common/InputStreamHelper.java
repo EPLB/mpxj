@@ -27,6 +27,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipInputStream;
@@ -49,7 +50,7 @@ public class InputStreamHelper
 
       try
       {
-         File file = File.createTempFile("mpxj", tempFileSuffix);
+         File file = Files.createTempFile("mpxj", tempFileSuffix).toFile();
          outputStream = new FileOutputStream(file);
          byte[] buffer = new byte[1024];
          while (true)
@@ -107,6 +108,53 @@ public class InputStreamHelper
    }
 
    /**
+    * Reads a specified number of bytes from the input stream and populates
+    * a new byte array. If the required number of bytes can't be read
+    * an exception will be raised.
+    *
+    * @param is InputStream instance
+    * @param size number of bytes to read
+    * @return new byte array instance
+    */
+   public static byte[] read(InputStream is, int size) throws IOException
+   {
+      return read(is, new byte[size]);
+   }
+
+   /**
+    * Read bytes from the input stream to fill the provided array.
+    * If the array can't be filled an exception will be raised.
+    *
+    * @param is InputStream instance
+    * @param data array to fill
+    * @return filled byte array
+    */
+   public static byte[] read(InputStream is, byte[] data) throws IOException
+   {
+      return read(is, data, data.length);
+   }
+
+   /**
+    * Read bytes from the input stream to fill the provided array.
+    * If the array can't be filled with the requested number of bytes,
+    * an exception will be raised.
+    *
+    * @param is InputStream instance
+    * @param data array to fill
+    * @param size number of bytes to read
+    * @return filled byte array
+    */
+   public static byte[] read(InputStream is, byte[] data, int size) throws IOException
+   {
+      int bytesRead = is.read(data, 0, size);
+      if (bytesRead != size)
+      {
+         throw new RuntimeException("Unable to read the required number of bytes");
+      }
+      return data;
+   }
+
+   /**
     * Expands a zip file input stream into a temporary directory.
     *
     * @param dir temporary directory
@@ -114,6 +162,7 @@ public class InputStreamHelper
     */
    private static void processZipStream(File dir, InputStream inputStream) throws IOException
    {
+      String canonicalDestinationDirPath = dir.getCanonicalPath();
       ZipInputStream zip = new ZipInputStream(inputStream);
       while (true)
       {
@@ -124,6 +173,14 @@ public class InputStreamHelper
          }
 
          File file = new File(dir, entry.getName());
+
+         // https://snyk.io/research/zip-slip-vulnerability
+         String canonicalDestinationFile = file.getCanonicalPath();
+         if (!canonicalDestinationFile.startsWith(canonicalDestinationDirPath + File.separator))
+         {
+            throw new IOException("Entry is outside of the target dir: " + entry.getName());
+         }
+
          if (entry.isDirectory())
          {
             FileHelper.mkdirsQuietly(file);
@@ -144,6 +201,27 @@ public class InputStreamHelper
             fos.write(bytes, 0, length);
          }
          fos.close();
+      }
+   }
+
+   /**
+    * The documentation for {@code InputStream.skip} indicates that it can bail out early, and not skip
+    * the requested number of bytes. I've encountered this in practice, hence this helper method.
+    *
+    * @param stream InputStream instance
+    * @param skip number of bytes to skip
+    */
+   public static void skip(InputStream stream, long skip) throws IOException
+   {
+      long count = skip;
+      while (count > 0)
+      {
+         long skipped = stream.skip(count);
+         if (skipped == 0)
+         {
+            throw new IOException("Cannot skip forward within InputStream");
+         }
+         count -= skipped;
       }
    }
 }

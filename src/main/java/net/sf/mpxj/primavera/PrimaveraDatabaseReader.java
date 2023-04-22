@@ -29,23 +29,25 @@ import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
 
 import javax.sql.DataSource;
 
 import net.sf.mpxj.Day;
 import net.sf.mpxj.FieldType;
 import net.sf.mpxj.MPXJException;
+import net.sf.mpxj.Notes;
 import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.ProjectProperties;
+import net.sf.mpxj.WorkContour;
+import net.sf.mpxj.WorkContourContainer;
 import net.sf.mpxj.common.AutoCloseableHelper;
 import net.sf.mpxj.common.NumberHelper;
+import net.sf.mpxj.common.ResultSetHelper;
 import net.sf.mpxj.reader.AbstractProjectReader;
 
 /**
@@ -59,7 +61,6 @@ public final class PrimaveraDatabaseReader extends AbstractProjectReader
     * projects available in the current database.
     *
     * @return Map instance containing ID and name pairs
-    * @throws MPXJException
     */
    public Map<Integer, String> listProjects() throws MPXJException
    {
@@ -88,29 +89,35 @@ public final class PrimaveraDatabaseReader extends AbstractProjectReader
     * Read a project from the current data source.
     *
     * @return ProjectFile instance
-    * @throws MPXJException
     */
    public ProjectFile read() throws MPXJException
    {
       try
       {
-         m_reader = new PrimaveraReader(m_taskUdfCounters, m_resourceUdfCounters, m_assignmentUdfCounters, m_resourceFields, m_wbsFields, m_taskFields, m_assignmentFields, m_aliases, m_matchPrimaveraWBS, m_wbsIsFullPath);
+         m_reader = new PrimaveraReader(m_resourceFields, m_roleFields, m_wbsFields, m_taskFields, m_assignmentFields, m_matchPrimaveraWBS, m_wbsIsFullPath);
          ProjectFile project = m_reader.getProject();
          addListenersToProject(project);
 
          processAnalytics();
+         processUserDefinedFields();
+         processLocations();
          processProjectProperties();
          processActivityCodes();
-         processUserDefinedFields();
          processExpenseCategories();
          processCostAccounts();
+         processNotebookTopics();
          processCalendars();
          processResources();
+         processRoles();
          processResourceRates();
+         processRoleRates();
          processTasks();
          processPredecessors();
+         processWorkContours();
          processAssignments();
          processExpenseItems();
+         processActivitySteps();
+         m_reader.rollupValues();
 
          m_reader = null;
          project.updateStructure();
@@ -138,7 +145,6 @@ public final class PrimaveraDatabaseReader extends AbstractProjectReader
     * be read in a single operation.
     *
     * @return list of ProjectFile instances
-    * @throws MPXJException
     */
    public List<ProjectFile> readAll() throws MPXJException
    {
@@ -159,34 +165,24 @@ public final class PrimaveraDatabaseReader extends AbstractProjectReader
    {
       allocateConnection();
 
-      try
+      DatabaseMetaData meta = m_connection.getMetaData();
+      String productName = meta.getDatabaseProductName();
+      if (productName == null || productName.isEmpty())
       {
-         DatabaseMetaData meta = m_connection.getMetaData();
-         String productName = meta.getDatabaseProductName();
-         if (productName == null || productName.isEmpty())
-         {
-            productName = "DATABASE";
-         }
-         else
-         {
-            productName = productName.toUpperCase();
-         }
-
-         ProjectProperties properties = m_reader.getProject().getProjectProperties();
-         properties.setFileApplication("Primavera");
-         properties.setFileType(productName);
+         productName = "DATABASE";
+      }
+      else
+      {
+         productName = productName.toUpperCase();
       }
 
-      finally
-      {
-         releaseConnection();
-      }
+      ProjectProperties properties = m_reader.getProject().getProjectProperties();
+      properties.setFileApplication("Primavera");
+      properties.setFileType(productName);
    }
 
    /**
     * Select the project properties from the database.
-    *
-    * @throws SQLException
     */
    private void processProjectProperties() throws SQLException
    {
@@ -194,7 +190,7 @@ public final class PrimaveraDatabaseReader extends AbstractProjectReader
       // Process common attributes
       //
       List<Row> rows = getRows("select * from " + m_schema + "project where proj_id=?", m_projectID);
-      m_reader.processProjectProperties(rows, m_projectID);
+      m_reader.processProjectProperties(m_projectID, rows);
 
       //
       // Process PMDB-specific attributes
@@ -206,14 +202,24 @@ public final class PrimaveraDatabaseReader extends AbstractProjectReader
          ProjectProperties ph = m_reader.getProject().getProjectProperties();
          ph.setCreationDate(row.getDate("create_date"));
          ph.setLastSaved(row.getDate("update_date"));
-         ph.setMinutesPerDay(Double.valueOf(row.getDouble("day_hr_cnt").doubleValue() * 60));
-         ph.setMinutesPerWeek(Double.valueOf(row.getDouble("week_hr_cnt").doubleValue() * 60));
+         ph.setMinutesPerDay(Integer.valueOf((int) (row.getDouble("day_hr_cnt").doubleValue() * 60)));
+         ph.setMinutesPerWeek(Integer.valueOf((int) (row.getDouble("week_hr_cnt").doubleValue() * 60)));
+         ph.setMinutesPerMonth(Integer.valueOf((int) (row.getDouble("month_hr_cnt").doubleValue() * 60)));
+         ph.setMinutesPerYear(Integer.valueOf((int) (row.getDouble("year_hr_cnt").doubleValue() * 60)));
          ph.setWeekStartDay(Day.getInstance(row.getInt("week_start_day_num")));
 
          processDefaultCurrency(row.getInteger("curr_id"));
       }
 
       processSchedulingProjectProperties();
+   }
+
+   /**
+    * Select the locations from the database.
+    */
+   private void processLocations() throws SQLException
+   {
+      m_reader.processLocations(getRows("select * from " + m_schema + "location"));
    }
 
    /**
@@ -233,11 +239,27 @@ public final class PrimaveraDatabaseReader extends AbstractProjectReader
    }
 
    /**
+    * Select the activity steps from the database.
+    */
+   private void processActivitySteps() throws SQLException
+   {
+      m_reader.processActivitySteps(getRows("select * from " + m_schema + "taskproc where proj_id=?", m_projectID));
+   }
+
+   /**
     * Select the cost accounts from the database.
     */
    private void processCostAccounts() throws SQLException
    {
       m_reader.processCostAccounts(getRows("select * from " + m_schema + "account"));
+   }
+
+   /**
+    * Process notebook topics.
+    */
+   private void processNotebookTopics() throws SQLException
+   {
+      m_reader.processNotebookTopics(getRows("select * from " + m_schema + "memotype"));
    }
 
    /**
@@ -262,32 +284,16 @@ public final class PrimaveraDatabaseReader extends AbstractProjectReader
    }
 
    /**
-    * Process the scheduling project property from PROJPROP. This table only seems to exist
-    * in P6 databases, not XER files.
-    *
-    * @throws SQLException
+    * Process the scheduling project property from PROJPROP. This is represented
+    * as the schedoptions table in an XER file.
     */
    private void processSchedulingProjectProperties() throws SQLException
    {
       List<Row> rows = getRows("select * from " + m_schema + "projprop where proj_id=? and prop_name='scheduling'", m_projectID);
       if (!rows.isEmpty())
       {
-         Row row = rows.get(0);
-         Record record = Record.getRecord(row.getString("prop_value"));
-         if (record != null)
-         {
-            String[] keyValues = record.getValue().split("\\|");
-            for (int i = 0; i < keyValues.length - 1; ++i)
-            {
-               if ("sched_calendar_on_relationship_lag".equals(keyValues[i]))
-               {
-                  Map<String, Object> customProperties = new TreeMap<>();
-                  customProperties.put("LagCalendar", keyValues[i + 1]);
-                  m_reader.getProject().getProjectProperties().setCustomProperties(customProperties);
-                  break;
-               }
-            }
-         }
+         StructuredTextRecord record = new StructuredTextParser().parse(rows.get(0).getString("prop_value"));
+         m_reader.processScheduleOptions(new MapRow(new HashMap<>(record.getAttributes())));
       }
    }
 
@@ -308,19 +314,26 @@ public final class PrimaveraDatabaseReader extends AbstractProjectReader
 
    /**
     * Process resources.
-    *
-    * @throws SQLException
     */
    private void processResources() throws SQLException
    {
+      // TODO: handle exporting parent resources
       List<Row> rows = getRows("select * from " + m_schema + "rsrc where delete_date is null and rsrc_id in (select rsrc_id from " + m_schema + "taskrsrc t where proj_id=? and delete_date is null) order by rsrc_seq_num", m_projectID);
       m_reader.processResources(rows);
    }
 
    /**
+    * Process roles.
+    */
+   private void processRoles() throws SQLException
+   {
+      // TODO: handle exporting parent roles
+      List<Row> rows = getRows("select * from " + m_schema + "roles where delete_date is null and role_id in (select role_id from " + m_schema + "taskrsrc t where proj_id=? and delete_date is null) order by seq_num", m_projectID);
+      m_reader.processRoles(rows);
+   }
+
+   /**
     * Process resource rates.
-    *
-    * @throws SQLException
     */
    private void processResourceRates() throws SQLException
    {
@@ -329,21 +342,29 @@ public final class PrimaveraDatabaseReader extends AbstractProjectReader
    }
 
    /**
+    * Process role rates.
+    */
+   private void processRoleRates() throws SQLException
+   {
+      List<Row> rows = getRows("select * from " + m_schema + "rolerate where delete_date is null and role_id in (select role_id from " + m_schema + "taskrsrc t where proj_id=? and delete_date is null) order by role_rate_id", m_projectID);
+      m_reader.processRoleRates(rows);
+   }
+
+   /**
     * Process tasks.
-    *
-    * @throws SQLException
     */
    private void processTasks() throws SQLException
    {
       List<Row> wbs = getRows("select * from " + m_schema + "projwbs where proj_id=? and delete_date is null order by parent_wbs_id,seq_num", m_projectID);
       List<Row> tasks = getRows("select * from " + m_schema + "task where proj_id=? and delete_date is null", m_projectID);
-      m_reader.processTasks(wbs, tasks);
+      Map<Integer, Notes> wbsNotes = m_reader.getNotes(getRows("select * from " + m_schema + "wbsmemo where proj_id=?", m_projectID), "wbs_memo_id", "wbs_id", "wbs_memo");
+      Map<Integer, Notes> taskNotes = m_reader.getNotes(getRows("select * from " + m_schema + "taskmemo where proj_id=?", m_projectID), "memo_id", "task_id", "task_memo");
+
+      m_reader.processTasks(wbs, tasks, wbsNotes, taskNotes);
    }
 
    /**
     * Process predecessors.
-    *
-    * @throws SQLException
     */
    private void processPredecessors() throws SQLException
    {
@@ -353,8 +374,6 @@ public final class PrimaveraDatabaseReader extends AbstractProjectReader
 
    /**
     * Process calendars.
-    *
-    * @throws SQLException
     */
    private void processCalendars() throws SQLException
    {
@@ -364,13 +383,39 @@ public final class PrimaveraDatabaseReader extends AbstractProjectReader
 
    /**
     * Process resource assignments.
-    *
-    * @throws SQLException
     */
    private void processAssignments() throws SQLException
    {
+      processWorkContours();
       List<Row> rows = getRows("select * from " + m_schema + "taskrsrc where proj_id=? and delete_date is null", m_projectID);
       m_reader.processAssignments(rows);
+   }
+
+   /**
+    * Process resource curves.
+    */
+   private void processWorkContours() throws SQLException
+   {
+      WorkContourContainer contours = m_reader.getProject().getWorkContours();
+      List<Row> rows = getRows("select * from " + m_schema + "rsrccurv");
+      for (Row row : rows)
+      {
+         try
+         {
+            Integer id = row.getInteger("curv_id");
+            if (contours.getByUniqueID(id) != null)
+            {
+               continue;
+            }
+            double[] values = new StructuredTextParser().parse(row.getString("curv_data")).getChildren().stream().mapToDouble(r -> Double.parseDouble(r.getAttribute("PctUsage"))).toArray();
+            contours.add(new WorkContour(id, row.getString("curv_name"), row.getBoolean("default_flag"), values));
+         }
+
+         catch (Exception ex)
+         {
+            // Skip any curves we can't read
+         }
+      }
    }
 
    /**
@@ -405,49 +450,31 @@ public final class PrimaveraDatabaseReader extends AbstractProjectReader
       m_connection = connection;
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public ProjectFile read(String fileName)
    {
       throw new UnsupportedOperationException();
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public List<ProjectFile> readAll(String fileName)
    {
       throw new UnsupportedOperationException();
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public ProjectFile read(File file)
    {
       throw new UnsupportedOperationException();
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public List<ProjectFile> readAll(File file)
    {
       throw new UnsupportedOperationException();
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public ProjectFile read(InputStream inputStream)
    {
       throw new UnsupportedOperationException();
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public List<ProjectFile> readAll(InputStream inputStream)
    {
       throw new UnsupportedOperationException();
@@ -458,30 +485,23 @@ public final class PrimaveraDatabaseReader extends AbstractProjectReader
     *
     * @param sql query statement
     * @return result set
-    * @throws SQLException
     */
    private List<Row> getRows(String sql) throws SQLException
    {
       allocateConnection();
 
-      try
+      try (PreparedStatement ps = m_connection.prepareStatement(sql))
       {
-         List<Row> result = new ArrayList<>();
-
-         m_ps = m_connection.prepareStatement(sql);
-         m_rs = m_ps.executeQuery();
-         populateMetaData();
-         while (m_rs.next())
+         try (ResultSet rs = ps.executeQuery())
          {
-            result.add(new ResultSetRow(m_rs, m_meta));
+            List<Row> result = new ArrayList<>();
+            Map<String, Integer> meta = ResultSetHelper.populateMetaData(rs);
+            while (rs.next())
+            {
+               result.add(new ResultSetRow(rs, meta));
+            }
+            return result;
          }
-
-         return (result);
-      }
-
-      finally
-      {
-         releaseConnection();
       }
    }
 
@@ -492,38 +512,30 @@ public final class PrimaveraDatabaseReader extends AbstractProjectReader
     * @param sql query statement
     * @param var bind variable value
     * @return result set
-    * @throws SQLException
     */
    private List<Row> getRows(String sql, Integer var) throws SQLException
    {
       allocateConnection();
 
-      try
-      {
-         List<Row> result = new ArrayList<>();
+      List<Row> result = new ArrayList<>();
 
-         m_ps = m_connection.prepareStatement(sql);
-         m_ps.setInt(1, NumberHelper.getInt(var));
-         m_rs = m_ps.executeQuery();
-         populateMetaData();
-         while (m_rs.next())
+      try (PreparedStatement ps = m_connection.prepareStatement(sql))
+      {
+         ps.setInt(1, NumberHelper.getInt(var));
+         try (ResultSet rs = ps.executeQuery())
          {
-            result.add(new ResultSetRow(m_rs, m_meta));
+            Map<String, Integer> meta = ResultSetHelper.populateMetaData(rs);
+            while (rs.next())
+            {
+               result.add(new ResultSetRow(rs, meta));
+            }
          }
-
-         return (result);
       }
-
-      finally
-      {
-         releaseConnection();
-      }
+      return (result);
    }
 
    /**
     * Allocates a database connection.
-    *
-    * @throws SQLException
     */
    private void allocateConnection() throws SQLException
    {
@@ -531,38 +543,6 @@ public final class PrimaveraDatabaseReader extends AbstractProjectReader
       {
          m_connection = m_dataSource.getConnection();
          m_allocatedConnection = true;
-      }
-   }
-
-   /**
-    * Releases a database connection, and cleans up any resources
-    * associated with that connection.
-    */
-   private void releaseConnection()
-   {
-      AutoCloseableHelper.closeQuietly(m_rs);
-      m_rs = null;
-
-      AutoCloseableHelper.closeQuietly(m_ps);
-      m_ps = null;
-   }
-
-   /**
-    * Retrieves basic meta data from the result set.
-    *
-    * @throws SQLException
-    */
-   private void populateMetaData() throws SQLException
-   {
-      m_meta.clear();
-
-      ResultSetMetaData meta = m_rs.getMetaData();
-      int columnCount = meta.getColumnCount() + 1;
-      for (int loop = 1; loop < columnCount; loop++)
-      {
-         String name = meta.getColumnName(loop).toLowerCase();
-         Integer type = Integer.valueOf(meta.getColumnType(loop));
-         m_meta.put(name, type);
       }
    }
 
@@ -598,39 +578,6 @@ public final class PrimaveraDatabaseReader extends AbstractProjectReader
    }
 
    /**
-    * Override the default field name mapping for Task user defined types.
-    *
-    * @param type target user defined data type
-    * @param fieldNames field names
-    */
-   public void setFieldNamesForTaskUdfType(UserFieldDataType type, String[] fieldNames)
-   {
-      m_taskUdfCounters.setFieldNamesForType(type, fieldNames);
-   }
-
-   /**
-    * Override the default field name mapping for Resource user defined types.
-    *
-    * @param type target user defined data type
-    * @param fieldNames field names
-    */
-   public void setFieldNamesForResourceUdfType(UserFieldDataType type, String[] fieldNames)
-   {
-      m_resourceUdfCounters.setFieldNamesForType(type, fieldNames);
-   }
-
-   /**
-    * Override the default field name mapping for Assignment user defined types.
-    *
-    * @param type target user defined data type
-    * @param fieldNames field names
-    */
-   public void setFieldNamesForAssignmentUdfType(UserFieldDataType type, String[] fieldNames)
-   {
-      m_assignmentUdfCounters.setFieldNamesForType(type, fieldNames);
-   }
-
-   /**
     * Customise the data retrieved by this reader by modifying the contents of this map.
     *
     * @return Primavera field name to MPXJ field type map
@@ -638,6 +585,16 @@ public final class PrimaveraDatabaseReader extends AbstractProjectReader
    public Map<FieldType, String> getResourceFieldMap()
    {
       return m_resourceFields;
+   }
+
+   /**
+    * Customise the data retrieved by this reader by modifying the contents of this map.
+    *
+    * @return Primavera field name to MPXJ field type map
+    */
+   public Map<FieldType, String> getRoleFieldMap()
+   {
+      return m_roleFields;
    }
 
    /**
@@ -668,16 +625,6 @@ public final class PrimaveraDatabaseReader extends AbstractProjectReader
    public Map<FieldType, String> getAssignmentFieldMap()
    {
       return m_assignmentFields;
-   }
-
-   /**
-    * Customise the MPXJ field name aliases applied by this reader by modifying the contents of this map.
-    *
-    * @return Primavera field name to MPXJ field type map
-    */
-   public Map<FieldType, String> getAliases()
-   {
-      return m_aliases;
    }
 
    /**
@@ -732,18 +679,12 @@ public final class PrimaveraDatabaseReader extends AbstractProjectReader
    private DataSource m_dataSource;
    private Connection m_connection;
    private boolean m_allocatedConnection;
-   private PreparedStatement m_ps;
-   private ResultSet m_rs;
-   private Map<String, Integer> m_meta = new HashMap<>();
-   private UserFieldCounters m_taskUdfCounters = new UserFieldCounters();
-   private UserFieldCounters m_resourceUdfCounters = new UserFieldCounters();
-   private UserFieldCounters m_assignmentUdfCounters = new UserFieldCounters();
    private boolean m_matchPrimaveraWBS = true;
    private boolean m_wbsIsFullPath = true;
 
-   private Map<FieldType, String> m_resourceFields = PrimaveraReader.getDefaultResourceFieldMap();
-   private Map<FieldType, String> m_wbsFields = PrimaveraReader.getDefaultWbsFieldMap();
-   private Map<FieldType, String> m_taskFields = PrimaveraReader.getDefaultTaskFieldMap();
-   private Map<FieldType, String> m_assignmentFields = PrimaveraReader.getDefaultAssignmentFieldMap();
-   private Map<FieldType, String> m_aliases = PrimaveraReader.getDefaultAliases();
+   private final Map<FieldType, String> m_resourceFields = PrimaveraReader.getDefaultResourceFieldMap();
+   private final Map<FieldType, String> m_roleFields = PrimaveraReader.getDefaultRoleFieldMap();
+   private final Map<FieldType, String> m_wbsFields = PrimaveraReader.getDefaultWbsFieldMap();
+   private final Map<FieldType, String> m_taskFields = PrimaveraReader.getDefaultTaskFieldMap();
+   private final Map<FieldType, String> m_assignmentFields = PrimaveraReader.getDefaultAssignmentFieldMap();
 }

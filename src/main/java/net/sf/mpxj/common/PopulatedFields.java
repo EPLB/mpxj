@@ -25,7 +25,7 @@ package net.sf.mpxj.common;
 
 import java.util.Collection;
 import java.util.EnumSet;
-import java.util.Iterator;
+import java.util.HashSet;
 import java.util.Set;
 
 import net.sf.mpxj.AccrueType;
@@ -37,8 +37,10 @@ import net.sf.mpxj.Priority;
 import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.ProjectProperties;
 import net.sf.mpxj.Rate;
+import net.sf.mpxj.TaskMode;
 import net.sf.mpxj.TaskType;
 import net.sf.mpxj.TimeUnit;
+import net.sf.mpxj.UserDefinedField;
 
 /**
  * Given a collection of objects containing fields, return a set representing
@@ -47,18 +49,20 @@ import net.sf.mpxj.TimeUnit;
  * @param <E> field enumeration
  * @param <T> object type
  */
-public class PopulatedFields<E extends Enum<E>, T extends FieldContainer>
+public class PopulatedFields<E extends Enum<E> & FieldType, T extends FieldContainer>
 {
    /**
     * Constructor.
     *
     * @param project parent project
-    * @param fieldEnumType enumeration representing the set of fields
+    * @param fieldEnumType enumeration representing the set of fields for the parent container
+    * @param userDefinedFields collection of user defined fields for the parent container
     * @param collection collection of objects containing fields
     */
-   public PopulatedFields(ProjectFile project, Class<E> fieldEnumType, Collection<T> collection)
+   public PopulatedFields(ProjectFile project, Class<E> fieldEnumType, Collection<UserDefinedField> userDefinedFields, Collection<T> collection)
    {
-      m_fieldEnumType = fieldEnumType;
+      m_fields = new HashSet<>(EnumSet.allOf(fieldEnumType));
+      m_fields.addAll(userDefinedFields);
       m_collection = collection;
 
       ProjectProperties props = project.getProjectProperties();
@@ -73,23 +77,16 @@ public class PopulatedFields<E extends Enum<E>, T extends FieldContainer>
     *
     * @return populated fields
     */
-   public Set<E> getPopulatedFields()
+   public Set<FieldType> getPopulatedFields()
    {
-      Set<E> unusedFields = EnumSet.allOf(m_fieldEnumType);
+      Set<FieldType> unusedFields = new HashSet<>(m_fields);
 
       for (FieldContainer item : m_collection)
       {
-         Iterator<E> iter = unusedFields.iterator();
-         while (iter.hasNext())
-         {
-            if (fieldIsPopulated(item, (FieldType) iter.next()))
-            {
-               iter.remove();
-            }
-         }
+         unusedFields.removeIf(e -> fieldIsPopulated(item, e));
       }
 
-      Set<E> usedFields = EnumSet.allOf(m_fieldEnumType);
+      Set<FieldType> usedFields = new HashSet<>(m_fields);
       usedFields.removeAll(unusedFields);
 
       return usedFields;
@@ -97,7 +94,7 @@ public class PopulatedFields<E extends Enum<E>, T extends FieldContainer>
 
    /**
     * Returns true if the field is populated with a non-default value.
-    * 
+    *
     * @param item field container
     * @param type field type
     * @return true if the field is populated with a non-default value
@@ -105,12 +102,12 @@ public class PopulatedFields<E extends Enum<E>, T extends FieldContainer>
    private boolean fieldIsPopulated(FieldContainer item, FieldType type)
    {
       Object value = item.getCachedValue(type);
-      return value == null ? false : fieldIsNotDefaultValue(value, type);
+      return value != null && fieldIsNotDefaultValue(value, type);
    }
 
    /**
     * Returns true if the value is non-default.
-    * 
+    *
     * @param value field value
     * @param type field type
     * @return true if the value is non-default
@@ -122,9 +119,9 @@ public class PopulatedFields<E extends Enum<E>, T extends FieldContainer>
       switch (type.getDataType())
       {
          case STRING:
-         case ASCII_STRING:
+         case NOTES:
          {
-            result = !((String) value).isEmpty();
+            result = !(value.toString()).isEmpty();
             break;
          }
 
@@ -166,33 +163,39 @@ public class PopulatedFields<E extends Enum<E>, T extends FieldContainer>
             break;
          }
 
-         case TIME_UNITS:
-         {
-            result = ((TimeUnit) value) != m_defaultDurationUnits;
-            break;
-         }
-
-         case TASK_TYPE:
-         {
-            result = ((TaskType) value) != m_defaultTaskType;
-            break;
-         }
-
          case PRIORITY:
          {
             result = ((Priority) value).getValue() != Priority.MEDIUM;
             break;
          }
 
+         case TIME_UNITS:
+         {
+            result = value != m_defaultDurationUnits;
+            break;
+         }
+
+         case TASK_TYPE:
+         {
+            result = value != m_defaultTaskType;
+            break;
+         }
+
          case EARNED_VALUE_METHOD:
          {
-            result = ((EarnedValueMethod) value) != m_defaultTaskEarnedValueMethod;
+            result = value != m_defaultTaskEarnedValueMethod;
             break;
          }
 
          case ACCRUE:
          {
-            result = ((AccrueType) value) != m_defaultFixedCostAccrual;
+            result = value != m_defaultFixedCostAccrual;
+            break;
+         }
+
+         case TASK_MODE:
+         {
+            result = value != TaskMode.AUTO_SCHEDULED;
             break;
          }
 
@@ -206,7 +209,7 @@ public class PopulatedFields<E extends Enum<E>, T extends FieldContainer>
       return result;
    }
 
-   private final Class<E> m_fieldEnumType;
+   private final Set<FieldType> m_fields;
    private final Collection<T> m_collection;
    private final TimeUnit m_defaultDurationUnits;
    private final TaskType m_defaultTaskType;

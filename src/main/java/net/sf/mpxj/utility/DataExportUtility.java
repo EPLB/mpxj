@@ -39,6 +39,8 @@ import java.util.Date;
 import java.util.Locale;
 
 import net.sf.mpxj.common.AutoCloseableHelper;
+import net.sf.mpxj.common.JdbcOdbcHelper;
+import net.sf.mpxj.common.XmlHelper;
 
 /**
  * Simple utility to export data to an XML file from an arbitrary database
@@ -63,9 +65,7 @@ public final class DataExportUtility
 
          try
          {
-            Class.forName("sun.jdbc.odbc.JdbcOdbcDriver");
-            String url = "jdbc:odbc:DRIVER=Microsoft Access Driver (*.mdb);DBQ=" + argv[0];
-            connection = DriverManager.getConnection(url);
+            connection = DriverManager.getConnection(JdbcOdbcHelper.getMicrosoftAccessJdbcUrl(argv[0]));
 
             DataExportUtility dx = new DataExportUtility();
             dx.process(connection, argv[1]);
@@ -88,14 +88,13 @@ public final class DataExportUtility
     *
     * @param connection database connection
     * @param directory target directory
-    * @throws Exception
     */
    public void process(Connection connection, String directory) throws Exception
    {
       connection.setAutoCommit(true);
 
       //
-      // Retrieve meta data about the connection
+      // Retrieve metadata about the connection
       //
       DatabaseMetaData dmd = connection.getMetaData();
 
@@ -112,7 +111,7 @@ public final class DataExportUtility
       pw.println("<database>");
 
       ResultSet tables = dmd.getTables(null, null, null, types);
-      while (tables.next() == true)
+      while (tables.next())
       {
          processTable(pw, connection, tables.getString("TABLE_NAME"));
       }
@@ -130,7 +129,6 @@ public final class DataExportUtility
     * @param pw output print writer
     * @param connection database connection
     * @param name table name
-    * @throws Exception
     */
    private void processTable(PrintWriter pw, Connection connection, String name) throws Exception
    {
@@ -155,18 +153,11 @@ public final class DataExportUtility
       int columnCount = rmd.getColumnCount();
       String[] columnNames = new String[columnCount];
       int[] columnTypes = new int[columnCount];
-      int[] columnPrecision = new int[columnCount];
-      int[] columnScale = new int[columnCount];
 
       for (index = 0; index < columnCount; index++)
       {
          columnNames[index] = rmd.getColumnName(index + 1);
          columnTypes[index] = rmd.getColumnType(index + 1);
-         if (columnTypes[index] == Types.NUMERIC)
-         {
-            columnPrecision[index] = rmd.getPrecision(index + 1);
-            columnScale[index] = rmd.getScale(index + 1);
-         }
       }
 
       //
@@ -177,12 +168,13 @@ public final class DataExportUtility
       StringBuilder buffer = new StringBuilder(255);
       DateFormat df = new SimpleDateFormat("dd/MM/yyyy hh:mm", Locale.UK);
 
-      while (rs.next() == true)
+      while (rs.next())
       {
          pw.println(" <row>");
 
          for (index = 0; index < columnCount; index++)
          {
+            pw.print("  <column name=\"" + columnNames[index] + "\" type=\"" + columnTypes[index] + "\">");
             switch (columnTypes[index])
             {
                case Types.BINARY:
@@ -190,12 +182,7 @@ public final class DataExportUtility
                case Types.LONGVARBINARY:
                case Types.VARBINARY:
                {
-                  pw.print("  <column name=\"" + columnNames[index] + "\" type=\"" + columnTypes[index] + "\">");
-
                   pw.println("[BINARY DATA]");
-
-                  pw.println("</column>");
-
                   break;
                }
 
@@ -203,14 +190,9 @@ public final class DataExportUtility
                case Types.TIME:
                {
                   Date data = rs.getDate(index + 1);
-                  //if (data != null)
+                  if (data != null)
                   {
-                     pw.print("  <column name=\"" + columnNames[index] + "\" type=\"" + columnTypes[index] + "\">");
-                     if (data != null)
-                     {
-                        pw.print(df.format(data));
-                     }
-                     pw.println("</column>");
+                     pw.print(df.format(data));
                   }
                   break;
                }
@@ -218,66 +200,9 @@ public final class DataExportUtility
                case Types.TIMESTAMP:
                {
                   Timestamp data = rs.getTimestamp(index + 1);
-                  //if (data != null)
+                  if (data != null)
                   {
-                     pw.print("  <column name=\"" + columnNames[index] + "\" type=\"" + columnTypes[index] + "\">");
-                     if (data != null)
-                     {
-                        pw.print(data.toString());
-                     }
-                     pw.println("</column>");
-                  }
-                  break;
-               }
-
-               case Types.NUMERIC:
-               {
-                  //
-                  // If we have a non-null value, map the value to a
-                  // more specific type
-                  //
-                  String data = rs.getString(index + 1);
-                  //if (data != null)
-                  {
-                     int type = Types.NUMERIC;
-                     int precision = columnPrecision[index];
-                     int scale = columnScale[index];
-
-                     if (scale == 0)
-                     {
-                        if (precision == 10)
-                        {
-                           type = Types.INTEGER;
-                        }
-                        else
-                        {
-                           if (precision == 5)
-                           {
-                              type = Types.SMALLINT;
-                           }
-                           else
-                           {
-                              if (precision == 1)
-                              {
-                                 type = Types.BIT;
-                              }
-                           }
-                        }
-                     }
-                     else
-                     {
-                        if (precision > 125)
-                        {
-                           type = Types.DOUBLE;
-                        }
-                     }
-
-                     pw.print("  <column name=\"" + columnNames[index] + "\" type=\"" + type + "\">");
-                     if (data != null)
-                     {
-                        pw.print(data);
-                     }
-                     pw.println("</column>");
+                     pw.print(data);
                   }
                   break;
                }
@@ -285,18 +210,14 @@ public final class DataExportUtility
                default:
                {
                   String data = rs.getString(index + 1);
-                  //if (data != null)
+                  if (data != null)
                   {
-                     pw.print("  <column name=\"" + columnNames[index] + "\" type=\"" + columnTypes[index] + "\">");
-                     if (data != null)
-                     {
-                        pw.print(escapeText(buffer, data));
-                     }
-                     pw.println("</column>");
+                     pw.print(escapeText(buffer, data));
                   }
                   break;
                }
             }
+            pw.println("</column>");
          }
 
          pw.println(" </row>");
@@ -348,11 +269,11 @@ public final class DataExportUtility
 
             default:
             {
-               if (validXMLCharacter(c))
+               if (XmlHelper.validXmlChar(c))
                {
                   if (c > 127)
                   {
-                     sb.append("&#" + (int) c + ";");
+                     sb.append("&#").append((int) c).append(";");
                   }
                   else
                   {
@@ -366,16 +287,5 @@ public final class DataExportUtility
       }
 
       return (sb.toString());
-   }
-
-   /**
-    * Quick and dirty valid XML character test.
-    *
-    * @param c input character
-    * @return Boolean flag
-    */
-   private boolean validXMLCharacter(char c)
-   {
-      return (c == 0x9 || c == 0xA || c == 0xD || (c >= 0x20 && c <= 0xD7FF) || (c >= 0xE000 && c <= 0xFFFD));
    }
 }

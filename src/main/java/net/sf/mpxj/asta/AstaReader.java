@@ -25,7 +25,6 @@ package net.sf.mpxj.asta;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
@@ -35,16 +34,27 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.function.Function;
 
+import net.sf.mpxj.ActivityCode;
+import net.sf.mpxj.ActivityCodeContainer;
+import net.sf.mpxj.ActivityCodeScope;
+import net.sf.mpxj.ActivityCodeValue;
 import net.sf.mpxj.ChildTaskContainer;
 import net.sf.mpxj.ConstraintType;
-import net.sf.mpxj.CustomFieldContainer;
+import net.sf.mpxj.CostRateTable;
+import net.sf.mpxj.CostRateTableEntry;
+import net.sf.mpxj.DataType;
 import net.sf.mpxj.DateRange;
 import net.sf.mpxj.Day;
 import net.sf.mpxj.DayType;
 import net.sf.mpxj.Duration;
 import net.sf.mpxj.EventManager;
+import net.sf.mpxj.FieldContainer;
+import net.sf.mpxj.FieldType;
+import net.sf.mpxj.FieldTypeClass;
 import net.sf.mpxj.ProjectCalendar;
+import net.sf.mpxj.ProjectCalendarDays;
 import net.sf.mpxj.ProjectCalendarHours;
 import net.sf.mpxj.ProjectCalendarWeek;
 import net.sf.mpxj.ProjectConfig;
@@ -56,8 +66,10 @@ import net.sf.mpxj.Resource;
 import net.sf.mpxj.ResourceAssignment;
 import net.sf.mpxj.ResourceType;
 import net.sf.mpxj.Task;
-import net.sf.mpxj.TaskField;
 import net.sf.mpxj.TimeUnit;
+import net.sf.mpxj.CustomFieldContainer;
+import net.sf.mpxj.UserDefinedField;
+import net.sf.mpxj.UserDefinedFieldContainer;
 import net.sf.mpxj.common.DateHelper;
 import net.sf.mpxj.common.NumberHelper;
 
@@ -79,15 +91,13 @@ final class AstaReader
 
       config.setAutoTaskUniqueID(false);
       config.setAutoResourceUniqueID(false);
-
+      config.setAutoAssignmentUniqueID(false);
       config.setAutoCalendarUniqueID(false);
+      config.setAutoRelationUniqueID(false);
+      config.setBaselineStrategy(new AstaBaselineStrategy());
 
       m_project.getProjectProperties().setFileApplication("Asta");
       m_project.getProjectProperties().setFileType("PP");
-
-      CustomFieldContainer fields = m_project.getCustomFields();
-      fields.getCustomField(TaskField.TEXT1).setAlias("Code").setUserDefined(false);
-      fields.getCustomField(TaskField.NUMBER1).setAlias("Overall Percent Complete").setUserDefined(false);
    }
 
    /**
@@ -104,11 +114,13 @@ final class AstaReader
     * Process project properties.
     *
     * @param projectSummary project properties data.
+    * @param userSettings user settings
     * @param progressPeriods progress period data.
     */
-   public void processProjectProperties(Row projectSummary, List<Row> progressPeriods)
+   public void processProjectProperties(Row projectSummary, Row userSettings, List<Row> progressPeriods)
    {
       ProjectProperties ph = m_project.getProjectProperties();
+      final Integer currentProgressPeriodID;
 
       if (projectSummary != null)
       {
@@ -121,18 +133,33 @@ final class AstaReader
          ph.setLastSaved(projectSummary.getDate("LAST_EDITED_DATE"));
       }
 
+      if (userSettings == null)
+      {
+         currentProgressPeriodID = null;
+      }
+      else
+      {
+         currentProgressPeriodID = userSettings.getInteger("CURRENT_PROGRESS_PERIOD");
+      }
+
       if (progressPeriods != null)
       {
-         Collections.sort(progressPeriods, new Comparator<Row>()
+         Row progressPeriod;
+         if (currentProgressPeriodID == null)
          {
-            @Override public int compare(Row o1, Row o2)
-            {
-               return o1.getInteger("PROGRESS_PERIODID").compareTo(o2.getInteger("PROGRESS_PERIODID"));
-            }
-         });
+            progressPeriods.sort(Comparator.comparing(o -> o.getInteger("PROGRESS_PERIODID")));
 
-         Row lastProgressPeriod = progressPeriods.get(progressPeriods.size() - 1);
-         ph.setStatusDate(lastProgressPeriod.getDate("REPORT_DATE"));
+            progressPeriod = progressPeriods.get(progressPeriods.size() - 1);
+         }
+         else
+         {
+            progressPeriod = progressPeriods.stream().filter(r -> NumberHelper.equals(currentProgressPeriodID, r.getInteger("PROGRESS_PERIODID"))).findFirst().orElse(null);
+         }
+
+         if (progressPeriod != null)
+         {
+            ph.setStatusDate(progressPeriod.getDate("REPORT_DATE"));
+         }
       }
    }
 
@@ -155,7 +182,7 @@ final class AstaReader
          resource.setEmailAddress(row.getString("EMAIL_ADDRESS"));
          // EFFORT_TIME_UNIT
          resource.setName(row.getString("NASE"));
-         resource.setResourceCalendar(deriveResourceCalendar(row.getInteger("CALENDAV")));
+         resource.setCalendar(m_project.getCalendars().getByUniqueID(row.getInteger("CALENDAV")));
          resource.setMaxUnits(Double.valueOf(row.getDouble("AVAILABILITY").doubleValue() * 100));
          resource.setGeneric(row.getBoolean("CREATED_AS_FOLDER"));
          resource.setInitials(getInitials(resource.getName()));
@@ -183,30 +210,19 @@ final class AstaReader
          Resource resource = m_project.addResource();
          resource.setType(ResourceType.MATERIAL);
          resource.setUniqueID(row.getInteger("CONSUMABLE_RESOURCEID"));
-         resource.setCostPerUse(row.getDouble("COST_PER_USEDEFAULTSAMOUNT"));
          resource.setPeakUnits(Double.valueOf(row.getDouble("AVAILABILITY").doubleValue() * 100));
          resource.setName(row.getString("NASE"));
-         resource.setResourceCalendar(deriveResourceCalendar(row.getInteger("CALENDAV")));
+         resource.setCalendar(m_project.getCalendars().getByUniqueID(row.getInteger("CALENDAV")));
          resource.setAvailableFrom(row.getDate("AVAILABLE_FROM"));
          resource.setAvailableTo(row.getDate("AVAILABLE_TO"));
          resource.setGeneric(row.getBoolean("CREATED_AS_FOLDER"));
          resource.setMaterialLabel(row.getString("MEASUREMENT"));
          resource.setInitials(getInitials(resource.getName()));
-      }
-   }
 
-   /**
-    * Derive a calendar for a resource.
-    *
-    * @param parentCalendarID calendar from which resource calendar is derived
-    * @return new calendar for a resource
-    */
-   private ProjectCalendar deriveResourceCalendar(Integer parentCalendarID)
-   {
-      ProjectCalendar calendar = m_project.addDefaultDerivedCalendar();
-      calendar.setUniqueID(Integer.valueOf(m_project.getProjectConfig().getNextCalendarUniqueID()));
-      calendar.setParent(m_project.getCalendarByUniqueID(parentCalendarID));
-      return calendar;
+         CostRateTable table = new CostRateTable();
+         table.add(new CostRateTableEntry(DateHelper.START_DATE_NA, DateHelper.END_DATE_NA, row.getDouble("COST_PER_USEDEFAULTSAMOUNT")));
+         resource.setCostRateTable(0, table);
+      }
    }
 
    /**
@@ -222,6 +238,7 @@ final class AstaReader
       List<Row> parentBars = buildRowHierarchy(bars, expandedTasks, tasks, milestones);
       createTasks(m_project, "", parentBars);
       deriveProjectCalendar();
+      updateUniqueIDs();
       updateStructure();
       updateDates();
       calculatePercentComplete();
@@ -255,8 +272,8 @@ final class AstaReader
       //
       // Sort the bars and the leaves
       //
-      Collections.sort(bars, BAR_COMPARATOR);
-      Collections.sort(leaves, LEAF_COMPARATOR);
+      bars.sort(BAR_COMPARATOR);
+      leaves.sort(LEAF_COMPARATOR);
 
       //
       // Map bar IDs to bars
@@ -359,6 +376,11 @@ final class AstaReader
 
          Task task = parent.addTask();
 
+         if (row.getInteger("_EXPANDED_TASKID") != null)
+         {
+            m_expandedTaskMap.put(row.getInteger("_EXPANDED_TASKID"), task);
+         }
+
          //
          // Do we have a bar, task, or milestone?
          //
@@ -376,6 +398,8 @@ final class AstaReader
                populateBar(row, task);
                createTasks(task, task.getName(), row.getChildRows());
             }
+
+            m_barMap.put(row.getInteger("BARID"), task);
          }
          else
          {
@@ -410,10 +434,12 @@ final class AstaReader
       if (row.getInteger("TASKID") != null)
       {
          populateTask(row, task);
+         m_taskMap.put(row.getInteger("TASKID"), task);
       }
       else
       {
          populateMilestone(row, task);
+         m_milestoneMap.put(row.getInteger("MILESTONEID"), task);
       }
 
       String name = task.getName();
@@ -467,7 +493,7 @@ final class AstaReader
       //OVERALL_PERCENT_COMPL_WEIGHT
       task.setName(row.getString("NARE"));
       task.setNotes(getNotes(row));
-      task.setText(1, row.getString("UNIQUE_TASK_ID"));
+      task.setActivityID(row.getString("UNIQUE_TASK_ID"));
       task.setCalendar(m_project.getCalendarByUniqueID(row.getInteger("CALENDAU")));
       //EFFORT_TIMI_UNIT
       //WORL_UNIT
@@ -502,14 +528,14 @@ final class AstaReader
       // Note the conversion to hours is not strictly necessary, but matches the units previously used.
       //
       Duration duration = task.getEffectiveCalendar().getDuration(task.getStart(), task.getFinish());
-      duration = Duration.convertUnits(duration.getDuration(), duration.getUnits(), TimeUnit.HOURS, m_project.getProjectProperties());
+      duration = duration.convertUnits(TimeUnit.HOURS, m_project.getProjectProperties());
       task.setDuration(duration);
 
       //
       // Overall Percent Complete
       //
       Double overallPercentComplete = row.getPercent("OVERALL_PERCENV_COMPLETE");
-      task.setNumber(1, overallPercentComplete);
+      task.setOverallPercentComplete(overallPercentComplete);
       m_weights.put(task, row.getDouble("OVERALL_PERCENT_COMPL_WEIGHT"));
 
       //
@@ -560,6 +586,16 @@ final class AstaReader
          calendarID = row.getInteger("_COMMON_CALENDAR");
       }
 
+      String name = row.getString("NAMH");
+      if (name == null || name.isEmpty())
+      {
+         String extendedTaskName = row.getString("_NAME");
+         if (extendedTaskName != null && !extendedTaskName.isEmpty())
+         {
+            name = extendedTaskName;
+         }
+      }
+
       ProjectCalendar calendar = m_project.getCalendarByUniqueID(calendarID);
 
       //PROJID
@@ -568,7 +604,7 @@ final class AstaReader
       task.setFinish(row.getDate("ENF"));
       //NATURAL_ORDER
       //SPARI_INTEGER
-      task.setName(row.getString("NAMH"));
+      task.setName(name);
       //EXPANDED_TASK
       //PRIORITY
       //UNSCHEDULABLE
@@ -589,7 +625,32 @@ final class AstaReader
       //Related_Documents
       task.setCalendar(calendar);
 
-      task.setDuration(task.getEffectiveCalendar().getDuration(task.getStart(), task.getFinish()));
+      task.setDuration(deriveEffectiveCalendar(task).getDuration(task.getStart(), task.getFinish()));
+   }
+
+   /**
+    * This is a hacky solution to the problem that at the point in the process we have not
+    * determined the default calendar. We need a better way to understand how date calculations
+    * should be carried out for summary tasks.
+    *
+    * @param task task from which to derive the effective calendar
+    * @return effective calendar
+    */
+   private ProjectCalendar deriveEffectiveCalendar(Task task)
+   {
+      ProjectCalendar result = task.getEffectiveCalendar();
+      if (result == null)
+      {
+         if (m_project.getCalendars().isEmpty())
+         {
+            result = m_project.addDefaultBaseCalendar();
+         }
+         else
+         {
+            result = m_project.getCalendars().get(0);
+         }
+      }
+      return result;
    }
 
    /**
@@ -628,7 +689,7 @@ final class AstaReader
       //OVERALL_PERCENT_COMPL_WEIGHT
       task.setName(row.getString("NARE"));
       //NOTET
-      task.setText(1, row.getString("UNIQUE_TASK_ID"));
+      task.setActivityID(row.getString("UNIQUE_TASK_ID"));
       task.setCalendar(m_project.getCalendarByUniqueID(row.getInteger("CALENDAU")));
       //EFFORT_TIMI_UNIT
       //WORL_UNIT
@@ -670,6 +731,22 @@ final class AstaReader
       processConstraints(row, task);
 
       m_weights.put(task, row.getDouble("OVERALL_PERCENT_COMPL_WEIGHT"));
+   }
+
+   /**
+    * Ensure all tasks have a unique ID.
+    */
+   private void updateUniqueIDs()
+   {
+      int maxUniqueID = m_project.getTasks().stream().mapToInt(task -> NumberHelper.getInt(task.getUniqueID())).max().orElse(0);
+      int uniqueID = (((maxUniqueID + 1000) / 1000) + 1) * 1000;
+      for (Task task : m_project.getTasks())
+      {
+         if (task.getUniqueID() == null)
+         {
+            task.setUniqueID(Integer.valueOf(uniqueID++));
+         }
+      }
    }
 
    /**
@@ -736,7 +813,7 @@ final class AstaReader
             for (Task child : childTasks)
             {
                totalPercentComplete += NumberHelper.getDouble(child.getPercentageComplete());
-               totalOverallPercentComplete += NumberHelper.getDouble(child.getNumber(1));
+               totalOverallPercentComplete += NumberHelper.getDouble(child.getOverallPercentComplete());
                totalWeight += NumberHelper.getDouble(m_weights.get(child));
 
                Duration actualDuration = child.getActualDuration();
@@ -761,7 +838,7 @@ final class AstaReader
             // but for others it's not clear how the percent completes and weights are being
             // combined in Powerproject to determine the value shown.
             double overallPercentComplete = totalOverallPercentComplete / totalWeight;
-            task.setNumber(1, Double.valueOf(overallPercentComplete));
+            task.setOverallPercentComplete(Double.valueOf(overallPercentComplete));
 
             //
             // Duration percent complete
@@ -816,7 +893,7 @@ final class AstaReader
     */
    private void updateDates()
    {
-      m_project.getChildTasks().forEach(task -> updateDates(task));
+      m_project.getChildTasks().forEach(this::updateDates);
    }
 
    /**
@@ -1007,15 +1084,16 @@ final class AstaReader
     */
    public void processAssignments(List<Row> permanentAssignments)
    {
+      // TODO: add support for consumable resource assignments
       for (Row row : permanentAssignments)
       {
          Task task = m_project.getTaskByUniqueID(row.getInteger("ALLOCATEE_TO"));
          Resource resource = m_project.getResourceByUniqueID(row.getInteger("PLAYER"));
          if (task != null && resource != null)
          {
-            double percentComplete = row.getPercent("PERCENT_COMPLETE").doubleValue();
+            Double percentComplete = row.getPercent("PERCENT_COMPLETE");
             Duration work = row.getWork("EFFORW");
-            double actualWork = work.getDuration() * percentComplete;
+            double actualWork = (work.getDuration() * percentComplete.doubleValue()) / 100.0;
             double remainingWork = work.getDuration() - actualWork;
 
             ResourceAssignment assignment = task.addResourceAssignment(resource);
@@ -1024,11 +1102,10 @@ final class AstaReader
             assignment.setFinish(row.getDate("ENJ"));
             assignment.setUnits(Double.valueOf(row.getDouble("GIVEN_ALLOCATION").doubleValue() * 100));
             assignment.setDelay(row.getDuration("DELAAHOURS"));
-            assignment.setPercentageWorkComplete(Double.valueOf(percentComplete * 100));
             assignment.setWork(work);
             assignment.setActualWork(Duration.getInstance(actualWork, work.getUnits()));
             assignment.setRemainingWork(Duration.getInstance(remainingWork, work.getUnits()));
-
+            assignment.setPercentageWorkComplete(percentComplete);
          }
 
          //PROJID
@@ -1234,11 +1311,14 @@ final class AstaReader
 
       //
       // Set the default calendar for the project
-      // and remove it's use as a task-specific calendar.
+      // and remove its use as a task-specific calendar.
       //
-      if (defaultCalendar != null)
+      if (defaultCalendar == null)
       {
-         m_project.setDefaultCalendar(defaultCalendar);
+         defaultCalendar = m_project.getCalendars().findOrCreateDefaultCalendar();
+      }
+      else
+      {
          for (Task task : m_project.getTasks())
          {
             if (task.getCalendar() == defaultCalendar)
@@ -1247,6 +1327,8 @@ final class AstaReader
             }
          }
       }
+
+      m_project.setDefaultCalendar(defaultCalendar);
    }
 
    /**
@@ -1269,7 +1351,7 @@ final class AstaReader
             {
                // If the task has no predecessors, the constraint type will be START_NO_EARLIER_THAN.
                // If the task has predecessors, the constraint type will be AS_LATE_AS_POSSIBLE.
-               // We don't have the predecessor information at this point so we note the task Unique ID
+               // We don't have the predecessor information at this point, so we note the task Unique ID
                // to allow us to update the constraint type later if necessary.
                // https://github.com/joniles/mpxj/issues/161
                m_deferredConstraintType.add(task.getUniqueID());
@@ -1465,8 +1547,12 @@ final class AstaReader
       ProjectCalendar calendar = m_project.addCalendar();
       Integer dominantWorkPatternID = calendarRow.getInteger("DOMINANT_WORK_PATTERN");
       calendar.setUniqueID(calendarRow.getInteger("CALENDARID"));
-      processWorkPattern(calendar, dominantWorkPatternID, workPatternMap, timeEntryMap, exceptionTypeMap);
-      calendar.setName(calendarRow.getString("NAMK"));
+
+      boolean defaultWeekSet = workPatternMap.get(dominantWorkPatternID) != null;
+      if (defaultWeekSet)
+      {
+         processWorkPattern(calendar, dominantWorkPatternID, workPatternMap, timeEntryMap, exceptionTypeMap);
+      }
 
       //
       // Add any additional working weeks
@@ -1479,11 +1565,24 @@ final class AstaReader
             Integer workPatternID = row.getInteger("WORK_PATTERN");
             if (!workPatternID.equals(dominantWorkPatternID))
             {
-               ProjectCalendarWeek week = calendar.addWorkWeek();
-               week.setDateRange(new DateRange(row.getDate("START_DATE"), row.getDate("END_DATE")));
+               ProjectCalendarDays week;
+               if (defaultWeekSet)
+               {
+                  ProjectCalendarWeek newWeek = calendar.addWorkWeek();
+                  newWeek.setDateRange(new DateRange(row.getDate("START_DATE"), row.getDate("END_DATE")));
+                  week = newWeek;
+               }
+               else
+               {
+                  week = calendar;
+                  defaultWeekSet = true;
+               }
+
                processWorkPattern(week, workPatternID, workPatternMap, timeEntryMap, exceptionTypeMap);
             }
          }
+
+         calendar.setName(calendarRow.getString("NAMK"));
       }
 
       //
@@ -1507,6 +1606,26 @@ final class AstaReader
          }
       }
 
+      //
+      // Populate WORKING or NON_WORKING days with calendar hours if they are missing.
+      //
+      for (Day day : Day.values())
+      {
+         if (calendar.getCalendarHours(day) == null)
+         {
+            DayType dayType = calendar.getCalendarDayType(day);
+            if (dayType != DayType.DEFAULT)
+            {
+               ProjectCalendarHours hours = calendar.addCalendarHours(day);
+               if (dayType == DayType.WORKING)
+               {
+                  hours.add(ProjectCalendarDays.DEFAULT_WORKING_MORNING);
+                  hours.add(ProjectCalendarDays.DEFAULT_WORKING_AFTERNOON);
+               }
+            }
+         }
+      }
+
       m_eventManager.fireCalendarReadEvent(calendar);
    }
 
@@ -1519,7 +1638,7 @@ final class AstaReader
     * @param timeEntryMap time entry map
     * @param exceptionTypeMap exception type map
     */
-   private void processWorkPattern(ProjectCalendarWeek week, Integer workPatternID, Map<Integer, Row> workPatternMap, Map<Integer, List<Row>> timeEntryMap, Map<Integer, DayType> exceptionTypeMap)
+   private void processWorkPattern(ProjectCalendarDays week, Integer workPatternID, Map<Integer, Row> workPatternMap, Map<Integer, List<Row>> timeEntryMap, Map<Integer, DayType> exceptionTypeMap)
    {
       Row workPatternRow = workPatternMap.get(workPatternID);
       if (workPatternRow != null)
@@ -1535,7 +1654,7 @@ final class AstaReader
             // Haven't worked out how the start day is determined.
             Day currentDay = Day.SUNDAY;
             ProjectCalendarHours hours = week.addCalendarHours(currentDay);
-            Arrays.fill(week.getDays(), DayType.NON_WORKING);
+            Arrays.stream(Day.values()).forEach(d -> week.setCalendarDayType(d, DayType.NON_WORKING));
 
             for (Row row : timeEntryRows)
             {
@@ -1565,8 +1684,8 @@ final class AstaReader
                DayType type = exceptionTypeMap.get(row.getInteger("EXCEPTIOP"));
                if (type == DayType.WORKING)
                {
-                  hours.addRange(new DateRange(startTime, endTime));
-                  week.setWorkingDay(currentDay, DayType.WORKING);
+                  hours.add(new DateRange(startTime, endTime));
+                  week.setCalendarDayType(currentDay, DayType.WORKING);
                }
 
                lastEndTime = endTime.getTime();
@@ -1592,7 +1711,7 @@ final class AstaReader
          }
          else
          {
-            if (notes.indexOf(LINE_BREAK) != -1)
+            if (notes.contains(LINE_BREAK))
             {
                notes = notes.replace(LINE_BREAK, "\n");
             }
@@ -1601,10 +1720,423 @@ final class AstaReader
       return notes;
    }
 
-   private ProjectFile m_project;
-   private EventManager m_eventManager;
+   /**
+    * Extract user defined field data.
+    *
+    * @param definitions user defined field definitions
+    * @param data user defined  field data
+    */
+   public void processUserDefinedFields(List<Row> definitions, List<Row> data)
+   {
+      Map<Integer, ObjectType> objectTypeMap = new HashMap<>();
+      Map<Integer, FieldType> fieldMap = new HashMap<>();
+
+      processUserDefinedFieldDefinitions(definitions, objectTypeMap, fieldMap);
+      processUserDefinedFieldData(data, objectTypeMap, fieldMap);
+   }
+
+   /**
+    * Process user defined field definitions.
+    *
+    * @param definitions field definitions
+    * @param objectTypeMap id to object type map
+    * @param fieldMap id to user defined field map
+    */
+   private void processUserDefinedFieldDefinitions(List<Row> definitions, Map<Integer, ObjectType> objectTypeMap, Map<Integer, FieldType> fieldMap)
+   {
+      UserDefinedFieldContainer userDefinedFields = m_project.getUserDefinedFields();
+      CustomFieldContainer customFields = m_project.getCustomFields();
+
+      for (Row row : definitions)
+      {
+         ObjectType objectType = ObjectType.getInstance(row.getInteger("OBJ_TYPE"));
+         if (objectType == null)
+         {
+            continue;
+         }
+
+         FieldTypeClass fieldTypeClass = getFieldTypeClass(objectType);
+         if (fieldTypeClass == null)
+         {
+            continue;
+         }
+
+         DataType dataType = DATA_TYPE_MAP.get(row.getInteger("DATA_TYPE"));
+         if (dataType == null)
+         {
+            continue;
+         }
+
+         Integer id = row.getInteger("UDF_ID");
+         String internalName = "user_field_" + id;
+         String externalName = row.getString("UDF_NAME");
+         UserDefinedField field = new UserDefinedField(id, internalName, externalName, fieldTypeClass, false, dataType);
+         userDefinedFields.add(field);
+         customFields.add(field).setAlias(externalName);
+
+         objectTypeMap.put(id, objectType);
+         fieldMap.put(id, field);
+      }
+   }
+
+   private FieldTypeClass getFieldTypeClass(ObjectType objectType)
+   {
+      FieldTypeClass fieldTypeClass = null;
+
+      switch (objectType)
+      {
+         case BAR_OBJECT_TYPE:
+         case TASK_OBJECT_TYPE:
+         case MILESTONE_OBJECT_TYPE:
+         {
+            fieldTypeClass = FieldTypeClass.TASK;
+            break;
+         }
+
+         case PERMANENT_RESOURCE_OBJECT_TYPE:
+         case CONSUMABLE_RESOURCE_OBJECT_TYPE:
+         {
+            fieldTypeClass = FieldTypeClass.RESOURCE;
+            break;
+         }
+
+         case PERMANENT_SCHEDULE_ALLOCATION_OBJECT_TYPE:
+         {
+            fieldTypeClass = FieldTypeClass.ASSIGNMENT;
+            break;
+         }
+      }
+
+      return fieldTypeClass;
+   }
+
+   /**
+    * Process user defined field data.
+    *
+    * @param data user defined field data
+    * @param objectTypeMap id to object type map
+    * @param fieldMap id to field map
+    */
+   private void processUserDefinedFieldData(List<Row> data, Map<Integer, ObjectType> objectTypeMap, Map<Integer, FieldType> fieldMap)
+   {
+      for (Row row : data)
+      {
+         Integer id = row.getInteger("UDF_ID");
+
+         FieldType field = fieldMap.get(id);
+         if (field == null)
+         {
+            continue;
+         }
+
+         ObjectType objectType = objectTypeMap.get(id);
+         if (objectType == null)
+         {
+            continue;
+         }
+
+         Function<Integer, FieldContainer> mapper = getFieldContainerMapper(objectType);
+         if (mapper == null)
+         {
+            continue;
+         }
+
+         FieldContainer container = mapper.apply(row.getInteger("OBJ_ID"));
+         if (container == null)
+         {
+            continue;
+         }
+
+         container.set(field, getUserDefinedFieldValue(field.getDataType(), row));
+      }
+   }
+
+   private Function<Integer, FieldContainer> getFieldContainerMapper(ObjectType objectType)
+   {
+      Function<Integer, FieldContainer> mapper = null;
+      switch (objectType)
+      {
+         case BAR_OBJECT_TYPE:
+         {
+            mapper = m_barMap::get;
+            break;
+         }
+
+         case TASK_OBJECT_TYPE:
+         {
+            mapper = m_taskMap::get;
+            break;
+         }
+
+         case MILESTONE_OBJECT_TYPE:
+         {
+            mapper = m_milestoneMap::get;
+            break;
+         }
+
+         case PERMANENT_RESOURCE_OBJECT_TYPE:
+         case CONSUMABLE_RESOURCE_OBJECT_TYPE:
+         {
+            mapper = m_project::getResourceByUniqueID;
+            break;
+         }
+
+         // TODO: add support for consumable resource assignments
+         case PERMANENT_SCHEDULE_ALLOCATION_OBJECT_TYPE:
+         {
+            mapper = i -> m_project.getResourceAssignments().getByUniqueID(i);
+            break;
+         }
+      }
+
+      return mapper;
+   }
+
+   private Object getUserDefinedFieldValue(DataType type, Row row)
+   {
+      // Ideally we'd just retrieve the correct type from the result set.
+      // Although the table metadata is correct, it appears that Asta is
+      // writing inconsistent data types in the records themselves, hence
+      // we have to work to ensure that we can convert what we get into
+      // the expected type.
+      Object value;
+      switch (type)
+      {
+         case BOOLEAN:
+         {
+            value = getUserDefinedFieldBoolean(row);
+            break;
+         }
+
+         case INTEGER:
+         {
+            value = getUserDefinedFieldInteger(row);
+            break;
+         }
+
+         case NUMERIC:
+         {
+            value = getUserDefinedFieldDouble(row);
+            break;
+         }
+
+         case DATE:
+         {
+            value = getUserDefinedFieldDate(row);
+            break;
+         }
+
+         case DURATION:
+         {
+            value = getUserDefinedFieldDuration(row);
+            break;
+         }
+
+         default:
+         {
+            value = getUserDefinedFieldString(row);
+            break;
+         }
+      }
+      return value;
+   }
+
+   /**
+    * Retrieve a value and handle inconsistent types.
+    *
+    * @param row result set row
+    * @return value
+    */
+   private Integer getUserDefinedFieldInteger(Row row)
+   {
+      Integer result;
+      Object value = row.getObject("DATA_AS_NUMBER");
+      if (value instanceof Number)
+      {
+         result = Integer.valueOf(((Number) value).intValue());
+      }
+      else
+      {
+         if (value instanceof String)
+         {
+            try
+            {
+               result = Integer.valueOf((String) value);
+            }
+            catch (NumberFormatException ex)
+            {
+               result = null;
+            }
+         }
+         else
+         {
+            result = null;
+         }
+      }
+      return result;
+   }
+
+   /**
+    * Retrieve a value and handle inconsistent types.
+    *
+    * @param row result set row
+    * @return value
+    */
+   private Double getUserDefinedFieldDouble(Row row)
+   {
+      Double result;
+      Object value = row.getObject("DATA_AS_NUMBER");
+      if (value instanceof Number)
+      {
+         result = Double.valueOf(((Number) value).doubleValue());
+      }
+      else
+      {
+         if (value instanceof String)
+         {
+            try
+            {
+               result = Double.valueOf((String) value);
+            }
+            catch (NumberFormatException ex)
+            {
+               result = null;
+            }
+         }
+         else
+         {
+            result = null;
+         }
+      }
+      return result;
+   }
+
+   /**
+    * Retrieve a value and handle inconsistent types.
+    *
+    * @param row result set row
+    * @return value
+    */
+   private Boolean getUserDefinedFieldBoolean(Row row)
+   {
+      Integer result = getUserDefinedFieldInteger(row);
+      return Boolean.valueOf(result != null && result.intValue() == 1);
+   }
+
+   /**
+    * Retrieve a value and handle inconsistent types.
+    *
+    * @param row result set row
+    * @return value
+    */
+   private Date getUserDefinedFieldDate(Row row)
+   {
+      Object value = row.getObject("DATA_AS_DATE");
+      if (!(value instanceof Date))
+      {
+         value = null;
+      }
+      return (Date) value;
+   }
+
+   /**
+    * Retrieve a value and handle inconsistent types.
+    *
+    * @param row result set row
+    * @return value
+    */
+   private Duration getUserDefinedFieldDuration(Row row)
+   {
+      // TODO: displayed time units defined by DATA_AS_ID
+      return Duration.getInstance(NumberHelper.getDouble(getUserDefinedFieldDouble(row)), TimeUnit.HOURS);
+   }
+
+   /**
+    * Retrieve a value and handle inconsistent types.
+    *
+    * @param row result set row
+    * @return value
+    */
+   private String getUserDefinedFieldString(Row row)
+   {
+      Object value = row.getObject("DATA_AS_NOTE");
+      return value == null ? null : value.toString();
+   }
+
+   public void processCodeLibraries(List<Row> types, List<Row> typeValues, List<Row> assignments)
+   {
+      ActivityCodeContainer container = m_project.getActivityCodes();
+      Map<Integer, ActivityCode> codeMap = new HashMap<>();
+      Map<Integer, ActivityCodeValue> valueMap = new HashMap<>();
+
+      for (Row row : types)
+      {
+         Integer sequenceNumber = Integer.valueOf(codeMap.size() + 1);
+         ActivityCode code = new ActivityCode(m_project, row.getInteger("ID"), ActivityCodeScope.GLOBAL, null, null, sequenceNumber, row.getString("NAME"), false, null);
+         container.add(code);
+         codeMap.put(code.getUniqueID(), code);
+      }
+
+      for (Row row : typeValues)
+      {
+         ActivityCode code = codeMap.get(row.getInteger("CODE_LIBRARY"));
+         if (code != null)
+         {
+            Integer sequenceNumber = Integer.valueOf(code.getValues().size() + 1);
+            ActivityCodeValue value = code.addValue(row.getInteger("ID"), sequenceNumber, row.getString("SHORT_NAME"), row.getString("NAME"), null);
+            valueMap.put(value.getUniqueID(), value);
+         }
+      }
+
+      for (Row row : typeValues)
+      {
+         ActivityCodeValue child = valueMap.get(row.getInteger("ID"));
+         ActivityCodeValue parent = valueMap.get(row.getInteger("CODE_LIBRARY_ENTRY"));
+         if (parent != null && child != null)
+         {
+            child.setParent(parent);
+         }
+      }
+
+      for (Row row : assignments)
+      {
+         ActivityCodeValue value = valueMap.get(row.getInteger("ASSIGNED_TO"));
+         if (value == null)
+         {
+            continue;
+         }
+
+         Integer id = row.getInteger("CODES");
+         Task task = m_taskMap.get(id);
+         if (task == null)
+         {
+            task = m_milestoneMap.get(id);
+            if (task == null)
+            {
+               task = m_barMap.get(id);
+               if (task == null)
+               {
+                  task = m_expandedTaskMap.get(id);
+               }
+            }
+         }
+
+         // Task will be null here for hammock tasks
+         if (task != null)
+         {
+            task.addActivityCode(value);
+         }
+      }
+   }
+
+   private final ProjectFile m_project;
+   private final EventManager m_eventManager;
    private final Map<Task, Double> m_weights = new HashMap<>();
    private final Set<Integer> m_deferredConstraintType = new HashSet<>();
+   private final Map<Integer, Task> m_barMap = new HashMap<>();
+   private final Map<Integer, Task> m_taskMap = new HashMap<>();
+   private final Map<Integer, Task> m_milestoneMap = new HashMap<>();
+   private final Map<Integer, Task> m_expandedTaskMap = new HashMap<>();
 
    private static final Double COMPLETE = Double.valueOf(100);
    private static final Double INCOMPLETE = Double.valueOf(0);
@@ -1619,4 +2151,16 @@ final class AstaReader
       RelationType.FINISH_FINISH,
       RelationType.START_FINISH
    };
+
+   private static final Map<Integer, DataType> DATA_TYPE_MAP = new HashMap<>();
+   static
+   {
+      DATA_TYPE_MAP.put(Integer.valueOf(0), DataType.BOOLEAN); // Boolean
+      DATA_TYPE_MAP.put(Integer.valueOf(6), DataType.INTEGER); // Integer
+      DATA_TYPE_MAP.put(Integer.valueOf(8), DataType.NUMERIC); // Float
+      DATA_TYPE_MAP.put(Integer.valueOf(9), DataType.STRING); // String
+      DATA_TYPE_MAP.put(Integer.valueOf(13), DataType.DATE); // Date
+      DATA_TYPE_MAP.put(Integer.valueOf(15), DataType.DURATION); // Duration
+      DATA_TYPE_MAP.put(Integer.valueOf(24), DataType.STRING); // URL
+   }
 }

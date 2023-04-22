@@ -28,9 +28,11 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Locale;
 
+import net.sf.mpxj.FieldType;
 import net.sf.mpxj.MPXJException;
 import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.Resource;
+import net.sf.mpxj.mpp.UserDefinedFieldMap;
 
 /**
  * This class represents the resource table definition record in an MPX file.
@@ -45,10 +47,12 @@ final class ResourceModel
     *
     * @param file the parent file to which this record belongs.
     * @param locale target locale
+    * @param userDefinedFieldMap user defined field map
     */
-   ResourceModel(ProjectFile file, Locale locale)
+   ResourceModel(ProjectFile file, Locale locale, UserDefinedFieldMap userDefinedFieldMap)
    {
       m_parentFile = file;
+      m_userDefinedFieldMap = userDefinedFieldMap;
       setLocale(locale);
    }
 
@@ -78,7 +82,7 @@ final class ResourceModel
     * This method populates the resource model from data read from an MPX file.
     *
     * @param record data read from an MPX file
-    * @param isText flag indicating whether the tetxual or numeric data is being supplied
+    * @param isText flag indicating whether the textual or numeric data is being supplied
     */
    public void update(Record record, boolean isText) throws MPXJException
    {
@@ -86,7 +90,7 @@ final class ResourceModel
 
       for (int i = 0; i < length; i++)
       {
-         if (isText == true)
+         if (isText)
          {
             add(getResourceCode(record.getString(i)));
          }
@@ -102,7 +106,7 @@ final class ResourceModel
     * indicating the fields present in a resource record. Note that
     * the values in this array will be terminated by -1.
     *
-    * @return list of field names
+    * @return array of field identifiers
     */
    public int[] getModel()
    {
@@ -126,9 +130,13 @@ final class ResourceModel
       {
          for (int loop = 0; loop < MPXResourceField.MAX_FIELDS; loop++)
          {
-            if (resource.getCachedValue(MPXResourceField.getMpxjField(loop)) != null)
+            FieldType field = MPXResourceField.getMpxjField(loop);
+            field = m_userDefinedFieldMap == null ? field : m_userDefinedFieldMap.getSource(field);
+
+            Object value = resource.get(field);
+            if (ModelUtility.isFieldPopulated(field, value))
             {
-               if (m_flags[loop] == false)
+               if (!m_flags[loop])
                {
                   m_flags[loop] = true;
                   m_fields[m_count] = loop;
@@ -139,7 +147,7 @@ final class ResourceModel
       }
 
       //
-      // Ensure the the model fields always appear in the same order
+      // Ensure the model fields always appear in the same order
       //
       Arrays.sort(m_fields);
       System.arraycopy(m_fields, m_fields.length - m_count, m_fields, 0, m_count);
@@ -179,7 +187,7 @@ final class ResourceModel
       textual.append(MPXConstants.EOL);
       numeric.append(MPXConstants.EOL);
 
-      textual.append(numeric.toString());
+      textual.append(numeric);
 
       return (textual.toString());
    }
@@ -195,7 +203,7 @@ final class ResourceModel
    {
       if (field < m_flags.length)
       {
-         if (m_flags[field] == false)
+         if (!m_flags[field])
          {
             m_flags[field] = true;
             m_fields[m_count] = field;
@@ -240,18 +248,18 @@ final class ResourceModel
       return (result.intValue());
    }
 
-   private ProjectFile m_parentFile;
+   private final ProjectFile m_parentFile;
 
    /**
     * Array of flags indicating whether each field has already been
     * added to the model.
     */
-   private boolean[] m_flags = new boolean[MPXResourceField.MAX_FIELDS];
+   private final boolean[] m_flags = new boolean[MPXResourceField.MAX_FIELDS];
 
    /**
     * Array of field numbers in order of their appearance.
     */
-   private int[] m_fields = new int[MPXResourceField.MAX_FIELDS + 1];
+   private final int[] m_fields = new int[MPXResourceField.MAX_FIELDS + 1];
 
    /**
     * Count of the number of fields present.
@@ -266,5 +274,6 @@ final class ResourceModel
    /**
     * Map to store Resource field Numbers.
     */
-   private HashMap<String, Integer> m_resourceNumbers = new HashMap<>();
+   private final HashMap<String, Integer> m_resourceNumbers = new HashMap<>();
+   private final UserDefinedFieldMap m_userDefinedFieldMap;
 }

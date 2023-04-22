@@ -26,11 +26,11 @@ package net.sf.mpxj.merlin;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
 
+import net.sf.mpxj.common.DateHelper;
 import net.sf.mpxj.common.NumberHelper;
 
 /**
@@ -47,7 +47,7 @@ final class SqliteResultSetRow extends MapRow
    public SqliteResultSetRow(ResultSet rs, Map<String, Integer> meta)
       throws SQLException
    {
-      super(new HashMap<String, Object>());
+      super(new HashMap<>());
 
       for (Entry<String, Integer> entry : meta.entrySet())
       {
@@ -96,7 +96,7 @@ final class SqliteResultSetRow extends MapRow
                }
                else
                {
-                  value = new Date(TIMESTAMP_EPOCH + (ts * 1000));
+                  value = DateHelper.getTimestampFromLong(TIMESTAMP_EPOCH + (ts * 1000));
                }
                break;
             }

@@ -26,10 +26,12 @@ package net.sf.mpxj;
 import java.util.ArrayList;
 import java.util.List;
 
+import net.sf.mpxj.common.FieldTypeHelper;
+
 /**
- * Configuration detail for a custom field.
+ * Configuration detail for a field.
  */
-public class CustomField
+public class CustomField implements Comparable<CustomField>
 {
    /**
     * Constructor.
@@ -57,7 +59,7 @@ public class CustomField
    }
 
    /**
-    * Retrieve the value lookup table associated with this custom field.
+    * Retrieve the value lookup table associated with this field.
     *
     * @return value lookup table
     */
@@ -67,7 +69,7 @@ public class CustomField
    }
 
    /**
-    * Retrieve the graphical indicator configuration for this custom field.
+    * Retrieve the graphical indicator configuration for this field.
     *
     * @return graphical indicator configuration
     */
@@ -100,27 +102,32 @@ public class CustomField
    }
 
    /**
-    * Sets a flag to indicate if this field is user defined.
+    * Retrieve the Unique ID for this field.
+    * If this value is not set explicitly,
+    * it defaults to the field ID used by
+    * Microsoft Project.
     *
-    * @param userDefined true if this field is user defined
-    * @return this to allow method chaining
+    * @return Unique ID
     */
-   public CustomField setUserDefined(boolean userDefined)
+   public Integer getUniqueID()
    {
-      m_userDefined = userDefined;
-      return this;
+      if (m_uniqueID == null)
+      {
+         m_uniqueID = Integer.valueOf(FieldTypeHelper.getFieldID(m_field));
+      }
+      return m_uniqueID;
    }
 
    /**
-    * Returns true if this attribute is user defined. False indicates that MPXJ is using
-    * this attribute to represent an attribute from the source application
-    * which MPXJ can't map to a "built in" attribute.
+    * Set the Unique ID for this field.
     *
-    * @return true if this field is user defined
+    * @param uniqueID Unique ID
+    * @return this to allow method chaining
     */
-   public boolean getUserDefined()
+   public CustomField setUniqueID(Integer uniqueID)
    {
-      return m_userDefined;
+      m_uniqueID = uniqueID;
+      return this;
    }
 
    /**
@@ -133,6 +140,13 @@ public class CustomField
       return m_masks;
    }
 
+   @Override public int compareTo(CustomField f)
+   {
+      String name1 = getFieldType().getFieldTypeClass().name() + "." + getUniqueID() + "." + getAlias();
+      String name2 = f.getFieldType().getFieldTypeClass().name() + "." + f.getUniqueID() + "." + f.getAlias();
+      return name1.compareTo(name2);
+   }
+
    @Override public String toString()
    {
       return "[CustomField field=" + m_field + " alias=" + m_alias + "]";
@@ -143,6 +157,6 @@ public class CustomField
    private final CustomFieldLookupTable m_table;
    private final GraphicalIndicator m_indicator;
    private final List<CustomFieldValueMask> m_masks;
+   private Integer m_uniqueID;
    private String m_alias;
-   private boolean m_userDefined = true;
 }

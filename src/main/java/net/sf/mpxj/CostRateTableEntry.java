@@ -23,7 +23,10 @@
 
 package net.sf.mpxj;
 
+import java.util.Arrays;
 import java.util.Date;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import net.sf.mpxj.common.DateHelper;
 import net.sf.mpxj.common.NumberHelper;
@@ -41,29 +44,24 @@ public final class CostRateTableEntry implements Comparable<CostRateTableEntry>
     */
    private CostRateTableEntry()
    {
-      this(new Rate(0, TimeUnit.HOURS), TimeUnit.HOURS, new Rate(0, TimeUnit.HOURS), TimeUnit.HOURS, NumberHelper.DOUBLE_ZERO, DateHelper.START_DATE_NA, DateHelper.END_DATE_NA);
+      this(DateHelper.START_DATE_NA, DateHelper.END_DATE_NA, NumberHelper.DOUBLE_ZERO);
    }
 
    /**
     * Constructor.
     *
-    * @param standardRate standard rate
-    * @param standardRateFormat standard rate format
-    * @param overtimeRate overtime rate
-    * @param overtimeRateFormat overtime rate format
-    * @param costPerUse cost per use
-    * @param startDate start date
-    * @param endDate end date
+    * @param startDate    start date
+    * @param endDate      end date
+    * @param costPerUse   cost per use
+    * @param rates Rate instances
     */
-   public CostRateTableEntry(Rate standardRate, TimeUnit standardRateFormat, Rate overtimeRate, TimeUnit overtimeRateFormat, Number costPerUse, Date startDate, Date endDate)
+   public CostRateTableEntry(Date startDate, Date endDate, Number costPerUse, Rate... rates)
    {
       m_startDate = startDate;
       m_endDate = endDate;
-      m_standardRate = standardRate;
-      m_standardRateFormat = standardRateFormat;
-      m_overtimeRate = overtimeRate;
-      m_overtimeRateFormat = overtimeRateFormat;
       m_costPerUse = costPerUse;
+      Arrays.fill(m_rates, Rate.ZERO);
+      System.arraycopy(rates, 0, m_rates, 0, rates.length);
    }
 
    /**
@@ -87,23 +85,24 @@ public final class CostRateTableEntry implements Comparable<CostRateTableEntry>
    }
 
    /**
+    * Retrieve the rate with the specified index.
+    *
+    * @param index rate index
+    * @return Rate instance
+    */
+   public Rate getRate(int index)
+   {
+      return m_rates[index];
+   }
+
+   /**
     * Retrieves the standard rate represented by this entry.
     *
     * @return standard rate
     */
    public Rate getStandardRate()
    {
-      return m_standardRate;
-   }
-
-   /**
-    * Retrieves the format used when displaying the standard rate.
-    *
-    * @return standard rate format
-    */
-   public TimeUnit getStandardRateFormat()
-   {
-      return m_standardRateFormat;
+      return getRate(0);
    }
 
    /**
@@ -113,17 +112,7 @@ public final class CostRateTableEntry implements Comparable<CostRateTableEntry>
     */
    public Rate getOvertimeRate()
    {
-      return m_overtimeRate;
-   }
-
-   /**
-    * Retrieves the format used when displaying the overtime rate.
-    *
-    * @return overtime rate format
-    */
-   public TimeUnit getOvertimeRateFormat()
-   {
-      return m_overtimeRateFormat;
+      return getRate(1);
    }
 
    /**
@@ -136,29 +125,21 @@ public final class CostRateTableEntry implements Comparable<CostRateTableEntry>
       return m_costPerUse;
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public int compareTo(CostRateTableEntry o)
    {
       return DateHelper.compare(m_endDate, o.m_endDate);
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public String toString()
    {
-      return "[CostRateTableEntry standardRate=" + m_standardRate + " overtimeRate=" + m_overtimeRate + " costPerUse=" + m_costPerUse + " startDate=" + m_startDate + " endDate=" + m_endDate + "]";
+      String rates = Stream.of(m_rates).map(String::valueOf).collect(Collectors.joining(", "));
+      return "[CostRateTableEntry startDate=" + m_startDate + " endDate=" + m_endDate + " costPerUse=" + m_costPerUse + " rates=" + rates + "]";
    }
 
    private final Date m_startDate;
    private final Date m_endDate;
-   private final Rate m_standardRate;
-   private final TimeUnit m_standardRateFormat;
-   private final Rate m_overtimeRate;
-   private final TimeUnit m_overtimeRateFormat;
    private final Number m_costPerUse;
-
+   private final Rate[] m_rates = new Rate[MAX_RATES];
    public static final CostRateTableEntry DEFAULT_ENTRY = new CostRateTableEntry();
+   public static final int MAX_RATES = 5;
 }

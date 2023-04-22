@@ -37,6 +37,7 @@ import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.RecurrenceType;
 import net.sf.mpxj.RecurringData;
 import net.sf.mpxj.common.DateHelper;
+import net.sf.mpxj.common.NumberHelper;
 
 /**
  * Shared code used to read calendar data from MPP files.
@@ -101,7 +102,15 @@ abstract class AbstractCalendarAndExceptionFactory extends AbstractCalendarFacto
 
                Date fromDate = MPPUtility.getDate(data, offset);
                Date toDate = MPPUtility.getDate(data, offset + 2);
-               exception = cal.addCalendarException(fromDate, toDate);
+               RecurringData rd = readRecurringData(data, offset, fromDate, toDate);
+               if (rd == null)
+               {
+                  exception = cal.addCalendarException(fromDate, toDate);
+               }
+               else
+               {
+                  exception = cal.addCalendarException(rd);
+               }
 
                periodCount = MPPUtility.getShort(data, offset + 14);
                if (periodCount != 0)
@@ -110,7 +119,7 @@ abstract class AbstractCalendarAndExceptionFactory extends AbstractCalendarFacto
                   {
                      start = MPPUtility.getTime(data, offset + 20 + (exceptionPeriodIndex * 2));
                      duration = MPPUtility.getDuration(data, offset + 32 + (exceptionPeriodIndex * 4));
-                     exception.addRange(new DateRange(start, new Date(start.getTime() + duration)));
+                     exception.add(new DateRange(start, new Date(start.getTime() + duration)));
                   }
                }
 
@@ -128,87 +137,90 @@ abstract class AbstractCalendarAndExceptionFactory extends AbstractCalendarFacto
                   exception.setName(MPPUtility.getUnicodeString(data, offset + 92));
                }
 
-               //System.out.println(ByteArrayHelper.hexdump(data, offset, 92, false));
-
-               RecurringData rd = new RecurringData();
-               int recurrenceTypeValue = MPPUtility.getShort(data, offset + 72);
-               rd.setStartDate(exception.getFromDate());
-               rd.setFinishDate(exception.getToDate());
-               rd.setRecurrenceType(getRecurrenceType(recurrenceTypeValue));
-               rd.setRelative(getRelative(recurrenceTypeValue));
-               rd.setOccurrences(Integer.valueOf(MPPUtility.getShort(data, offset + 4)));
-
-               switch (rd.getRecurrenceType())
-               {
-                  case DAILY:
-                  {
-                     int frequency;
-                     if (recurrenceTypeValue == 1)
-                     {
-                        frequency = 1;
-                     }
-                     else
-                     {
-                        frequency = MPPUtility.getShort(data, offset + 76);
-                     }
-                     rd.setFrequency(Integer.valueOf(frequency));
-                     break;
-                  }
-
-                  case WEEKLY:
-                  {
-                     rd.setWeeklyDaysFromBitmap(Integer.valueOf(MPPUtility.getByte(data, offset + 76)), DAY_MASKS);
-                     rd.setFrequency(Integer.valueOf(MPPUtility.getShort(data, offset + 78)));
-                     break;
-                  }
-
-                  case MONTHLY:
-                  {
-                     if (rd.getRelative())
-                     {
-                        rd.setDayOfWeek(Day.getInstance(MPPUtility.getByte(data, offset + 77) - 2));
-                        rd.setDayNumber(Integer.valueOf(MPPUtility.getByte(data, offset + 76) + 1));
-                        rd.setFrequency(Integer.valueOf(MPPUtility.getShort(data, offset + 78)));
-                     }
-                     else
-                     {
-                        rd.setDayNumber(Integer.valueOf(MPPUtility.getByte(data, offset + 76)));
-                        rd.setFrequency(Integer.valueOf(MPPUtility.getByte(data, offset + 78)));
-                     }
-                     break;
-                  }
-
-                  case YEARLY:
-                  {
-                     if (rd.getRelative())
-                     {
-                        rd.setDayOfWeek(Day.getInstance(MPPUtility.getByte(data, offset + 78) - 2));
-                        rd.setDayNumber(Integer.valueOf(MPPUtility.getByte(data, offset + 77) + 1));
-                     }
-                     else
-                     {
-                        rd.setDayNumber(Integer.valueOf(MPPUtility.getByte(data, offset + 77)));
-                     }
-                     rd.setMonthNumber(Integer.valueOf(MPPUtility.getByte(data, offset + 76) + 1));
-                     break;
-                  }
-               }
-
-               //
-               // The default values for a non-recurring exception are daily, with 1 occurrence.
-               // Only add recurrence data if it is non-default.
-               //
-               if (rd.getRecurrenceType() != RecurrenceType.DAILY || rd.getOccurrences().intValue() != 1)
-               {
-                  exception.setRecurring(rd);
-               }
-
                offset += (92 + exceptionNameLength);
             }
          }
 
          processWorkWeeks(data, offset, cal);
       }
+   }
+
+   private RecurringData readRecurringData(byte[] data, int offset, Date fromDate, Date toDate)
+   {
+      RecurringData rd = new RecurringData();
+      int recurrenceTypeValue = MPPUtility.getShort(data, offset + 72);
+      rd.setStartDate(fromDate);
+      rd.setFinishDate(toDate);
+      rd.setRecurrenceType(getRecurrenceType(recurrenceTypeValue));
+      rd.setRelative(getRelative(recurrenceTypeValue));
+      rd.setOccurrences(Integer.valueOf(MPPUtility.getShort(data, offset + 4)));
+
+      switch (rd.getRecurrenceType())
+      {
+         case DAILY:
+         {
+            int frequency;
+            if (recurrenceTypeValue == 1)
+            {
+               frequency = 1;
+            }
+            else
+            {
+               frequency = MPPUtility.getShort(data, offset + 76);
+            }
+            rd.setFrequency(Integer.valueOf(frequency));
+            break;
+         }
+
+         case WEEKLY:
+         {
+            rd.setWeeklyDaysFromBitmap(Integer.valueOf(MPPUtility.getByte(data, offset + 76)), DAY_MASKS);
+            rd.setFrequency(Integer.valueOf(MPPUtility.getShort(data, offset + 78)));
+            break;
+         }
+
+         case MONTHLY:
+         {
+            if (rd.getRelative())
+            {
+               rd.setDayOfWeek(Day.getInstance(MPPUtility.getByte(data, offset + 77) - 2));
+               rd.setDayNumber(Integer.valueOf(MPPUtility.getByte(data, offset + 76) + 1));
+               rd.setFrequency(Integer.valueOf(MPPUtility.getShort(data, offset + 78)));
+            }
+            else
+            {
+               rd.setDayNumber(Integer.valueOf(MPPUtility.getByte(data, offset + 76)));
+               rd.setFrequency(Integer.valueOf(MPPUtility.getByte(data, offset + 78)));
+            }
+            break;
+         }
+
+         case YEARLY:
+         {
+            if (rd.getRelative())
+            {
+               rd.setDayOfWeek(Day.getInstance(MPPUtility.getByte(data, offset + 78) - 2));
+               rd.setDayNumber(Integer.valueOf(MPPUtility.getByte(data, offset + 77) + 1));
+            }
+            else
+            {
+               rd.setDayNumber(Integer.valueOf(MPPUtility.getByte(data, offset + 77)));
+            }
+            rd.setMonthNumber(Integer.valueOf(MPPUtility.getByte(data, offset + 76) + 1));
+            break;
+         }
+      }
+
+      //
+      // Flatten daily recurring exceptions if they only result in one date range.
+      // Flatten exception if it doesn't generate any dates.
+      //
+      if (rd.getRecurrenceType() == RecurrenceType.DAILY && NumberHelper.getInt(rd.getFrequency()) == 1)
+      {
+         rd = null;
+      }
+
+      return rd;
    }
 
    /**
@@ -282,10 +294,10 @@ abstract class AbstractCalendarAndExceptionFactory extends AbstractCalendarFacto
    {
       //System.out.println(ByteArrayHelper.hexdump(data, offset, 60, false));
 
-      int dayType = MPPUtility.getShort(data, offset + 0);
+      int dayType = MPPUtility.getShort(data, offset);
       if (dayType == 1)
       {
-         week.setWorkingDay(day, DayType.DEFAULT);
+         week.setCalendarDayType(day, DayType.DEFAULT);
       }
       else
       {
@@ -293,11 +305,11 @@ abstract class AbstractCalendarAndExceptionFactory extends AbstractCalendarFacto
          int rangeCount = MPPUtility.getShort(data, offset + 2);
          if (rangeCount == 0)
          {
-            week.setWorkingDay(day, DayType.NON_WORKING);
+            week.setCalendarDayType(day, DayType.NON_WORKING);
          }
          else
          {
-            week.setWorkingDay(day, DayType.WORKING);
+            week.setCalendarDayType(day, DayType.WORKING);
             Calendar cal = DateHelper.popCalendar();
             for (int index = 0; index < rangeCount; index++)
             {
@@ -306,7 +318,7 @@ abstract class AbstractCalendarAndExceptionFactory extends AbstractCalendarFacto
                cal.setTime(startTime);
                cal.add(Calendar.SECOND, durationInSeconds);
                Date finishTime = DateHelper.getCanonicalTime(cal.getTime());
-               hours.addRange(new DateRange(startTime, finishTime));
+               hours.add(new DateRange(startTime, finishTime));
             }
             DateHelper.pushCalendar(cal);
          }

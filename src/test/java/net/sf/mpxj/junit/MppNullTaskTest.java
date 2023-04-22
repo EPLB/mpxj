@@ -23,11 +23,10 @@
 
 package net.sf.mpxj.junit;
 
-import static net.sf.mpxj.junit.MpxjAssert.*;
 import static org.junit.Assert.*;
 import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.Task;
-import net.sf.mpxj.mpd.MPDDatabaseReader;
+import net.sf.mpxj.mpd.MPDFileReader;
 import net.sf.mpxj.mpp.MPPReader;
 import net.sf.mpxj.mspdi.MSPDIReader;
 
@@ -42,8 +41,6 @@ public class MppNullTaskTest
 
    /**
     * Test null task data read from an MPP9 file.
-    *
-    * @throws Exception
     */
    @Test public void testMpp9NullTasks() throws Exception
    {
@@ -53,8 +50,6 @@ public class MppNullTaskTest
 
    /**
     * Test null task data read from an MPP9 file saved by Project 2007.
-    *
-    * @throws Exception
     */
    @Test public void testMpp9NullTasksFrom12() throws Exception
    {
@@ -64,8 +59,6 @@ public class MppNullTaskTest
 
    /**
     * Test null task data read from an MPP9 file saved by Project 2010.
-    *
-    * @throws Exception
     */
    @Test public void testMpp9NullTasksFrom14() throws Exception
    {
@@ -75,8 +68,6 @@ public class MppNullTaskTest
 
    /**
     * Test null task data read from an MPP12 file.
-    *
-    * @throws Exception
     */
    @Test public void testMpp12NullTasks() throws Exception
    {
@@ -86,8 +77,6 @@ public class MppNullTaskTest
 
    /**
     * Test null task data read from an MPP12 file saved by Project 2010.
-    *
-    * @throws Exception
     */
    @Test public void testMpp12NullTasksFrom14() throws Exception
    {
@@ -97,8 +86,6 @@ public class MppNullTaskTest
 
    /**
     * Test null task data read from an MPP14 file.
-    *
-    * @throws Exception
     */
    @Test public void testMpp14NullTasks() throws Exception
    {
@@ -108,20 +95,15 @@ public class MppNullTaskTest
 
    /**
     * Test null task data read from an MPD9 file.
-    *
-    * @throws Exception
     */
    @Test public void testMpd9NullTasks() throws Exception
    {
-      assumeJvm();
-      ProjectFile project = new MPDDatabaseReader().read(MpxjTestData.filePath("mpp9nulltasks.mpd"));
+      ProjectFile project = new MPDFileReader().read(MpxjTestData.filePath("mpp9nulltasks.mpd"));
       testNullTasks(project);
    }
 
    /**
     * Test null task data read from an MSPDI file.
-    *
-    * @throws Exception
     */
    @Test public void testMspdiNullTasks() throws Exception
    {
@@ -133,7 +115,6 @@ public class MppNullTaskTest
     * Tests a project containing null tasks.
     *
     * @param project The ProjectFile instance being tested.
-    * @throws Exception
     */
    private void testNullTasks(ProjectFile project)
    {
@@ -148,10 +129,10 @@ public class MppNullTaskTest
       task = project.getTaskByID(Integer.valueOf(2));
       if (task != null)
       {
-         assertEquals(null, task.getName());
-         assertEquals(null, task.getOutlineLevel());
-         assertEquals(null, task.getOutlineNumber());
-         assertEquals(null, task.getWBS());
+         assertNull(task.getName());
+         assertNull(task.getOutlineLevel());
+         assertNull(task.getOutlineNumber());
+         assertNull(task.getWBS());
          assertFalse(task.getSummary());
       }
 
@@ -174,10 +155,10 @@ public class MppNullTaskTest
       task = project.getTaskByID(Integer.valueOf(5));
       if (task != null)
       {
-         assertEquals(null, task.getName());
-         assertEquals(null, task.getOutlineLevel());
-         assertEquals(null, task.getOutlineNumber());
-         assertEquals(null, task.getWBS());
+         assertNull(task.getName());
+         assertNull(task.getOutlineLevel());
+         assertNull(task.getOutlineNumber());
+         assertNull(task.getWBS());
          assertFalse(task.getSummary());
       }
 
@@ -192,10 +173,10 @@ public class MppNullTaskTest
       task = project.getTaskByID(Integer.valueOf(7));
       if (task != null)
       {
-         assertEquals(null, task.getName());
-         assertEquals(null, task.getOutlineLevel());
-         assertEquals(null, task.getOutlineNumber());
-         assertEquals(null, task.getWBS());
+         assertNull(task.getName());
+         assertNull(task.getOutlineLevel());
+         assertNull(task.getOutlineNumber());
+         assertNull(task.getWBS());
          assertFalse(task.getSummary());
       }
 

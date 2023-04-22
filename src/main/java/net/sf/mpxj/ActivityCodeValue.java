@@ -23,6 +23,10 @@
 
 package net.sf.mpxj;
 
+import java.awt.Color;
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Represents an individual activity code value.
  */
@@ -33,15 +37,19 @@ public class ActivityCodeValue
     *
     * @param type parent activity code type
     * @param uniqueID unique ID
+    * @param sequenceNumber value sequence number
     * @param name value name
     * @param description value description
+    * @param color value color
     */
-   public ActivityCodeValue(ActivityCode type, Integer uniqueID, String name, String description)
+   public ActivityCodeValue(ActivityCode type, Integer uniqueID, Integer sequenceNumber, String name, String description, Color color)
    {
       m_type = type;
       m_uniqueID = uniqueID;
+      m_sequenceNumber = sequenceNumber;
       m_name = name;
       m_description = description;
+      m_color = color;
    }
 
    /**
@@ -65,6 +73,16 @@ public class ActivityCodeValue
    }
 
    /**
+    * Retrieves the sequence number for this value.
+    *
+    * @return sequence number
+    */
+   public Integer getSequenceNumber()
+   {
+      return m_sequenceNumber;
+   }
+
+   /**
     * Retrieves the value name.
     *
     * @return value name
@@ -85,6 +103,16 @@ public class ActivityCodeValue
    }
 
    /**
+    * Retrieves the color associated with this value.
+    *
+    * @return Color instance
+    */
+   public Color getColor()
+   {
+      return m_color;
+   }
+
+   /**
     * Retrieve the parent ActivityCodeValue.
     *
     * @return parent ActivityCodeValue
@@ -95,13 +123,43 @@ public class ActivityCodeValue
    }
 
    /**
+    * Retrieve the parent ActivityCodeValue unique ID.
+    *
+    * @return parent ActivityCodeValue unique ID
+    */
+   public Integer getParentUniqueID()
+   {
+      return m_parent == null ? null : m_parent.getUniqueID();
+   }
+
+   /**
     * Set the parent ActivityCodeValue.
     *
     * @param parent parent ActivityCodeValue
     */
    public void setParent(ActivityCodeValue parent)
    {
+      if (m_parent != null)
+      {
+         m_parent.getChildValues().remove(this);
+      }
+
       m_parent = parent;
+
+      if (m_parent != null)
+      {
+         m_parent.getChildValues().add(this);
+      }
+   }
+
+   /**
+    * Retrieve any children of this value.
+    *
+    * @return list of ActivityCodeValue instances
+    */
+   public List<ActivityCodeValue> getChildValues()
+   {
+      return m_childValues;
    }
 
    @Override public String toString()
@@ -111,7 +169,11 @@ public class ActivityCodeValue
 
    private final ActivityCode m_type;
    private final Integer m_uniqueID;
+   private final Integer m_sequenceNumber;
    private final String m_name;
    private final String m_description;
+   private final Color m_color;
    private ActivityCodeValue m_parent;
+
+   private final List<ActivityCodeValue> m_childValues = new ArrayList<>();
 }

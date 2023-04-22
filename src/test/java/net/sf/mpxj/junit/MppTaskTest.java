@@ -43,7 +43,7 @@ import net.sf.mpxj.Resource;
 import net.sf.mpxj.Task;
 import net.sf.mpxj.TaskType;
 import net.sf.mpxj.TimeUnit;
-import net.sf.mpxj.mpd.MPDDatabaseReader;
+import net.sf.mpxj.mpd.MPDFileReader;
 import net.sf.mpxj.mpp.MPPReader;
 import net.sf.mpxj.mspdi.MSPDIReader;
 
@@ -58,8 +58,6 @@ public class MppTaskTest
 
    /**
     * Test task data read from an MPP9 file.
-    *
-    * @throws Exception
     */
    @Test public void testMpp9Task() throws Exception
    {
@@ -69,8 +67,6 @@ public class MppTaskTest
 
    /**
     * Test task data read from an MPP9 file saved by Project 2007.
-    *
-    * @throws Exception
     */
    @Test public void testMpp9TaskFrom12() throws Exception
    {
@@ -80,8 +76,6 @@ public class MppTaskTest
 
    /**
     * Test task data read from an MPP9 file saved by Project 2010.
-    *
-    * @throws Exception
     */
    @Test public void testMpp9TaskFrom14() throws Exception
    {
@@ -91,8 +85,6 @@ public class MppTaskTest
 
    /**
     * Test task data read from an MPP12 file.
-    *
-    * @throws Exception
     */
    @Test public void testMpp12Task() throws Exception
    {
@@ -102,8 +94,6 @@ public class MppTaskTest
 
    /**
     * Test task data read from an MPP12 file saved by Project 2010.
-    *
-    * @throws Exception
     */
    @Test public void testMpp12TaskFrom14() throws Exception
    {
@@ -113,8 +103,6 @@ public class MppTaskTest
 
    /**
     * Test task data read from an MPP14 file.
-    *
-    * @throws Exception
     */
    @Test public void testMpp14Task() throws Exception
    {
@@ -124,8 +112,6 @@ public class MppTaskTest
 
    /**
     * Test task data read from an MPP14 file.
-    *
-    * @throws Exception
     */
    @Test public void testMpp14TaskFromProject2013() throws Exception
    {
@@ -135,20 +121,15 @@ public class MppTaskTest
 
    /**
     * Test task data read from an MPD9 file.
-    *
-    * @throws Exception
     */
    @Test public void testMpd9Task() throws Exception
    {
-      assumeJvm();
-      ProjectFile mpp = new MPDDatabaseReader().read(MpxjTestData.filePath("mpp9task.mpd"));
+      ProjectFile mpp = new MPDFileReader().read(MpxjTestData.filePath("mpp9task.mpd"));
       testBasicTask(mpp);
    }
 
    /**
     * Test task data read from an MPP9 file.
-    *
-    * @throws Exception
     */
    @Test public void testMpp9Baseline() throws Exception
    {
@@ -158,8 +139,6 @@ public class MppTaskTest
 
    /**
     * Test task data read from an MPP9 file saved from Project 2007.
-    *
-    * @throws Exception
     */
    @Test public void testMpp9BaselineFrom12() throws Exception
    {
@@ -169,8 +148,6 @@ public class MppTaskTest
 
    /**
     * Test task data read from an MPP9 file saved from Project 2010.
-    *
-    * @throws Exception
     */
    @Test public void testMpp9BaselineFrom14() throws Exception
    {
@@ -180,8 +157,6 @@ public class MppTaskTest
 
    /**
     * Test task data read from an MPP12 file.
-    *
-    * @throws Exception
     */
    @Test public void testMpp12Baseline() throws Exception
    {
@@ -191,8 +166,6 @@ public class MppTaskTest
 
    /**
     * Test task data read from an MPP12 file saved by Project 2010.
-    *
-    * @throws Exception
     */
    @Test public void testMpp12BaselineFrom14() throws Exception
    {
@@ -202,8 +175,6 @@ public class MppTaskTest
 
    /**
     * Test task data read from an MPP14 file.
-    *
-    * @throws Exception
     */
    @Test public void testMpp14Baseline() throws Exception
    {
@@ -213,20 +184,15 @@ public class MppTaskTest
 
    /**
     * Test task data read from an MPD9 file.
-    *
-    * @throws Exception
     */
    @Test public void testMpd9Baseline() throws Exception
    {
-      assumeJvm();
-      ProjectFile mpp = new MPDDatabaseReader().read(MpxjTestData.filePath("mpp9baseline.mpd"));
+      ProjectFile mpp = new MPDFileReader().read(MpxjTestData.filePath("mpp9baseline.mpd"));
       testBaselineTasks(mpp);
    }
 
    /**
     * Test Split Tasks in an MPP9 file.
-    *
-    * @throws Exception
     */
    @Test public void testMpp9Splits() throws Exception
    {
@@ -236,8 +202,6 @@ public class MppTaskTest
 
    /**
     * Test Split Tasks in an MPP9 file saved by Project 2007.
-    *
-    * @throws Exception
     */
    @Test public void testMpp9SplitsFrom12() throws Exception
    {
@@ -247,8 +211,6 @@ public class MppTaskTest
 
    /**
     * Test Split Tasks in an MPP9 file saved by Project 2010.
-    *
-    * @throws Exception
     */
    @Test public void testMpp9SplitsFrom14() throws Exception
    {
@@ -258,8 +220,6 @@ public class MppTaskTest
 
    /**
     * Test Split Tasks in an MPP12 file.
-    *
-    * @throws Exception
     */
    @Test public void testMpp12Splits() throws Exception
    {
@@ -269,8 +229,6 @@ public class MppTaskTest
 
    /**
     * Test Split Tasks in an MPP12 file saved by Project 2010.
-    *
-    * @throws Exception
     */
    @Test public void testMpp12SplitsFrom14() throws Exception
    {
@@ -280,8 +238,6 @@ public class MppTaskTest
 
    /**
     * Test Split Tasks in an MPP14 file.
-    *
-    * @throws Exception
     */
    @Test public void testMpp14Splits() throws Exception
    {
@@ -291,8 +247,6 @@ public class MppTaskTest
 
    /**
     * Test Split Tasks in an MSPDI file.
-    *
-    * @throws Exception
     */
    @Test public void testMspdiSplits() throws Exception
    {
@@ -304,10 +258,8 @@ public class MppTaskTest
     * Test Split Tasks in an MPD9 file.
     *
     * Currently split tasks are not supported in MPD files.
-    *
-    * @throws Exception
     */
-   @Test public void testMpd9Splits() throws Exception
+   @Test public void testMpd9Splits()
    {
       //       ProjectFile mpp = new MPDDatabaseReader().read (MpxjTestData.filePath("mpp9splittask.mpd");
       //       testSplitTasks(mpp);
@@ -315,8 +267,6 @@ public class MppTaskTest
 
    /**
     * Tests Relations in an MPP9 file.
-    *
-    * @throws Exception
     */
    @Test public void testMpp9Relations() throws Exception
    {
@@ -326,8 +276,6 @@ public class MppTaskTest
 
    /**
     * Tests Relations in an MPP9 file saved by Project 2007.
-    *
-    * @throws Exception
     */
    @Test public void testMpp9RelationsFrom12() throws Exception
    {
@@ -337,8 +285,6 @@ public class MppTaskTest
 
    /**
     * Tests Relations in an MPP9 file saved by Project 2010.
-    *
-    * @throws Exception
     */
    @Test public void testMpp9RelationsFrom14() throws Exception
    {
@@ -348,20 +294,15 @@ public class MppTaskTest
 
    /**
     * Tests Relations in an MPD9 file.
-    *
-    * @throws Exception
     */
    @Test public void testMpd9Relations() throws Exception
    {
-      assumeJvm();
-      ProjectFile mpp = new MPDDatabaseReader().read(MpxjTestData.filePath("mpp9relations.mpd"));
+      ProjectFile mpp = new MPDFileReader().read(MpxjTestData.filePath("mpp9relations.mpd"));
       testRelations(mpp);
    }
 
    /**
     * Tests Relations in an MPP12 file.
-    *
-    * @throws Exception
     */
    @Test public void testMpp12Relations() throws Exception
    {
@@ -371,8 +312,6 @@ public class MppTaskTest
 
    /**
     * Tests Relations in an MPP12 file saved by Project 2010.
-    *
-    * @throws Exception
     */
    @Test public void testMpp12RelationsFrom14() throws Exception
    {
@@ -382,8 +321,6 @@ public class MppTaskTest
 
    /**
     * Tests Relations in an MPP14 file.
-    *
-    * @throws Exception
     */
    @Test public void testMpp14Relations() throws Exception
    {
@@ -393,8 +330,6 @@ public class MppTaskTest
 
    /**
     * Tests Relations in an MSPDI file.
-    *
-    * @throws Exception
     */
    @Test public void testMspdiRelations() throws Exception
    {
@@ -405,7 +340,6 @@ public class MppTaskTest
    /**
     * Tests dozens of basic fields of a Task.
     * @param mpp The ProjectFile being tested.
-    * @throws Exception
     *
     * <br><br>
     * Columns not tested:<br><br>
@@ -443,7 +377,7 @@ public class MppTaskTest
     * Task Calendar<br>
     * Team Status Pending<br>
     * Type<br>
-    * Unique ID Predecessors, Unique ID Succeessors<br>
+    * Unique ID Predecessors, Unique ID Successors<br>
     * Update Needed<br>
     * WBS Predecessors, WBS Succeessors<br>
     * Work Contour<br><br><br>
@@ -465,7 +399,7 @@ public class MppTaskTest
     * VAC<br>
     *
     */
-   private void testBasicTask(ProjectFile mpp) throws Exception
+   private void testBasicTask(ProjectFile mpp)
    {
 
       DateFormat df = new SimpleDateFormat("dd/MM/yyyy");
@@ -792,27 +726,11 @@ public class MppTaskTest
     * dates, estimated, and other fields (see below).
     *
     * @param mpp The ProjectFile being tested.
-    * @throws Exception
-    *
-    * <br><br>
-    * Columns tested:<br><br>
-    *
-    * Actual Start<br>
-    * Actual Finish<br>
-    * Baseline Start<br>
-    * Baseline Finish<br>
-    * Baseline Duration<br>
-    * Baseline Work<br>
-    * Estimated<br>
-    * Predecessors<br>
-    * Summary<br>
-    * Outline Number<br>
-    * WBS<br>
     *
     */
-   private void testBaselineTasks(ProjectFile mpp) throws Exception
+   private void testBaselineTasks(ProjectFile mpp)
    {
-      /**
+      /*
        * Columns tested:
        *
        * Actual Start
@@ -875,7 +793,7 @@ public class MppTaskTest
 
       // Actual for 'Base Task'
       assertEquals("24/08/2006", df.format(baseTask.getActualStart()));
-      assertEquals(null, baseTask.getActualFinish());
+      assertNull(baseTask.getActualFinish());
 
       // % Complete
       assertEquals(Double.valueOf(57), baseTask.getPercentageComplete());
@@ -1025,15 +943,14 @@ public class MppTaskTest
       assertTrue(listPreds.isEmpty());
 
       task4.addPredecessor(relation.getTargetTask(), relation.getType(), relation.getLag());
-
       task4.addPredecessor(task2, RelationType.FINISH_START, Duration.getInstance(0, TimeUnit.DAYS));
+      assertEquals(2, task4.getPredecessors().size());
 
-      listPreds = task4.getPredecessors();
       removed = task4.removePredecessor(task2, RelationType.FINISH_FINISH, Duration.getInstance(0, TimeUnit.DAYS));
       assertFalse(removed);
 
       task4.addPredecessor(task2, RelationType.FINISH_START, Duration.getInstance(0, TimeUnit.DAYS));
-      listPreds = task4.getPredecessors();
+      assertEquals(2, task4.getPredecessors().size());
       removed = task4.removePredecessor(task2, RelationType.FINISH_START, Duration.getInstance(0, TimeUnit.DAYS));
       assertTrue(removed);
 
@@ -1048,5 +965,5 @@ public class MppTaskTest
       assertEquals(RelationType.START_FINISH, relation.getType());
    }
 
-   private DateFormat m_df = new SimpleDateFormat("dd/MM/yyyy HH:mm");
+   private final DateFormat m_df = new SimpleDateFormat("dd/MM/yyyy HH:mm");
 }

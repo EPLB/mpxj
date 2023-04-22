@@ -23,8 +23,10 @@
 
 package net.sf.mpxj;
 
+import java.awt.Color;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Activity code type definition, contains a list of the valid
@@ -35,13 +37,26 @@ public class ActivityCode
    /**
     * Constructor.
     *
+    * @param parentFile parent file
     * @param uniqueID activity code unique ID
+    * @param scope activity code scope
+    * @param scopeEpsUniqueID scope EPS Unique ID
+    * @param scopeProjectUniqueID scope Project Unique ID
+    * @param sequenceNumber sequence number
     * @param name activity code name
+    * @param secure secure flag
+    * @param maxLength max length
     */
-   public ActivityCode(Integer uniqueID, String name)
+   public ActivityCode(ProjectFile parentFile, Integer uniqueID, ActivityCodeScope scope, Integer scopeEpsUniqueID, Integer scopeProjectUniqueID, Integer sequenceNumber, String name, boolean secure, Integer maxLength)
    {
       m_uniqueID = uniqueID;
+      m_scope = scope;
+      m_scopeEpsUniqueID = scopeEpsUniqueID;
+      m_scopeProjectUniqueID = scopeProjectUniqueID;
+      m_sequenceNumber = sequenceNumber;
       m_name = name;
+      m_secure = secure;
+      m_maxLength = maxLength;
    }
 
    /**
@@ -55,6 +70,46 @@ public class ActivityCode
    }
 
    /**
+    * Retrieve the scope of this activity code.
+    *
+    * @return activity code scope
+    */
+   public ActivityCodeScope getScope()
+   {
+      return m_scope;
+   }
+
+   /**
+    * Scope project unique ID.
+    *
+    * @return project unique ID
+    */
+   public Integer getScopeProjectUniqueID()
+   {
+      return m_scopeProjectUniqueID;
+   }
+
+   /**
+    * Scope EPS unique ID.
+    *
+    * @return EPS unique ID
+    */
+   public Integer getScopeEpsUniqueID()
+   {
+      return m_scopeEpsUniqueID;
+   }
+
+   /**
+    * Retrieve the sequence number of this activity code.
+    *
+    * @return sequence number
+    */
+   public Integer getSequenceNumber()
+   {
+      return m_sequenceNumber;
+   }
+
+   /**
     * Retrieve the activity code name.
     *
     * @return name
@@ -65,22 +120,45 @@ public class ActivityCode
    }
 
    /**
+    * Retrieve the secure flag.
+    *
+    * @return secure flag
+    */
+   public boolean getSecure()
+   {
+      return m_secure;
+   }
+
+   /**
+    * Retrieve the max length.
+    *
+    * @return max length
+    */
+   public Integer getMaxLength()
+   {
+      return m_maxLength;
+   }
+
+   /**
     * Add a value to this activity code.
     *
     * @param uniqueID value unique ID
+    * @param sequenceNumber value sequence number
     * @param name value name
     * @param description value description
+    * @param color value color
     * @return ActivityCodeValue instance
     */
-   public ActivityCodeValue addValue(Integer uniqueID, String name, String description)
+   public ActivityCodeValue addValue(Integer uniqueID, Integer sequenceNumber, String name, String description, Color color)
    {
-      ActivityCodeValue value = new ActivityCodeValue(this, uniqueID, name, description);
+      ActivityCodeValue value = new ActivityCodeValue(this, uniqueID, sequenceNumber, name, description, color);
       m_values.add(value);
       return value;
    }
 
    /**
-    * Retrieve a list of values for this actibity code.
+    * Retrieve a list of all values for this activity code,
+    * including child values from the hierarchy.
     *
     * @return list of ActivityCodeValue instances
     */
@@ -89,7 +167,25 @@ public class ActivityCode
       return m_values;
    }
 
+   /**
+    * Retrieve a list of top level values for his activity code.
+    * This excludes any child values from further down the
+    * hierarchy of values.
+    *
+    * @return list of ActivityCodeValue instances
+    */
+   public List<ActivityCodeValue> getChildValues()
+   {
+      return m_values.stream().filter(v -> v.getParent() == null).collect(Collectors.toList());
+   }
+
    private final Integer m_uniqueID;
+   private final ActivityCodeScope m_scope;
+   private final Integer m_scopeEpsUniqueID;
+   private final Integer m_scopeProjectUniqueID;
+   private final Integer m_sequenceNumber;
    private final String m_name;
+   private final boolean m_secure;
+   private final Integer m_maxLength;
    private final List<ActivityCodeValue> m_values = new ArrayList<>();
 }

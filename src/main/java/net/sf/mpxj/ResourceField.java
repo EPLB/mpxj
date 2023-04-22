@@ -71,7 +71,7 @@ public enum ResourceField implements FieldType
    OVERALLOCATED(DataType.BOOLEAN),
    PEAK(DataType.UNITS),
    UNIQUE_ID(DataType.INTEGER),
-   NOTES(DataType.ASCII_STRING),
+   NOTES(DataType.NOTES),
    PERCENT_WORK_COMPLETE(DataType.PERCENTAGE),
    TEXT3(DataType.STRING),
    TEXT4(DataType.STRING),
@@ -132,7 +132,7 @@ public enum ResourceField implements FieldType
    HYPERLINK_ADDRESS(DataType.STRING),
    HYPERLINK_SUBADDRESS(DataType.STRING),
    HYPERLINK_HREF(DataType.STRING),
-   ASSIGNMENT(DataType.STRING),
+   ASSIGNMENT(DataType.BOOLEAN),
    TASK_SUMMARY_NAME(DataType.STRING),
    CAN_LEVEL(DataType.BOOLEAN),
    WORK_CONTOUR(DataType.WORK_CONTOUR),
@@ -496,7 +496,7 @@ public enum ResourceField implements FieldType
    CALENDAR_GUID(DataType.GUID),
    COST_CENTER(DataType.STRING),
    DEFAULT_ASSIGNMENT_OWNER(DataType.STRING),
-   ENTERPRISE_BASE_CALENDAR(DataType.STRING),
+   ENTERPRISE_BASE_CALENDAR(DataType.BOOLEAN),
    ENTERPRISE_REQUIRED_VALUES(DataType.STRING),
    ENTERPRISE_TEAM_MEMBER(DataType.STRING),
    ENTERPRISE_UNIQUE_ID(DataType.INTEGER),
@@ -579,67 +579,28 @@ public enum ResourceField implements FieldType
    ACTUAL_WORK_PROTECTED(DataType.WORK),
    ACTUAL_OVERTIME_WORK_PROTECTED(DataType.WORK),
    PARENT_ID(DataType.INTEGER),
-   CALENDAR(DataType.BINARY),
    CALENDAR_UNIQUE_ID(DataType.INTEGER),
    PROPOSED_START(DataType.DATE),
    PROPOSED_FINISH(DataType.DATE),
    PROPOSED_MAX_UNITS(DataType.UNITS),
    ENGAGEMENT_STATUS(DataType.STRING), // Check this type
-
-   // KEEP THESE TOGETHER AND IN ORDER
-   ENTERPRISE_CUSTOM_FIELD1(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD2(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD3(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD4(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD5(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD6(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD7(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD8(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD9(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD10(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD11(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD12(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD13(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD14(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD15(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD16(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD17(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD18(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD19(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD20(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD21(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD22(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD23(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD24(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD25(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD26(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD27(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD28(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD29(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD30(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD31(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD32(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD33(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD34(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD35(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD36(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD37(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD38(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD39(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD40(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD41(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD42(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD43(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD44(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD45(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD46(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD47(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD48(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD49(DataType.STRING),
-   ENTERPRISE_CUSTOM_FIELD50(DataType.STRING),
-   // KEEP THESE TOGETHER AND IN ORDER
-
-   FINISH(DataType.DATE); // Must always be last value
+   UNIT(DataType.STRING),
+   SUPPLY_REFERENCE(DataType.STRING),
+   DESCRIPTION(DataType.STRING),
+   RESOURCE_ID(DataType.STRING),
+   MODIFY_ON_INTEGRATE(DataType.BOOLEAN),
+   EXPENSES_ONLY(DataType.BOOLEAN),
+   PERIOD_DUR(DataType.NUMERIC),
+   PRIORITY(DataType.NUMERIC),
+   RATE(DataType.NUMERIC),
+   POOL(DataType.NUMERIC),
+   PER_DAY(DataType.NUMERIC),
+   PHONE(DataType.STRING),
+   ROLE(DataType.BOOLEAN),
+   CALCULATE_COSTS_FROM_UNITS(DataType.BOOLEAN),
+   SEQUENCE_NUMBER(DataType.INTEGER),
+   LOCATION_UNIQUE_ID(DataType.INTEGER),
+   FINISH(DataType.DATE);
 
    /**
     * Constructor.
@@ -647,7 +608,7 @@ public enum ResourceField implements FieldType
     * @param dataType field data type
     * @param unitsType units type
     */
-   private ResourceField(DataType dataType, FieldType unitsType)
+   ResourceField(DataType dataType, FieldType unitsType)
    {
       m_dataType = dataType;
       m_unitsType = unitsType;
@@ -658,30 +619,21 @@ public enum ResourceField implements FieldType
     *
     * @param dataType field data type
     */
-   private ResourceField(DataType dataType)
+   ResourceField(DataType dataType)
    {
       this(dataType, null);
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public FieldTypeClass getFieldTypeClass()
    {
       return FieldTypeClass.RESOURCE;
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public String getName()
    {
       return (getName(Locale.ENGLISH));
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public String getName(Locale locale)
    {
       String[] titles = LocaleData.getStringArray(locale, LocaleData.RESOURCE_COLUMNS);
@@ -695,25 +647,16 @@ public enum ResourceField implements FieldType
       return (result);
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public int getValue()
    {
       return (m_value);
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public DataType getDataType()
    {
       return (m_dataType);
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public FieldType getUnitsType()
    {
       return m_unitsType;
@@ -761,6 +704,6 @@ public enum ResourceField implements FieldType
    }
 
    private int m_value;
-   private DataType m_dataType;
-   private FieldType m_unitsType;
+   private final DataType m_dataType;
+   private final FieldType m_unitsType;
 }

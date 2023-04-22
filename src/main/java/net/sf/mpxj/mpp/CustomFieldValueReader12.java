@@ -27,11 +27,10 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-import net.sf.mpxj.CustomFieldContainer;
 import net.sf.mpxj.CustomFieldLookupTable;
 import net.sf.mpxj.CustomFieldValueDataType;
 import net.sf.mpxj.FieldType;
-import net.sf.mpxj.ProjectProperties;
+import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.common.FieldTypeHelper;
 
 /**
@@ -42,17 +41,16 @@ public class CustomFieldValueReader12 extends CustomFieldValueReader
    /**
     * Constructor.
     *
-    * @param properties project properties
-    * @param container custom field config
+    * @param file project file
     * @param outlineCodeVarMeta raw mpp data
     * @param outlineCodeVarData raw mpp data
     * @param outlineCodeFixedData raw mpp data
     * @param outlineCodeFixedData2 raw mpp data
     * @param taskProps raw mpp data
     */
-   public CustomFieldValueReader12(ProjectProperties properties, CustomFieldContainer container, VarMeta outlineCodeVarMeta, Var2Data outlineCodeVarData, FixedData outlineCodeFixedData, FixedData outlineCodeFixedData2, Props taskProps)
+   public CustomFieldValueReader12(ProjectFile file, VarMeta outlineCodeVarMeta, Var2Data outlineCodeVarData, FixedData outlineCodeFixedData, FixedData outlineCodeFixedData2, Props taskProps)
    {
-      super(properties, container, outlineCodeVarMeta, outlineCodeVarData, outlineCodeFixedData, outlineCodeFixedData2, taskProps);
+      super(file, outlineCodeVarMeta, outlineCodeVarData, outlineCodeFixedData, outlineCodeFixedData2, taskProps);
    }
 
    @Override public void process()
@@ -86,7 +84,7 @@ public class CustomFieldValueReader12 extends CustomFieldValueReader
          FieldType field = map.get(lookupTableGuid);
          if (field != null)
          {
-            CustomFieldLookupTable table = m_container.getCustomField(field).getLookupTable();
+            CustomFieldLookupTable table = m_container.getOrCreate(field).getLookupTable();
             table.add(item);
             // It's like this to avoid creating empty lookup tables. Need to refactor!
             table.setGUID(lookupTableGuid);
@@ -101,31 +99,34 @@ public class CustomFieldValueReader12 extends CustomFieldValueReader
     */
    private Map<UUID, FieldType> populateCustomFieldMap()
    {
-      byte[] data = m_taskProps.getByteArray(Props.CUSTOM_FIELDS);
-      int length = MPPUtility.getInt(data, 0);
-      int index = length + 36;
-
-      // 4 byte record count
-      int recordCount = MPPUtility.getInt(data, index);
-      index += 4;
-
-      // 8 bytes per record
-      index += (8 * recordCount);
-
       Map<UUID, FieldType> map = new HashMap<>();
-      while (index + 176 <= data.length)
+      byte[] data = m_taskProps.getByteArray(Props.CUSTOM_FIELDS);
+      if (data != null)
       {
-         int blockLength = MPPUtility.getInt(data, index);
-         if (blockLength <= 0 || index + blockLength > data.length)
-         {
-            break;
-         }
+         int length = MPPUtility.getInt(data, 0);
+         int index = length + 36;
 
-         int extendedAttributeFieldID = MPPUtility.getInt(data, index + 4);
-         FieldType field = FieldTypeHelper.getInstance(extendedAttributeFieldID);
-         UUID lookupTableGuid = MPPUtility.getGUID(data, index + 160);
-         map.put(lookupTableGuid, field);
-         index += blockLength;
+         // 4 byte record count
+         int recordCount = MPPUtility.getInt(data, index);
+         index += 4;
+
+         // 8 bytes per record
+         index += (8 * recordCount);
+
+         while (index + 176 <= data.length)
+         {
+            int blockLength = MPPUtility.getInt(data, index);
+            if (blockLength <= 0 || index + blockLength > data.length)
+            {
+               break;
+            }
+
+            int customFieldID = MPPUtility.getInt(data, index + 4);
+            FieldType field = FieldTypeHelper.getInstance(m_file, customFieldID);
+            UUID lookupTableGuid = MPPUtility.getGUID(data, index + 160);
+            map.put(lookupTableGuid, field);
+            index += blockLength;
+         }
       }
       return map;
    }

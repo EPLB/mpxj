@@ -24,7 +24,7 @@
 package net.sf.mpxj.ganttdesigner;
 
 import java.io.InputStream;
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,9 +40,9 @@ import net.sf.mpxj.Day;
 import net.sf.mpxj.EventManager;
 import net.sf.mpxj.MPXJException;
 import net.sf.mpxj.ProjectCalendar;
+import net.sf.mpxj.ProjectCalendarDays;
 import net.sf.mpxj.ProjectCalendarException;
 import net.sf.mpxj.ProjectCalendarHours;
-import net.sf.mpxj.ProjectCalendarWeek;
 import net.sf.mpxj.ProjectConfig;
 import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.ProjectProperties;
@@ -59,9 +59,6 @@ import net.sf.mpxj.reader.AbstractProjectStreamReader;
  */
 public final class GanttDesignerReader extends AbstractProjectStreamReader
 {
-   /**
-    * {@inheritDoc}
-    */
    @Override public ProjectFile read(InputStream stream) throws MPXJException
    {
       try
@@ -92,17 +89,7 @@ public final class GanttDesignerReader extends AbstractProjectStreamReader
          return m_projectFile;
       }
 
-      catch (ParserConfigurationException ex)
-      {
-         throw new MPXJException("Failed to parse file", ex);
-      }
-
-      catch (JAXBException ex)
-      {
-         throw new MPXJException("Failed to parse file", ex);
-      }
-
-      catch (SAXException ex)
+      catch (ParserConfigurationException | SAXException | JAXBException ex)
       {
          throw new MPXJException("Failed to parse file", ex);
       }
@@ -115,12 +102,9 @@ public final class GanttDesignerReader extends AbstractProjectStreamReader
       }
    }
 
-   /**
-    * {@inheritDoc}
-    */
    @Override public List<ProjectFile> readAll(InputStream inputStream) throws MPXJException
    {
-      return Arrays.asList(read(inputStream));
+      return Collections.singletonList(read(inputStream));
    }
 
    /**
@@ -166,14 +150,14 @@ public final class GanttDesignerReader extends AbstractProjectStreamReader
          ProjectCalendarHours hours = calendar.addCalendarHours(day);
          if (calendar.isWorkingDay(day))
          {
-            hours.addRange(ProjectCalendarWeek.DEFAULT_WORKING_MORNING);
-            hours.addRange(ProjectCalendarWeek.DEFAULT_WORKING_AFTERNOON);
+            hours.add(ProjectCalendarDays.DEFAULT_WORKING_MORNING);
+            hours.add(ProjectCalendarDays.DEFAULT_WORKING_AFTERNOON);
          }
       }
 
       for (Gantt.Holidays.Holiday holiday : gantt.getHolidays().getHoliday())
       {
-         ProjectCalendarException exception = calendar.addCalendarException(holiday.getDate(), holiday.getDate());
+         ProjectCalendarException exception = calendar.addCalendarException(holiday.getDate());
          exception.setName(holiday.getContent());
       }
 

@@ -28,9 +28,9 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.nio.charset.Charset;
+import java.nio.file.Files;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
-import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -38,28 +38,32 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Properties;
 import java.util.Set;
 import java.util.regex.Pattern;
 
 import org.apache.poi.poifs.filesystem.POIFSFileSystem;
-import org.apache.poi.util.CloseIgnoringInputStream;
+
+import com.healthmarketscience.jackcess.Database;
+import com.healthmarketscience.jackcess.DatabaseBuilder;
 
 import net.sf.mpxj.MPXJException;
 import net.sf.mpxj.ProjectFile;
-import net.sf.mpxj.asta.AstaDatabaseFileReader;
-import net.sf.mpxj.asta.AstaDatabaseReader;
-import net.sf.mpxj.asta.AstaFileReader;
+import net.sf.mpxj.asta.AstaMdbReader;
+import net.sf.mpxj.asta.AstaSqliteReader;
+import net.sf.mpxj.asta.AstaTextFileReader;
 import net.sf.mpxj.common.AutoCloseableHelper;
 import net.sf.mpxj.common.CharsetHelper;
+import net.sf.mpxj.common.CloseIgnoringInputStream;
 import net.sf.mpxj.common.FileHelper;
 import net.sf.mpxj.common.InputStreamHelper;
-import net.sf.mpxj.common.StreamHelper;
+import net.sf.mpxj.common.SQLite;
 import net.sf.mpxj.conceptdraw.ConceptDrawProjectReader;
 import net.sf.mpxj.fasttrack.FastTrackReader;
 import net.sf.mpxj.ganttdesigner.GanttDesignerReader;
 import net.sf.mpxj.ganttproject.GanttProjectReader;
 import net.sf.mpxj.merlin.MerlinReader;
-import net.sf.mpxj.mpd.MPDDatabaseReader;
+import net.sf.mpxj.mpd.MPDFileReader;
 import net.sf.mpxj.mpp.MPPReader;
 import net.sf.mpxj.mpx.MPXReader;
 import net.sf.mpxj.mspdi.MSPDIReader;
@@ -87,6 +91,36 @@ import net.sf.mpxj.turboproject.TurboProjectReader;
  */
 public final class UniversalProjectReader extends AbstractProjectReader
 {
+   /**
+    * Pass a set of Properties to configure the behavior of the reader class selected by
+    * {@code UniversalProjectReader} to read a schedule. Users of {@code UniversalProjectReader} are
+    * not expected to know what type of schedule they are working with ahead of time, so
+    * {@code UniversalProjectReader} will select the correct reader for the supplied file type
+    * use it to read the file.
+    * <p>
+    * Users of {@code UniversalProjectReader} may still want to configure the behavior of the individual reader
+    * classes, but as {@code UniversalProjectReader} hides their use from callers, an alternative
+    * mechanism is required to allow configuration information to be passed. In this case a {@code Properties}
+    * instance can be passed containing properties in this form:
+    * {@code <class name>.<property name>=<property value>}.
+    * <p>
+    * Here's an example of a single property value:
+    * <pre>
+    * net.sf.mpxj.phoenix.PhoenixReader.UseActivityCodesForTaskHierarchy=true
+    * </pre>
+    * This approach allows properties for multiple different reader classes to be specified,
+    * in one {@code Properties} instance, with only the relevant properties being applied to the reader
+    * class actually used by {@code UniversalProjectReader} to read the supplied schedule.
+    *
+    * @param props properties to set
+    * @return current UniversalProjectReader instance to allow method chaining
+    */
+   @Override public ProjectReader setProperties(Properties props)
+   {
+      m_properties = props;
+      return this;
+   }
+
    @Override public ProjectFile read(String fileName) throws MPXJException
    {
       return read(new File(fileName));
@@ -144,12 +178,35 @@ public final class UniversalProjectReader extends AbstractProjectReader
       return readInternal(inputStream);
    }
 
+   /**
+    * Internal implementation of the read method using an InputStream.
+    *
+    * @param inputStream input stream to read from
+    * @return list of schedules
+    */
    private List<ProjectFile> readInternal(InputStream inputStream) throws MPXJException
+   {
+      return readInternal(null, inputStream);
+   }
+
+   /**
+    * Internal implementation of the read method. This primarily works with the
+    * supplied InputStream instance however if the stream is from a file,
+    * we'll pass a File instance too. This allows us to read MPP files
+    * using a more memory-efficient approach based on the File than would
+    * otherwise be possible using an input stream. This also avoids a hard
+    * limit imposed by POI when reading certain very large files.
+    *
+    * @param file optional File instance
+    * @param inputStream input stream to read from
+    * @return list of schedules
+    */
+   private List<ProjectFile> readInternal(File file, InputStream inputStream) throws MPXJException
    {
       try
       {
          BufferedInputStream bis = new BufferedInputStream(inputStream);
-         bis.skip(m_skipBytes);
+         InputStreamHelper.skip(bis, m_skipBytes);
          bis.mark(BUFFER_SIZE);
          byte[] buffer = new byte[BUFFER_SIZE];
          int bytesRead = bis.read(buffer);
@@ -192,7 +249,7 @@ public final class UniversalProjectReader extends AbstractProjectReader
 
          if (matchesFingerprint(buffer, OLE_COMPOUND_DOC_FINGERPRINT))
          {
-            return handleOleCompoundDocument(bis);
+            return handleOleCompoundDocument(file, bis);
          }
 
          if (matchesFingerprint(buffer, MSPDI_FINGERPRINT_1) || matchesFingerprint(buffer, MSPDI_FINGERPRINT_2) || matchesFingerprint(buffer, MSPDI_FINGERPRINT_3))
@@ -202,7 +259,7 @@ public final class UniversalProjectReader extends AbstractProjectReader
 
          if (matchesFingerprint(buffer, PP_FINGERPRINT))
          {
-            return readProjectFile(new AstaFileReader(), bis);
+            return readProjectFile(new AstaTextFileReader(), bis);
          }
 
          if (matchesFingerprint(buffer, MPX_FINGERPRINT))
@@ -245,7 +302,7 @@ public final class UniversalProjectReader extends AbstractProjectReader
             return readProjectFile(new PhoenixReader(), new PhoenixInputStream(bis));
          }
 
-         if (matchesFingerprint(buffer, PHOENIX_XML_FINGERPRINT))
+         if (matchesFingerprint(buffer, PHOENIX_XML_FINGERPRINT1) || matchesFingerprint(buffer, PHOENIX_XML_FINGERPRINT2))
          {
             return readProjectFile(new PhoenixReader(), bis);
          }
@@ -349,7 +406,8 @@ public final class UniversalProjectReader extends AbstractProjectReader
    {
       addListenersToReader(reader);
       reader.setCharset(m_charset);
-      return m_readAll ? reader.readAll(stream) : Arrays.asList(reader.read(stream));
+      reader.setProperties(m_properties);
+      return m_readAll ? reader.readAll(stream) : Collections.singletonList(reader.read(stream));
    }
 
    /**
@@ -363,22 +421,33 @@ public final class UniversalProjectReader extends AbstractProjectReader
    {
       addListenersToReader(reader);
       reader.setCharset(m_charset);
-      return m_readAll ? reader.readAll(file) : Arrays.asList(reader.read(file));
+      reader.setProperties(m_properties);
+      return m_readAll ? reader.readAll(file) : Collections.singletonList(reader.read(file));
    }
 
    /**
     * We have an OLE compound document... but is it an MPP file?
     *
+    * @param file File object
     * @param stream file input stream
     * @return ProjectFile instance
     */
-   private List<ProjectFile> handleOleCompoundDocument(InputStream stream) throws Exception
+   private List<ProjectFile> handleOleCompoundDocument(File file, InputStream stream) throws Exception
    {
       POIFSFileSystem fs;
+      boolean closeFile = false;
 
       try
       {
-         fs = new POIFSFileSystem(new CloseIgnoringInputStream(stream));
+         if (file == null)
+         {
+            fs = new POIFSFileSystem(new CloseIgnoringInputStream(stream));
+         }
+         else
+         {
+            fs = new POIFSFileSystem(file);
+            closeFile = true;
+         }
       }
 
       catch (Exception ex)
@@ -386,14 +455,27 @@ public final class UniversalProjectReader extends AbstractProjectReader
          return Collections.emptyList();
       }
 
-      String fileFormat = MPPReader.getFileFormat(fs);
-      if (fileFormat != null && fileFormat.startsWith("MSProject"))
+      try
       {
+         String fileFormat = MPPReader.getFileFormat(fs);
+         if (fileFormat == null || !fileFormat.startsWith("MSProject"))
+         {
+            return Collections.emptyList();
+         }
+
          MPPReader reader = new MPPReader();
          addListenersToReader(reader);
-         return Arrays.asList(reader.read(fs));
+         reader.setProperties(m_properties);
+         return Collections.singletonList(reader.read(fs));
       }
-      return Collections.emptyList();
+
+      finally
+      {
+         if (closeFile)
+         {
+            AutoCloseableHelper.closeQuietly(fs);
+         }
+      }
    }
 
    /**
@@ -402,7 +484,7 @@ public final class UniversalProjectReader extends AbstractProjectReader
     * @param stream file input stream
     * @return ProjectFile instance
     */
-   private List<ProjectFile> handleBinaryPropertyList(InputStream stream) throws Exception
+   private List<ProjectFile> handleBinaryPropertyList(InputStream stream)
    {
       // This is an unusual case. I have seen an instance where an MSPDI file was downloaded
       // as a web archive, which is a binary property list containing the file data.
@@ -428,18 +510,16 @@ public final class UniversalProjectReader extends AbstractProjectReader
 
       try
       {
-         Class.forName("sun.jdbc.odbc.JdbcOdbcDriver");
-         String url = "jdbc:odbc:DRIVER=Microsoft Access Driver (*.mdb);DBQ=" + file.getCanonicalPath();
-         Set<String> tableNames = populateTableNames(url);
+         Set<String> tableNames = populateMdbTableNames(file);
 
          if (tableNames.contains("MSP_PROJECTS"))
          {
-            return readProjectFile(new MPDDatabaseReader(), file);
+            return readProjectFile(new MPDFileReader(), file);
          }
 
          if (tableNames.contains("EXCEPTIONN"))
          {
-            return readProjectFile(new AstaDatabaseReader(), file);
+            return readProjectFile(new AstaMdbReader(), file);
          }
 
          return Collections.emptyList();
@@ -465,13 +545,11 @@ public final class UniversalProjectReader extends AbstractProjectReader
 
       try
       {
-         Class.forName("org.sqlite.JDBC");
-         String url = "jdbc:sqlite:" + file.getCanonicalPath();
-         Set<String> tableNames = populateTableNames(url);
+         Set<String> tableNames = populateSqliteTableNames(file);
 
          if (tableNames.contains("EXCEPTIONN"))
          {
-            return readProjectFile(new AstaDatabaseFileReader(), file);
+            return readProjectFile(new AstaSqliteReader(), file);
          }
 
          if (tableNames.contains("PROJWBS"))
@@ -529,7 +607,7 @@ public final class UniversalProjectReader extends AbstractProjectReader
       try
       {
          fis = new FileInputStream(file);
-         List<ProjectFile> projectFiles = readInternal(fis);
+         List<ProjectFile> projectFiles = readInternal(file, fis);
          fis.close();
          return projectFiles;
       }
@@ -629,6 +707,7 @@ public final class UniversalProjectReader extends AbstractProjectReader
             else
             {
                UniversalProjectReader reader = new UniversalProjectReader();
+               reader.setProperties(m_properties);
                if (m_readAll)
                {
                   List<ProjectFile> result = reader.readAll(file);
@@ -642,7 +721,7 @@ public final class UniversalProjectReader extends AbstractProjectReader
                   ProjectFile result = reader.read(file);
                   if (result != null)
                   {
-                     return Arrays.asList(result);
+                     return Collections.singletonList(result);
                   }
                }
             }
@@ -669,7 +748,7 @@ public final class UniversalProjectReader extends AbstractProjectReader
     */
    private List<ProjectFile> handleP3BtrieveDatabase(File directory) throws Exception
    {
-      return m_readAll ? new P3DatabaseReader().readAll(directory) : Arrays.asList(P3DatabaseReader.setProjectNameAndRead(directory));
+      return m_readAll ? new P3DatabaseReader().setProperties(m_properties).readAll(directory) : Collections.singletonList(P3DatabaseReader.setProjectNameAndRead(directory, m_properties));
    }
 
    /**
@@ -680,7 +759,7 @@ public final class UniversalProjectReader extends AbstractProjectReader
     */
    private List<ProjectFile> handleSureTrakDatabase(File directory) throws Exception
    {
-      return m_readAll ? new SureTrakDatabaseReader().readAll(directory) : Arrays.asList(SureTrakDatabaseReader.setProjectNameAndRead(directory));
+      return m_readAll ? new SureTrakDatabaseReader().setProperties(m_properties).readAll(directory) : Collections.singletonList(SureTrakDatabaseReader.setProjectNameAndRead(directory, m_properties));
    }
 
    /**
@@ -694,9 +773,10 @@ public final class UniversalProjectReader extends AbstractProjectReader
    private List<ProjectFile> handleByteOrderMark(InputStream stream, int length, Charset charset) throws Exception
    {
       UniversalProjectReader reader = new UniversalProjectReader();
+      reader.setProperties(m_properties);
       reader.m_skipBytes = length;
       reader.m_charset = charset;
-      return m_readAll ? reader.readAll(stream) : Arrays.asList(reader.read(stream));
+      return m_readAll ? reader.readAll(stream) : Collections.singletonList(reader.read(stream));
    }
 
    /**
@@ -713,22 +793,19 @@ public final class UniversalProjectReader extends AbstractProjectReader
 
       try
       {
-         is = new FileInputStream(file);
+         is = Files.newInputStream(file.toPath());
          if (is.available() > 1350)
          {
-            StreamHelper.skip(is, 1024);
+            InputStreamHelper.skip(is, 1024);
 
             // Bytes at offset 1024
-            byte[] data = new byte[2];
-            is.read(data);
-
+            byte[] data = InputStreamHelper.read(is, 2);
             if (matchesFingerprint(data, WINDOWS_NE_EXE_FINGERPRINT))
             {
-               StreamHelper.skip(is, 286);
+               InputStreamHelper.skip(is, 286);
 
                // Bytes at offset 1312
-               data = new byte[34];
-               is.read(data);
+               data = InputStreamHelper.read(is, 34);
                if (matchesFingerprint(data, PRX_FINGERPRINT))
                {
                   is.close();
@@ -739,10 +816,9 @@ public final class UniversalProjectReader extends AbstractProjectReader
 
             if (matchesFingerprint(data, STX_FINGERPRINT))
             {
-               StreamHelper.skip(is, 31742);
+               InputStreamHelper.skip(is, 31742);
                // Bytes at offset 32768
-               data = new byte[4];
-               is.read(data);
+               data = InputStreamHelper.read(is, 4);
                if (matchesFingerprint(data, PRX3_FINGERPRINT))
                {
                   is.close();
@@ -761,21 +837,13 @@ public final class UniversalProjectReader extends AbstractProjectReader
       }
    }
 
-   /**
-    * Open a database and build a set of table names.
-    *
-    * @param url database URL
-    * @return set containing table names
-    */
-   private Set<String> populateTableNames(String url) throws SQLException
+   private Set<String> populateTableNames(Connection connection) throws SQLException
    {
       Set<String> tableNames = new HashSet<>();
-      Connection connection = null;
       ResultSet rs = null;
 
       try
       {
-         connection = DriverManager.getConnection(url);
          DatabaseMetaData dmd = connection.getMetaData();
          rs = dmd.getTables(null, null, null, null);
          while (rs.next())
@@ -793,6 +861,20 @@ public final class UniversalProjectReader extends AbstractProjectReader
       return tableNames;
    }
 
+   private Set<String> populateMdbTableNames(File file) throws Exception
+   {
+      try (Database database = DatabaseBuilder.open(file))
+      {
+         return database.getTableNames();
+      }
+   }
+
+   private Set<String> populateSqliteTableNames(File file) throws Exception
+   {
+      return populateTableNames(SQLite.createConnection(file));
+   }
+
+   private Properties m_properties;
    private int m_skipBytes;
    private Charset m_charset;
    private boolean m_readAll;
@@ -1029,7 +1111,9 @@ public final class UniversalProjectReader extends AbstractProjectReader
 
    private static final Pattern MSPDI_FINGERPRINT_3 = Pattern.compile(".*<Project.*<Title>.*", Pattern.DOTALL);
 
-   private static final Pattern PHOENIX_XML_FINGERPRINT = Pattern.compile(".*<project.*version=\"(\\d+|\\d+\\.\\d+)\".*update_mode=\"(true|false)\".*>.*", Pattern.DOTALL);
+   private static final Pattern PHOENIX_XML_FINGERPRINT1 = Pattern.compile(".*<project.*version=\"(\\d+|\\d+\\.\\d+)\".*update_mode=\"(true|false)\".*>.*", Pattern.DOTALL);
+
+   private static final Pattern PHOENIX_XML_FINGERPRINT2 = Pattern.compile(".*<project.*version=\"(\\d+|\\d+\\.\\d+)\".*application=\"Phoenix.*", Pattern.DOTALL);
 
    private static final Pattern GANTTPROJECT_FINGERPRINT = Pattern.compile(".*<project.*webLink.*", Pattern.DOTALL);
 
@@ -1039,7 +1123,7 @@ public final class UniversalProjectReader extends AbstractProjectReader
 
    private static final Pattern PRX3_FINGERPRINT = Pattern.compile("PRX3", Pattern.DOTALL);
 
-   private static final Pattern CONCEPT_DRAW_FINGERPRINT = Pattern.compile(".*Application=\\\"CDProject\\\".*", Pattern.DOTALL);
+   private static final Pattern CONCEPT_DRAW_FINGERPRINT = Pattern.compile(".*Application=\"CDProject\".*", Pattern.DOTALL);
 
    private static final Pattern GANTT_DESIGNER_FINGERPRINT = Pattern.compile(".*<Gantt Version=.*", Pattern.DOTALL);
 }

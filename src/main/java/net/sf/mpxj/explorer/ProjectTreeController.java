@@ -25,13 +25,20 @@ package net.sf.mpxj.explorer;
 
 import java.io.File;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
+import net.sf.mpxj.ProjectCalendarDays;
+import net.sf.mpxj.ActivityCode;
+import net.sf.mpxj.ActivityCodeValue;
 import net.sf.mpxj.ChildTaskContainer;
 import net.sf.mpxj.Column;
 import net.sf.mpxj.CustomField;
@@ -42,20 +49,24 @@ import net.sf.mpxj.FieldType;
 import net.sf.mpxj.Filter;
 import net.sf.mpxj.Group;
 import net.sf.mpxj.ProjectCalendar;
-import net.sf.mpxj.ProjectCalendarDateRanges;
 import net.sf.mpxj.ProjectCalendarException;
+import net.sf.mpxj.ProjectCalendarHours;
+import net.sf.mpxj.ProjectCalendarWeek;
 import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.Resource;
 import net.sf.mpxj.ResourceAssignment;
 import net.sf.mpxj.Table;
 import net.sf.mpxj.Task;
+import net.sf.mpxj.UserDefinedField;
 import net.sf.mpxj.View;
 import net.sf.mpxj.json.JsonWriter;
 import net.sf.mpxj.mpx.MPXWriter;
 import net.sf.mpxj.mspdi.MSPDIWriter;
 import net.sf.mpxj.planner.PlannerWriter;
 import net.sf.mpxj.primavera.PrimaveraPMFileWriter;
+import net.sf.mpxj.primavera.PrimaveraXERFileWriter;
 import net.sf.mpxj.sdef.SDEFWriter;
+import net.sf.mpxj.utility.ProjectCleanUtility;
 import net.sf.mpxj.writer.ProjectWriter;
 
 /**
@@ -72,19 +83,24 @@ public class ProjectTreeController
       WRITER_MAP.put("PLANNER", PlannerWriter.class);
       WRITER_MAP.put("JSON", JsonWriter.class);
       WRITER_MAP.put("SDEF", SDEFWriter.class);
+      WRITER_MAP.put("XER", PrimaveraXERFileWriter.class);
    }
 
    final SimpleDateFormat m_timeFormat = new SimpleDateFormat("HH:mm");
    final SimpleDateFormat m_dateFormat = new SimpleDateFormat("yyyy-MM-dd");
 
    private static final Set<String> FILE_EXCLUDED_METHODS = excludedMethods("getAllResourceAssignments", "getAllResources", "getAllTasks", "getChildTasks", "getCalendars", "getCustomFields", "getEventManager", "getFilters", "getGroups", "getProjectProperties", "getProjectConfig", "getViews", "getTables");
-   private static final Set<String> CALENDAR_EXCLUDED_METHODS = excludedMethods("getCalendarExceptions");
+   private static final Set<String> CALENDAR_EXCLUDED_METHODS = excludedMethods("getCalendarExceptions", "getExpandedCalendarExceptions", "getDerivedCalendars", "getHours", "getDays", "getParent", "getCalendar", "getWorkWeeks");
+   private static final Set<String> CALENDAR_WEEK_EXCLUDED_METHODS = excludedMethods("getCalendar", "getDays", "getHours");
    private static final Set<String> TASK_EXCLUDED_METHODS = excludedMethods("getChildTasks", "getEffectiveCalendar", "getParentTask", "getResourceAssignments");
-   private static final Set<String> CALENDAR_EXCEPTION_EXCLUDED_METHODS = excludedMethods("getRange");
+   private static final Set<String> CALENDAR_EXCEPTION_EXCLUDED_METHODS = excludedMethods("get", "getRange");
    private static final Set<String> TABLE_EXCLUDED_METHODS = excludedMethods("getColumns");
+   private static final Set<String> ACTIVITY_CODE_EXCLUDED_METHODS = excludedMethods("getValues");
+   private static final Set<String> ACTIVITY_CODE_VALUE_EXCLUDED_METHODS = excludedMethods("getParent", "getType");
 
    private final ProjectTreeModel m_model;
    private ProjectFile m_projectFile;
+   private File m_file;
 
    /**
     * Constructor.
@@ -99,19 +115,13 @@ public class ProjectTreeController
    /**
     * Command to load a file.
     *
-    * @param file file to load
+    * @param file original file
+    * @param projectFile parsed project file
     */
-   public void loadFile(ProjectFile file)
+   public void loadFile(File file, ProjectFile projectFile)
    {
-      try
-      {
-         m_projectFile = file;
-      }
-
-      catch (Exception ex)
-      {
-         throw new RuntimeException(ex);
-      }
+      m_file = file;
+      m_projectFile = projectFile;
 
       MpxjTreeNode projectNode = new MpxjTreeNode(m_projectFile, FILE_EXCLUDED_METHODS)
       {
@@ -159,9 +169,13 @@ public class ProjectTreeController
       projectNode.add(groupsFolder);
       addGroups(groupsFolder, m_projectFile);
 
-      MpxjTreeNode customFieldsFolder = new MpxjTreeNode("Custom Fields");
-      projectNode.add(customFieldsFolder);
-      addCustomFields(customFieldsFolder, m_projectFile);
+      MpxjTreeNode userDefinedFields = new MpxjTreeNode("User Defined Fields");
+      projectNode.add(userDefinedFields);
+      addUserDefinedFields(userDefinedFields, m_projectFile);
+
+      MpxjTreeNode customFields = new MpxjTreeNode("Custom Fields");
+      projectNode.add(customFields);
+      addCustomFields(customFields, m_projectFile);
 
       MpxjTreeNode filtersFolder = new MpxjTreeNode("Filters");
       projectNode.add(filtersFolder);
@@ -185,6 +199,10 @@ public class ProjectTreeController
       MpxjTreeNode dataLinksFolder = new MpxjTreeNode("Data Links");
       projectNode.add(dataLinksFolder);
       addDataLinks(dataLinksFolder, m_projectFile);
+
+      MpxjTreeNode activityCodesFolder = new MpxjTreeNode("Activity Codes");
+      projectNode.add(activityCodesFolder);
+      addActivityCodes(activityCodesFolder);
 
       m_model.setRoot(projectNode);
    }
@@ -242,10 +260,12 @@ public class ProjectTreeController
     */
    private void addCalendars(MpxjTreeNode parentNode, ProjectFile file)
    {
-      for (ProjectCalendar calendar : file.getCalendars())
-      {
-         addCalendar(parentNode, calendar);
-      }
+      addCalendars(parentNode, file.getCalendars().stream().filter(c -> c.getParent() == null).collect(Collectors.toList()));
+   }
+
+   private void addCalendars(MpxjTreeNode parentNode, List<ProjectCalendar> calendars)
+   {
+      calendars.stream().forEach(c -> addCalendar(parentNode, c));
    }
 
    /**
@@ -273,13 +293,61 @@ public class ProjectTreeController
          addCalendarDay(daysFolder, calendar, day);
       }
 
-      MpxjTreeNode exceptionsFolder = new MpxjTreeNode("Exceptions");
-      calendarNode.add(exceptionsFolder);
-
-      for (ProjectCalendarException exception : calendar.getCalendarExceptions())
+      List<ProjectCalendarException> exceptions = calendar.getCalendarExceptions();
+      if (!exceptions.isEmpty())
       {
-         addCalendarException(exceptionsFolder, exception);
+         MpxjTreeNode exceptionsFolder = new MpxjTreeNode("Exceptions");
+         calendarNode.add(exceptionsFolder);
+
+         for (ProjectCalendarException exception : exceptions)
+         {
+            addCalendarException(exceptionsFolder, exception);
+         }
       }
+
+      List<ProjectCalendarWeek> weeks = calendar.getWorkWeeks();
+      if (!weeks.isEmpty())
+      {
+         MpxjTreeNode workingWeeksFolder = new MpxjTreeNode("Working Weeks");
+         calendarNode.add(workingWeeksFolder);
+         addWorkingWeeks(workingWeeksFolder, weeks);
+      }
+
+      List<ProjectCalendar> derivedCalendars = calendar.getDerivedCalendars();
+      if (!derivedCalendars.isEmpty())
+      {
+         MpxjTreeNode derivedCalendarsFolder = new MpxjTreeNode("Derived Calendars");
+         calendarNode.add(derivedCalendarsFolder);
+         addCalendars(derivedCalendarsFolder, derivedCalendars);
+      }
+   }
+
+   private void addWorkingWeeks(MpxjTreeNode parentNode, List<ProjectCalendarWeek> weeks)
+   {
+      weeks.forEach(w -> addWorkingWeek(parentNode, w));
+   }
+
+   private void addWorkingWeek(MpxjTreeNode parentNode, ProjectCalendarWeek week)
+   {
+      MpxjTreeNode weekNode = new MpxjTreeNode(week, CALENDAR_WEEK_EXCLUDED_METHODS)
+      {
+         @Override public String toString()
+         {
+            String name = week.getName();
+            return name == null || name.isEmpty() ? "Unnamed Week" : name;
+         }
+      };
+
+      parentNode.add(weekNode);
+
+      MpxjTreeNode daysFolder = new MpxjTreeNode("Days");
+      weekNode.add(daysFolder);
+
+      for (Day day : Day.values())
+      {
+         addCalendarDay(daysFolder, week, day);
+      }
+
    }
 
    /**
@@ -289,17 +357,17 @@ public class ProjectTreeController
     * @param calendar ProjectCalendar instance
     * @param day calendar day
     */
-   private void addCalendarDay(MpxjTreeNode parentNode, ProjectCalendar calendar, final Day day)
+   private void addCalendarDay(MpxjTreeNode parentNode, ProjectCalendarDays calendar, final Day day)
    {
       MpxjTreeNode dayNode = new MpxjTreeNode(day)
       {
          @Override public String toString()
          {
-            return day.name();
+            return day.name() + " (" + calendar.getCalendarDayType(day) + ")";
          }
       };
       parentNode.add(dayNode);
-      addHours(dayNode, calendar.getHours(day));
+      addHours(dayNode, calendar.getCalendarHours(day));
    }
 
    /**
@@ -308,8 +376,13 @@ public class ProjectTreeController
     * @param parentNode parent node
     * @param hours list of ranges
     */
-   private void addHours(MpxjTreeNode parentNode, ProjectCalendarDateRanges hours)
+   private void addHours(MpxjTreeNode parentNode, ProjectCalendarHours hours)
    {
+      if (hours == null)
+      {
+         return;
+      }
+
       for (DateRange range : hours)
       {
          final DateRange r = range;
@@ -369,20 +442,53 @@ public class ProjectTreeController
     * Add custom fields to the tree.
     *
     * @param parentNode parent tree node
-    * @param file custom fields container
+    * @param file parent project
     */
    private void addCustomFields(MpxjTreeNode parentNode, ProjectFile file)
    {
-      for (CustomField field : file.getCustomFields())
+      // Function to generate a name for each custom field
+      Function<CustomField, String> name = f -> {
+         FieldType type = f.getFieldType();
+         String result = type == null ? "(unknown)" : type.getFieldTypeClass() + "." + type;
+         result = f.getAlias() == null || f.getAlias().isEmpty() ? result : result + " (" + f.getAlias() + ")";
+         return result;
+      };
+
+      // Use a TreeMap to sort by name
+      Map<String, CustomField> map = file.getCustomFields().stream().collect(Collectors.toMap(name, Function.identity(), (u, v) -> u, TreeMap::new));
+      for (Map.Entry<String, CustomField> entry : map.entrySet())
       {
-         final CustomField c = field;
-         MpxjTreeNode childNode = new MpxjTreeNode(field)
+         MpxjTreeNode childNode = new MpxjTreeNode(entry.getValue())
          {
             @Override public String toString()
             {
-               FieldType type = c.getFieldType();
+               return entry.getKey();
+            }
+         };
+         parentNode.add(childNode);
+      }
+   }
 
-               return type == null ? "(unknown)" : type.getFieldTypeClass() + "." + type.toString();
+   /**
+    * Add user defined fields to the tree.
+    *
+    * @param parentNode parent tree node
+    * @param file parent project
+    */
+   private void addUserDefinedFields(MpxjTreeNode parentNode, ProjectFile file)
+   {
+      // Function to generate a name for each user defined field
+      Function<UserDefinedField, String> name = f -> f.getFieldTypeClass().name() + " " + f.getName() + " (" + f.name() + " " + f.getDataType().name() + ")";
+
+      // Use a TreeMap to sort by name
+      Map<String, UserDefinedField> map = file.getUserDefinedFields().stream().collect(Collectors.toMap(name, Function.identity(), (u, v) -> u, TreeMap::new));
+      for (Map.Entry<String, UserDefinedField> entry : map.entrySet())
+      {
+         MpxjTreeNode childNode = new MpxjTreeNode(entry.getValue())
+         {
+            @Override public String toString()
+            {
+               return entry.getKey();
             }
          };
          parentNode.add(childNode);
@@ -539,6 +645,53 @@ public class ProjectTreeController
    }
 
    /**
+    * Add activity codes to the tree.
+    *
+    * @param parentNode parent tree node
+    */
+   private void addActivityCodes(MpxjTreeNode parentNode)
+   {
+      for (ActivityCode code : m_projectFile.getActivityCodes())
+      {
+         final ActivityCode c = code;
+         MpxjTreeNode childNode = new MpxjTreeNode(code, ACTIVITY_CODE_EXCLUDED_METHODS)
+         {
+            @Override public String toString()
+            {
+               return c.getName();
+            }
+         };
+         parentNode.add(childNode);
+         addActivityCodeValues(childNode, code);
+      }
+   }
+
+   private void addActivityCodeValues(MpxjTreeNode parentNode, ActivityCode code)
+   {
+      List<ActivityCodeValue> values = new ArrayList<>(code.getValues());
+      values.sort((v1, v2) -> {
+         int id1 = v1.getParent() == null ? 0 : v1.getParent().getUniqueID().intValue();
+         int id2 = v2.getParent() == null ? 0 : v2.getParent().getUniqueID().intValue();
+         return id1 - id2;
+      });
+
+      Map<ActivityCodeValue, MpxjTreeNode> nodes = new HashMap<>();
+      for (ActivityCodeValue value : values)
+      {
+         MpxjTreeNode node = new MpxjTreeNode(value, ACTIVITY_CODE_VALUE_EXCLUDED_METHODS);
+         nodes.put(value, node);
+         if (value.getParent() == null)
+         {
+            parentNode.add(node);
+         }
+         else
+         {
+            nodes.get(value.getParent()).add(node);
+         }
+      }
+   }
+
+   /**
     * Save the current file as the given type.
     *
     * @param file target file
@@ -555,7 +708,36 @@ public class ProjectTreeController
          }
 
          ProjectWriter writer = fileClass.newInstance();
+         if (fileClass == JsonWriter.class)
+         {
+            ((JsonWriter) writer).setPretty(true);
+         }
+
+         if (fileClass == MSPDIWriter.class)
+         {
+            ((MSPDIWriter) writer).setWriteTimephasedData(true);
+            ((MSPDIWriter) writer).setSplitTimephasedAsDays(false);
+         }
+
          writer.write(m_projectFile, file);
+      }
+
+      catch (Exception ex)
+      {
+         throw new RuntimeException(ex);
+      }
+   }
+
+   /**
+    * Create an anonymized version of the original file.
+    *
+    * @param file output file
+    */
+   public void cleanFile(File file)
+   {
+      try
+      {
+         new ProjectCleanUtility().process(m_file.getCanonicalPath(), file.getCanonicalPath());
       }
 
       catch (Exception ex)
