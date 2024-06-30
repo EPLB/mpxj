@@ -47,7 +47,7 @@ final class FixDeferFix extends MPPComponent
    FixDeferFix(InputStream is)
       throws IOException
    {
-      m_data = InputStreamHelper.read(is, is.available());
+      m_data = InputStreamHelper.readAvailable(is);
    }
 
    /**
@@ -178,7 +178,7 @@ final class FixDeferFix extends MPPComponent
       TreeSet<Integer> read = new TreeSet<>();
       int startOffset;
 
-      while (fileOffset < available || skipped.size() != 0)
+      while (fileOffset < available || !skipped.isEmpty())
       {
          Integer temp;
 

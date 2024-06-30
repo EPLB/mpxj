@@ -1,109 +1,78 @@
 # Getting Started with .Net
-For many people the easiest way to work with MPXJ is via
-[NuGet](http://www.nuget.org/packages?q=mpxj). The .Net assemblies and their
-dependencies can also be found in the zip file distribution from
-[GitHub](https://www.github.com/joniles/mpxj/releases) or
-[SourceForge](http://sourceforge.net/project/showfiles.php?group_id=70649).
+There are three different ways of adding MPXJ to your .Net project. In each case
+tool called [IKVM](https://github.com/ikvmnet/ikvm)
+is being used to convert the original Java version of MPXJ into .Net assemblies.
 
-You'll find a general introduction to MPXJ's functionality [here](howto-start.md).
+## MPXJ.Net
+**This is the recommended approach.**
 
-## MPXJ assemblies
-MPXJ ships with a set of .Net Framework and .Net Core assemblies, which are
-managed for you by NuGet or can be found in the `src.net\lib\net45` and
-`src.net\lib\netcoreapp3.1` folders of the distribution respectively.
+The [MPXJ.Net NuGet package](https://www.nuget.org/packages/MPXJ.Net)
+provides a .Net wrapper around MPXJ's Java API. You will work
+with objects which use standard C# naming conventions, and expose native .Net
+types and data structures. The original Java nature of MPXJ is completely
+hidden from you. This is the preferred way to work with MPXJ. Just add the 
+MPXJ.Net NuGet package to your project as a dependency and you can get started.
 
-There are actually three different .Net DLLs shipped with MPXJ - you only need
-one of these:
+> Note that your project will take longer than normal to build when first
+> built using the MPXJ.Net package. As part of the build process the Java
+> version of MPXJ is being dynamically translated into .Net assemblies.
+> The results of this translation will be reused, so subsequent build times will
+> return to normal. You may also see various transient warning messages as the
+> first build completes. These can be ignored and will disappear once your
+> project has finished building.
 
-* **mpxj.dll** - this is the default .Net version, the API is
-  identical to the Java version
-* **mpxj-for-csharp.dll** - in this version the API has been modified to make
-  it less like Java and more like C#: there are properties rather than getter
-  and setter methods and the method names follow the same uppercase initial
-  letter convention used by C#.
-* **mpxj-for-vb.dll** - this version also transforms getters and setters into
-  properties, but the method names are unchanged. VB is case insensitive and
-  can't cope with the seeing two methods whose name differs only by case
+## IKVM.Maven.Sdk
+**Documented for completeness. Use the MPXJ.Net package instead.**.
 
-As noted above, in the "for C#" and "for VB" versions of the MPXJ DLL, getters
-and setters have been replaced by properties. For example, where you would have
-previously written code like this:
+IKVM provides an extension to SDK-style .Net
+projects called [IKVM.Maven.SDK](https://www.nuget.org/packages/IKVM.Maven.Sdk)
+which allows you to refer to a Java library using Maven (the
+most common dependency management solution for Java projects). This means that
+your .Net project will be working directly with the original Java version of
+the library, which will automatically be translated into .Net assemblies for
+you as you build your project.
 
-```C#
-String text = task.getText();
-task.setText(text);
+To include MPXJ in your project using this approach, edit
+your project file and include the following lines:
+
+```xml
+<ItemGroup>
+  <PackageReference Include="IKVM.Maven.Sdk" Version="1.6.9" />
+  <MavenReference Include="net.sf.mpxj:mpxj" Version="13.0.0"/>
+</ItemGroup>
 ```
 
-Now when you work with the "for C#" and "for VB" versions of the MPXJ DLL,
-you'll be able to write code in a more familiar style:
+The `<PackageReference>` tag enables IKVM's Maven integration functionality. The
+`<MavenReference>` tag uses this integration to request from Maven the version
+of MPXJ you'd like to use.
 
-```C#
-String text = task.Text
-task.Text = text;
-```
+By using this approach you are working with MPXJ's Java API "as is", so you will
+need to deal with Java types, data structures, and naming conventions. In most
+cases you will find it more productive to work with the MPXJ.Net package
+described above. This approach is documented for completeness, but is not
+recommended.
 
-Also noted above, in the case of the "for C#" MPXJ DLL, method names have been
-modified to begin with an initial capital, so the code will again have a more
-familiar style. For example, using the original Java method names you'd write
-something like this:
+> Note that your project will take longer than normal to build when first
+> built using `IKVM.Maven.Sdk`. As part of the build process the Java
+> version of MPXJ is being dynamically translated into .Net assemblies.
+> The results of this translation will be reused, so subsequent build times will
+> return to normal. You may also see various transient warning messages as the
+> first build completes. These can be ignored and will disappear once your
+> project has finished building.
 
-```C#
-Task task = projectFile.addTask();
-```
 
-Using the "for C#" DLL your code will look like this:
+## Legacy IKVM
+**Deprecated. Do Not Use. Only supported until MPXJ version 14.**
 
-```C#
-Task task = projectFile.AddTask();
-```
+The original .Net version of MPXJ was created using a legacy version of IKVM.
+The assemblies for this version are shipped as part of the MPXJ distribution and
+are available from NuGet as the following packages:
 
-## MPXJ dependencies
-Once you have selected the version of the MPXJ DLL most suitable for your
-project, you will need to add its dependencies. If you are using NuGet to
-manage your dependencies, this is done for you automatically. If you are
-managing the dependencies manually, the files you need will all be in the
-relevant sub folder with the `src.net\lib` folder of the MPXJ distribution.
+* [net.sf.mpxj](https://www.nuget.org/packages/net.sf.mpxj) direct translation of MPXJ
+* [net.sf.mpxj-for-csharp](https://www.nuget.org/packages/net.sf.mpxj-for-csharp) translation of MPXJ with properties and methods following C# naming conventions
+* [net.sf.mpxj-for-vb](https://www.nuget.org/packages/net.sf.mpxj-for-vb) translation of MPXJ with properties and methods following C# naming conventions with some adjustments to accommodate VB's lack of case sensitivity
 
-## .Net samples
-MPXJ ships with some sample files which can be found in the `src.net\samples`
-folder of the distribution. These files illustrate how the MPXJ API can be 
-used to manipulate project data. In particular the `MpxjQuery` example
-shows how various elements which make up the project data can be queried.
-Two versions of this utility are present in `src.net\samples`, one written in C#,
-and the other written in Visual Basic (VB) to illustrate the basics of using
-MPXJ in either language. Even if you are developing software in a .Net
-language you may still find it useful to refer to the Java examples, and
-indeed the original Java source of MPXJ, to give you an insight into how the
-API can be used.
-
-## .Net and Java types
-The .Net version of MPXJ has been generated directly from the Java
-version using a tool called IKVM. One of the side effects of using IKVM to
-perform this conversion is that the MPXJ exposes .Net versions of the
-original Java data types, so for example you will find that the API returns
-a type called `Date` rather than a .Net `DateTime`, and collections which 
-don't expose the familiar `IEnumerable` interface.
-
-To simplify the translation between Java and .Net types, a set of extension
-methods have been provided. These are included n the NuGet package, and the
-source can be found in the `src.net\utilities` folder, in a project called
-`MpxjUtilities`. This project contains extension methods which enhance both
-Java and .Net classes to make it easier to pass data to and from the API. For
-example the extension method `ToIEnumerable` is added to Java collection data
-types which allows them to be iterated using the familiar `foreach` .Net
-syntax.
-
-To use these extension methods, simply add a reference to the `MpxjUtilities`
-assembly in your own project. The methods themselves are documented in the
-source, and examples of their use can be seen in the samples provided in the
-`src.net\samples` folder.
-
-## MPXJ and the GAC
-
-For your convenience two batch files are provided in the `src.net\lib\net45`
-directory: `mpxj-gac-install.bat` and `mpxj-gac-uninstall.bat`. These batch
-files install the MPXJ assemblies into the GAC and uninstall the MPXJ
-assemblies from the GAC using the
-[`gacutil`](http://msdn.microsoft.com/en-us/library/ex0ss12c(v=vs.110)) global
-assembly cache tool. Note that these batch files assume that `gacutil` is
-available on the path.
+## Sample Code
+There is a repository containing sample .Net
+code for MPXJ covering use of the library in more depth. This repository 
+can be found [here](https://github.com/joniles/mpxj-dotnet-samples).

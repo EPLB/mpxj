@@ -23,8 +23,9 @@
 
 package net.sf.mpxj.mpp;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Date;
+
 import java.util.List;
 
 import net.sf.mpxj.Duration;
@@ -65,7 +66,7 @@ final class TimephasedDataFactory
          return list;
       }
 
-      Date startDate = resourceAssignment.getStart();
+      LocalDateTime startDate = resourceAssignment.getStart();
       double finishTime = MPPUtility.getInt(data, 24);
 
       int blockCount = MPPUtility.getShort(data, 0);
@@ -103,14 +104,14 @@ final class TimephasedDataFactory
          // in negative durations.
          // MPPUtility.getDouble(data, index + 12);
 
-         Date start;
+         LocalDateTime start;
          if (startWork.getDuration() == 0)
          {
             start = startDate;
          }
          else
          {
-            start = calendar.getDate(startDate, startWork, true);
+            start = calendar.getNextWorkStart(calendar.getDate(startDate, startWork));
          }
 
          TimephasedWork assignment = new TimephasedWork();
@@ -119,9 +120,9 @@ final class TimephasedDataFactory
 
          if (previousAssignment != null)
          {
-            Date finish = calendar.getDate(startDate, startWork, false);
+            LocalDateTime finish = calendar.getDate(startDate, startWork);
             previousAssignment.setFinish(finish);
-            if (previousAssignment.getStart().getTime() == previousAssignment.getFinish().getTime())
+            if (previousAssignment.getStart().equals(previousAssignment.getFinish()))
             {
                list.remove(list.size() - 1);
             }
@@ -137,9 +138,9 @@ final class TimephasedDataFactory
       if (previousAssignment != null)
       {
          Duration finishWork = Duration.getInstance(finishTime / 80, TimeUnit.MINUTES);
-         Date finish = calendar.getDate(startDate, finishWork, false);
+         LocalDateTime finish = calendar.getDate(startDate, finishWork);
          previousAssignment.setFinish(finish);
-         if (previousAssignment.getStart().getTime() == previousAssignment.getFinish().getTime())
+         if (previousAssignment.getStart().equals(previousAssignment.getFinish()))
          {
             list.remove(list.size() - 1);
          }
@@ -197,7 +198,7 @@ final class TimephasedDataFactory
       }
       else
       {
-         Date offset = timephasedComplete.isEmpty() ? assignment.getStart() : assignment.getResume();
+         LocalDateTime offset = timephasedComplete.isEmpty() ? assignment.getStart() : assignment.getResume();
          int index = 40;
          double previousCumulativeWork = 0;
          TimephasedWork previousAssignment = null;
@@ -209,14 +210,14 @@ final class TimephasedDataFactory
             double time = MPPUtility.getInt(data, index);
             time /= 80;
             Duration blockDuration = Duration.getInstance(time, TimeUnit.MINUTES);
-            Date start;
+            LocalDateTime start;
             if (blockDuration.getDuration() == 0)
             {
                start = offset;
             }
             else
             {
-               start = calendar.getDate(offset, blockDuration, true);
+               start = calendar.getNextWorkStart(calendar.getDate(offset, blockDuration));
             }
 
             double currentCumulativeWork = MPPUtility.getDouble(data, index + 4);
@@ -241,9 +242,9 @@ final class TimephasedDataFactory
 
             if (previousAssignment != null)
             {
-               Date finish = calendar.getDate(offset, blockDuration, false);
+               LocalDateTime finish = calendar.getDate(offset, blockDuration);
                previousAssignment.setFinish(finish);
-               if (previousAssignment.getStart().getTime() == previousAssignment.getFinish().getTime())
+               if (previousAssignment.getStart().equals(previousAssignment.getFinish()))
                {
                   list.remove(list.size() - 1);
                }
@@ -261,9 +262,9 @@ final class TimephasedDataFactory
             double time = MPPUtility.getInt(data, 24);
             time /= 80;
             Duration blockDuration = Duration.getInstance(time, TimeUnit.MINUTES);
-            Date finish = calendar.getDate(offset, blockDuration, false);
+            LocalDateTime finish = calendar.getDate(offset, blockDuration);
             previousAssignment.setFinish(finish);
-            if (previousAssignment.getStart().getTime() == previousAssignment.getFinish().getTime())
+            if (previousAssignment.getStart().equals(previousAssignment.getFinish()))
             {
                list.remove(list.size() - 1);
             }
@@ -280,75 +281,90 @@ final class TimephasedDataFactory
     * Returns null if no baseline work is present, otherwise returns
     * a list of timephased work items.
     *
+    * @param calendar effective calendar for the resource assignment
     * @param assignment parent assignment
     * @param normaliser normaliser associated with this data
     * @param data timephased baseline work data block
     * @param raw flag indicating if this data is to be treated as raw
     * @return timephased work
     */
-   public TimephasedWorkContainer getBaselineWork(ResourceAssignment assignment, TimephasedNormaliser<TimephasedWork> normaliser, byte[] data, boolean raw)
+   public TimephasedWorkContainer getBaselineWork(ProjectCalendar calendar, ResourceAssignment assignment, TimephasedNormaliser<TimephasedWork> normaliser, byte[] data, boolean raw)
    {
-      TimephasedWorkContainer result = null;
       if (data == null || data.length == 0)
       {
-         return result;
+         return null;
       }
 
-      List<TimephasedWork> list = null;
+      // 8 byte header
+      int blockCount = MPPUtility.getShort(data, 0);
+      //int timephasedDataType = MPPUtility.getShort(data, 2);
+      int offset = MPPUtility.getShort(data, 4);
+      //int unknown = MPPUtility.getShort(data, 6);
 
-      //System.out.println(ByteArrayHelper.hexdump(data, false));
-      int index = 8; // 8 byte header
-      int blockSize = 40;
-      double previousCumulativeWorkPerformedInMinutes = 0;
-
-      Date blockStartDate = MPPUtility.getTimestampFromTenths(data, index + 36);
-      index += blockSize;
-      TimephasedWork work = null;
-
-      while (index + blockSize <= data.length)
+      // We need at least 3 blocks
+      if (blockCount < 3)
       {
-         double cumulativeWorkInMinutes = (double) ((long) MPPUtility.getDouble(data, index + 20)) / 1000;
-         if (!Duration.durationValueEquals(cumulativeWorkInMinutes, previousCumulativeWorkPerformedInMinutes))
+         return null;
+      }
+
+      // 20 byte blocks
+      // Each block contains the block end date, which is also then the start of the next block
+      // First block only used to give us the start of the first timephased data
+      // Last block is ignored
+      //
+      // 0 - 7: cumulative work; double 1/1000 minute
+      // 8 - 11: expected work this period; int 1/10 minute
+      // 12 - 15: unknown
+      // 16 - 19: block end date; int timestamp in 1/10 minute
+
+      LocalDateTime blockEndDate = null;
+      long previousTotalWorkInMinutes = 0;
+      List<TimephasedWork> list = new ArrayList<>();
+      long totalWork = 0;
+
+      for (int blockIndex = 0; blockIndex < blockCount - 1; blockIndex++)
+      {
+         if (offset + 20 > data.length)
          {
-            //double unknownWorkThisPeriodInMinutes = ((long) MPPUtility.getDouble(data, index + 0)) / 1000;
-            double normalActualWorkThisPeriodInMinutes = ((double) MPPUtility.getInt(data, index + 8)) / 10;
-            double normalRemainingWorkThisPeriodInMinutes = ((double) MPPUtility.getInt(data, index + 28)) / 10;
-            double workThisPeriodInMinutes = cumulativeWorkInMinutes - previousCumulativeWorkPerformedInMinutes;
-            double overtimeWorkThisPeriodInMinutes = workThisPeriodInMinutes - (normalActualWorkThisPeriodInMinutes + normalRemainingWorkThisPeriodInMinutes);
-            double overtimeFactor = overtimeWorkThisPeriodInMinutes / (normalActualWorkThisPeriodInMinutes + normalRemainingWorkThisPeriodInMinutes);
+            break;
+         }
 
-            double normalWorkPerDayInMinutes = 480;
-            double overtimeWorkPerDayInMinutes = normalWorkPerDayInMinutes * overtimeFactor;
+         if (blockIndex == 0)
+         {
+            blockEndDate = MPPUtility.getTimestampFromTenths(data, offset + 16);
+         }
+         else
+         {
+            LocalDateTime blockStartDate = blockEndDate;
+            long currentCumulativeWorkInMinutes = (long) (MPPUtility.getDouble(data, offset) / 1000.0);
+            int expectedWorkThisPeriodInMinutes = MPPUtility.getInt(data, offset + 8) / 10;
+            //int unknown = MPPUtility.getInt(data, offset + 12);
+            blockEndDate = MPPUtility.getTimestampFromTenths(data, offset + 16);
 
-            work = new TimephasedWork();
-            work.setFinish(MPPUtility.getTimestampFromTenths(data, index + 16));
+            long workThisPeriodInMinutes = currentCumulativeWorkInMinutes - previousTotalWorkInMinutes;
+            totalWork += workThisPeriodInMinutes;
+
+            TimephasedWork work = new TimephasedWork();
             work.setStart(blockStartDate);
+            work.setFinish(blockEndDate);
             work.setTotalAmount(Duration.getInstance(workThisPeriodInMinutes, TimeUnit.MINUTES));
-            work.setAmountPerDay(Duration.getInstance(normalWorkPerDayInMinutes + overtimeWorkPerDayInMinutes, TimeUnit.MINUTES));
-
-            previousCumulativeWorkPerformedInMinutes = cumulativeWorkInMinutes;
-
-            if (list == null)
-            {
-               list = new ArrayList<>();
-            }
+            work.setModified(workThisPeriodInMinutes != expectedWorkThisPeriodInMinutes);
             list.add(work);
-            //System.out.println(work);
+
+            previousTotalWorkInMinutes = currentCumulativeWorkInMinutes;
          }
-         blockStartDate = MPPUtility.getTimestampFromTenths(data, index + 36);
-         index += blockSize;
+
+         offset += 20;
       }
 
-      if (list != null)
+      if (totalWork == 0)
       {
-         if (work != null)
-         {
-            work.setFinish(assignment.getFinish());
-         }
-         result = new DefaultTimephasedWorkContainer(assignment, normaliser, list, raw);
+         return null;
       }
 
-      return result;
+      calculateAmountPerDay(calendar, list);
+
+      return new DefaultTimephasedWorkContainer(assignment, normaliser, list, true);
    }
 
    /**
@@ -377,12 +393,12 @@ final class TimephasedDataFactory
       int blockSize = 20;
       double previousTotalCost = 0;
 
-      Date blockStartDate = MPPUtility.getTimestampFromTenths(data, index + 16);
+      LocalDateTime blockStartDate = MPPUtility.getTimestampFromTenths(data, index + 16);
       index += blockSize;
 
       while (index + blockSize <= data.length)
       {
-         Date blockEndDate = MPPUtility.getTimestampFromTenths(data, index + 16);
+         LocalDateTime blockEndDate = MPPUtility.getTimestampFromTenths(data, index + 16);
          double currentTotalCost = (double) ((long) MPPUtility.getDouble(data, index + 8)) / 100;
          if (!costEquals(previousTotalCost, currentTotalCost))
          {

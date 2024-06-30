@@ -6,52 +6,121 @@ class which matches the format you want to convert to.
 
 MPXJ can do a lot of the work for you, as the example below illustrates. The
 `UniversalProjectReader` will detect the type of schedule being read and handle
-it accordingly. The `ProjectWriterUtility` will use the extension of the output
-file to determine the type of file written.
+it accordingly. The `UniversalProjectWriter` class manages the individual
+writer classes for you, taking an argument representing the type of file you
+want to write.
 
-The extensions recognised by the `ProjectWriterUtility` class are:
+=== "Java"
+	```java
+    package org.mpxj.howto.convert;
+    
+    import net.sf.mpxj.ProjectFile;
+    import net.sf.mpxj.reader.UniversalProjectReader;
+    import net.sf.mpxj.writer.FileFormat;
+    import net.sf.mpxj.writer.UniversalProjectWriter;
+    
+    public class ConvertUniversal
+    {
+       public void convert(String inputFile, FileFormat format, String outputFile) throws Exception
+       {
+          ProjectFile projectFile = new UniversalProjectReader().read(inputFile);
+          new UniversalProjectWriter(format).write(projectFile, outputFile);
+       }
+    }
+	```
 
-* MPX
-* XML (writes an MSPDI file)
-* PMXML
-* PLANNER
-* JSON
-* SDEF
+=== "C#"
+	```c#
+    using MPXJ.Net;
+    
+    public class ConvertUniversal
+    {
+        public void Convert(string inputFile, FileFormat format, string outputFile)
+        {
+            var projectFile = new UniversalProjectReader().Read(inputFile);
+            new UniversalProjectWriter(format).Write(projectFile, outputFile);
+        }
+    }
+	```
 
-```java
-import net.sf.mpxj.ProjectFile;
-import net.sf.mpxj.reader.UniversalProjectReader;
-import net.sf.mpxj.writer.ProjectWriter;
-import net.sf.mpxj.writer.ProjectWriterUtility;
+=== "Python"
+	```python
+	import jpype
+	import mpxj
+	
+	jpype.startJVM()
+	
+	from net.sf.mpxj.reader import UniversalProjectReader
+	from net.sf.mpxj.writer import FileFormat
+	from net.sf.mpxj.writer import UniversalProjectWriter
 
-// ...
-
-UniversalProjectReader reader = new UniversalProjectReader();
-ProjectFile projectFile = reader.read(inputFile);
-
-ProjectWriter writer = ProjectWriterUtility.getProjectWriter(outputFile);
-writer.write(projectFile, outputFile);
-```
+	def convert(input_file, format, output_file):
+		project_file = UniversalProjectReader().read(input_file);
+		UniversalProjectWriter(format).write(project_file, output_file);
+	
+	jpype.shutdownJVM()
+	```
 
 If you already know the file types you are converting between,
 you can use the specific Reader and Writer classes, as shown below.
 
-```java
-import net.sf.mpxj.ProjectFile;
-import net.sf.mpxj.reader.ProjectReader;
-import net.sf.mpxj.writer.ProjectWriter;
-import net.sf.mpxj.mpp.MPPReader;
-import net.sf.mpxj.mpx.MPXWriter;
+=== "Java"
+	```java
+    package org.mpxj.howto.convert;
+    
+    import net.sf.mpxj.ProjectFile;
+    import net.sf.mpxj.mpp.MPPReader;
+    import net.sf.mpxj.mpx.MPXWriter;
+    import net.sf.mpxj.reader.ProjectReader;
+    import net.sf.mpxj.writer.ProjectWriter;
+    
+    public class ConvertMppToMpx
+    {
+       public void convert(String inputFile, String outputFile) throws Exception
+       {
+          ProjectReader reader = new MPPReader();
+          ProjectFile projectFile = reader.read(inputFile);
+    
+          ProjectWriter writer = new MPXWriter();
+          writer.write(projectFile, outputFile);
+       }
+    }
+	```
 
-// ...
+=== "C#"
+	```c#
+    using MPXJ.Net;
+    
+    public class ConvertMppToMpx
+    {
+        public void Convert(string inputFile, string outputFile)
+        {
+            var reader = new MPPReader();
+            var projectFile = reader.Read(inputFile);
+    
+            var writer = new MPXWriter();
+            writer.Write(projectFile, outputFile);
+        }
+    }
+	```
 
-ProjectReader reader = new MPPReader();
-ProjectFile projectFile = reader.read(inputFile);
 
-ProjectWriter writer = new MPXWriter();
-writer.write(projectFile, outputFile);
-```
-
-
-
-
+=== "Python"
+	```python
+	import jpype
+	import mpxj
+	
+	jpype.startJVM()
+	
+	from net.sf.mpxj.mpp import MPPReader
+	from net.sf.mpxj.mpx import MPXWriter
+	
+	def convert(input_file, output_file):
+		reader = MPPReader()
+		project_file = reader.read(input_file)
+		writer = MPXWriter()
+		writer.write(project_file, output_file)
+	
+	jpype.shutdownJVM()
+	
+	```

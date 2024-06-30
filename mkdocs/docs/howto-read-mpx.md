@@ -7,15 +7,38 @@ Other third party project planning applications continue to use MPX as a data in
 ## Reading MPX files
 The simplest way to read an MPX file is to use the `UniversalProjectReader`:
 
-```java
-import net.sf.mpxj.ProjectFile;
-import net.sf.mpxj.reader.UniversalProjectReader;
+=== "Java"
+	```java
+	package org.mpxj.howto.read;
+	
+	import net.sf.mpxj.ProjectFile;
+	import net.sf.mpxj.reader.UniversalProjectReader;
+	
+	public class MPX
+	{
+		public void read() throws Exception
+		{
+			UniversalProjectReader reader = new UniversalProjectReader();
+			ProjectFile project = reader.read("my-sample.mpx");
+		}
+	}
+	```
 
-// ...
+=== "C#"
+	```c#
+	using MPXJ.Net;
+	
+	namespace MPXJ.Samples.HowToRead;
 
-UniversalProjectReader reader = new UniversalProjectReader();
-ProjectFile project = reader.read("my-sample.mpx");
-```
+	public class MPX
+	{
+		public void Read()
+		{
+			var reader = new UniversalProjectReader();
+			var project = reader.Read("my-sample.mpx");
+		}
+	}
+	```
 
 ## Using MPXReader
 
@@ -40,16 +63,43 @@ Microsoft Project, you'll need to explicitly set the locale in order to read the
 The sample below shows how this is done:
 
 
-```java
-import net.sf.mpxj.ProjectFile;
-import net.sf.mpxj.mpx.MPXReader;
+=== "Java"
+	```java
+	package org.mpxj.howto.read;
 
-// ...
+	import net.sf.mpxj.ProjectFile;
+	import net.sf.mpxj.mpx.MPXReader;
 
-MPXReader reader = new MPXReader();
-reader.setLocale(Locale.GERMAN);
-ProjectFile project = reader.read("my-sample.mpx");
-```
+	import java.util.Locale;
+
+	public class MPXWithLocale
+	{
+		public void read() throws Exception
+		{
+			MPXReader reader = new MPXReader();
+			reader.setLocale(Locale.GERMAN);
+			ProjectFile project = reader.read("my-sample.mpx");
+		}
+	}
+	```
+
+=== "C#"
+	```c#
+	using System.Globalization;
+	using MPXJ.Net;
+	
+	namespace MPXJ.Samples.HowToRead;
+
+	public class MPXWithLocale
+	{
+		public void Read()
+		{
+			var reader = new MPXReader();
+			reader.Culture = CultureInfo.GetCultureInfo("de");
+			var project = reader.Read("my-sample.mpx");
+		}
+	}
+	```
 
 The following locales are supported by `MPXReader`:
 
@@ -65,13 +115,37 @@ The following locales are supported by `MPXReader`:
 
 You can retrieve a list of supported locales programmatically using the code shown below:
 
-```java
-import net.sf.mpxj.mpx.MPXReader;
+=== "Java"
+	```java
+	package org.mpxj.howto.read;
+	
+	import net.sf.mpxj.mpx.MPXReader;
+	
+	import java.util.Locale;
+	
+	public class MPXSupportedLocales
+	{
+		public void read() throws Exception
+		{
+			Locale[] locales = MPXReader.getSupportedLocales();
+		}
+	}
+	```
 
-// ...
+=== "C#"
+	```c#
+	using MPXJ.Net;
+	
+	namespace MPXJ.Samples.HowToRead;
 
-Locale[] locales = MPXReader.getSupportedLocales();
-```
+	public class MPXSupportedLocales
+	{
+		public void Read()
+		{
+			var cultures = MPXReader.SupportedCultures;
+		}
+	}
+	```
 
 ### Ignore Text Models
 You should not normally need to modify this option.
@@ -89,13 +163,37 @@ are ignored. If for some reason you should wish to enable MPXJ's original
 behaviour and read these files, you would call `setIgnoreTextModels` as
 shown in the example below.
 
-```java
-import net.sf.mpxj.ProjectFile;
-import net.sf.mpxj.mpx.MPXReader;
+=== "Java"
+	```java
+	package org.mpxj.howto.read;
+	
+	import net.sf.mpxj.ProjectFile;
+	import net.sf.mpxj.mpx.MPXReader;
+	
+	public class MPXIgnoreTextModels
+	{
+		public void read() throws Exception
+		{
+			MPXReader reader = new MPXReader();
+			reader.setIgnoreTextModels(false);
+			ProjectFile project = reader.read("my-sample.mpx");
+		}
+	}
+	```
 
-// ...
-
-MPXReader reader = new MPXReader();
-reader.setIgnoreTextModels(false);
-ProjectFile project = reader.read("my-sample.mpx");
-```
+=== "C#"
+	```c#
+	using MPXJ.Net;
+	
+	namespace MPXJ.Samples.HowToRead;
+	
+	public class MPXIgnoreTextModels
+	{
+	 	public void Read()
+	 	{
+		  	var reader = new MPXReader();
+		  	reader.IgnoreTextModels = false;
+		  	var project = reader.Read("my-sample.mpx");
+	 	}
+	}
+	```

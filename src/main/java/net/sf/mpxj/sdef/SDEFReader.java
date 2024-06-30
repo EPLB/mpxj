@@ -29,11 +29,10 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
+import net.sf.mpxj.HasCharset;
 import net.sf.mpxj.MPXJException;
 import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.reader.AbstractProjectStreamReader;
@@ -41,7 +40,7 @@ import net.sf.mpxj.reader.AbstractProjectStreamReader;
 /**
  * Read the contents of an SDEF file.
  */
-public final class SDEFReader extends AbstractProjectStreamReader
+public final class SDEFReader extends AbstractProjectStreamReader implements HasCharset
 {
    /**
     * Set the character set used when reading an SDEF file.
@@ -52,10 +51,7 @@ public final class SDEFReader extends AbstractProjectStreamReader
     */
    @Override public void setCharset(Charset charset)
    {
-      if (charset != null)
-      {
-         m_charset = charset;
-      }
+      m_charset = charset;
    }
 
    /**
@@ -63,9 +59,9 @@ public final class SDEFReader extends AbstractProjectStreamReader
     *
     * @return character set
     */
-   public Charset getCharset()
+   @Override public Charset getCharset()
    {
-      return m_charset;
+      return m_charset == null ? StandardCharsets.US_ASCII : m_charset;
    }
 
    @Override public ProjectFile read(InputStream inputStream) throws MPXJException
@@ -78,7 +74,7 @@ public final class SDEFReader extends AbstractProjectStreamReader
 
       addListenersToProject(project);
 
-      BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, m_charset));
+      BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, getCharset()));
 
       try
       {
@@ -94,13 +90,31 @@ public final class SDEFReader extends AbstractProjectStreamReader
       }
 
       project.setDefaultCalendar(project.getCalendars().findOrCreateDefaultCalendar());
+      project.readComplete();
 
       return project;
    }
 
-   @Override public List<ProjectFile> readAll(InputStream inputStream) throws MPXJException
+   /**
+    * Set a flag to determine if datatype parse errors can be ignored.
+    * Defaults to true.
+    *
+    * @param ignoreErrors pass true to ignore errors
+    */
+   public void setIgnoreErrors(boolean ignoreErrors)
    {
-      return Collections.singletonList(read(inputStream));
+      m_ignoreErrors = ignoreErrors;
+   }
+
+   /**
+    * Retrieve the flag which determines if datatype parse errors can be ignored.
+    * Defaults to true.
+    *
+    * @return true if datatype parse errors are ignored
+    */
+   public boolean getIgnoreErrors()
+   {
+      return m_ignoreErrors;
    }
 
    /**
@@ -135,14 +149,15 @@ public final class SDEFReader extends AbstractProjectStreamReader
          throw new MPXJException(MPXJException.READ_ERROR, e);
       }
 
-      record.read(line);
+      record.read(context.getProject(), line, m_ignoreErrors);
 
       record.process(context);
 
       return true;
    }
 
-   private Charset m_charset = StandardCharsets.US_ASCII;
+   private Charset m_charset;
+   private boolean m_ignoreErrors = true;
 
    private static final Map<String, Class<? extends SDEFRecord>> RECORD_MAP = new HashMap<>();
    static

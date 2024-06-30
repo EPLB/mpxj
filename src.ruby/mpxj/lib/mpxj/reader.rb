@@ -1,5 +1,7 @@
 require 'tempfile'
+require 'active_support'
 require 'active_support/core_ext/time/calculations'
+require 'active_support/core_ext/object/blank'
 
 module MPXJ
   # Used to read a project plan from a file
@@ -47,6 +49,7 @@ module MPXJ
     # @private
     def self.jvm_args
       args = []
+      args << "-Dlog4j2.loggerContextFactory=org.apache.logging.log4j.simple.SimpleLoggerContextFactory"
       args << "-Xmx#{@@max_memory_size}" if @@max_memory_size.present?
       args.join(' ')
     end

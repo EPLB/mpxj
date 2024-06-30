@@ -6,48 +6,96 @@ widely used.
 ## Reading XER files
 The simplest way to read an XER file is to use the `UniversalProjectReader`:
 
-```java
-import net.sf.mpxj.ProjectFile;
-import net.sf.mpxj.reader.UniversalProjectReader;
+=== "Java"
+	```java
+	package org.mpxj.howto.read;
+	
+	import net.sf.mpxj.ProjectFile;
+	import net.sf.mpxj.reader.UniversalProjectReader;
+	
+	public class XER
+	{
+		public void read() throws Exception
+		{
+			UniversalProjectReader reader = new UniversalProjectReader();
+			ProjectFile project = reader.read("my-sample.xer");
+		}
+	}
+	```
 
-// ...
-
-UniversalProjectReader reader = new UniversalProjectReader();
-ProjectFile project = reader.read("my-sample.xer");
-```
+=== "C#"
+	```c#
+	using MPXJ.Net;
+	
+	namespace MPXJ.Samples.HowToRead;
+	
+	public class XER
+	{
+	 	public void Read()
+	 	{
+		  	var reader = new UniversalProjectReader();
+		  	var project = reader.Read("my-sample.xer");
+	 	}
+	}
+	```
 
 ## Using PrimaveraXERFileReader
 You can work directly with the `PrimaveraXERFileReader` class by replacing
 `UniversalProjectReader` with `PrimaveraXERFileReader`. This provides access to
 additional options, as described below.
 
-### Encoding
-By default MPXJ assumes that XER files are encoded using Windows-1252. The
-`UniversalProjectReader` understands Unicode Byte Order Marks (BOM) and will
-adjust the encoding appropriately if a BOM is present. If you have an XER file
-with an unusual encoding, you can manually set the encoding used by the reader.
+### Ignore Errors
+By default P6 ignores records it can't successfully read from an XER file. MPXJ
+takes the same approach, and in most cases if it doesn't receive the data it
+expects for a particular record it will ignore the problematic item.
 
-Two methods are provided to do this: `setCharset` and `setEncoding`. The
-`setCharset` method takes an instance of the `Charset` class, while the
-`setEncoding` method takes the name of an encoding. Examples of these methods
-are shown below:
-
+This behavior is controlled using the `setIgnoreErrors` method. The example
+below illustrates how we can force the `PrimaveraXERFileReader` to report
+errors encountered when reading a file:
 
 ```java
+package org.mpxj.howto.read;
+
 import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.primavera.PrimaveraXERFileReader;
 
-// ...
+public class XERIgnoreErrors
+{
+	public void read() throws Exception
+	{
+		PrimaveraXERFileReader reader = new PrimaveraXERFileReader();
+		reader.setIgnoreErrors(false);
+		ProjectFile project = reader.read("my-sample.xer");
+	}
+}
+```
 
-PrimaveraXERFileReader reader = new PrimaveraXERFileReader();
+Note that if errors are ignored when reading a file, the ignored errors
+are available by using the `ProjectFile.getIgnoredErrors()` method.
 
-// Use a Charset instance
-reader.setCharset(Charset.forName("GB2312"));
-ProjectFile project = reader.read("my-sample.xer");
+### Charset
+By default MPXJ assumes that XER files use the Windows-1252 Charset. The
+`UniversalProjectReader` understands Unicode Byte Order Marks (BOM) and will
+adjust the Charset appropriately if a BOM is present. If you have an XER file
+with an unusual encoding, you can manually set the Charset used by the reader.
 
-// Use an encoding name
-reader.setEncoding("GB2312");
-project = reader.read("my-sample.xer");
+```java
+package org.mpxj.howto.read;
+
+import net.sf.mpxj.ProjectFile;
+import net.sf.mpxj.primavera.PrimaveraXERFileReader;
+
+import java.nio.charset.Charset;
+
+public class XERCharset
+{
+	public void read() throws Exception
+	{
+		PrimaveraXERFileReader reader = new PrimaveraXERFileReader();
+		reader.setCharset(Charset.forName("GB2312"));
+		ProjectFile project = reader.read("my-sample.xer");
+	}
+}
 ```
 
 ### Multiple Projects
@@ -57,17 +105,26 @@ otherwise it will simply read the first project it finds. You can however use
 MPXJ to list the projects contained in an XER file, as shown below:
 
 ```java
+package org.mpxj.howto.read;
+
 import net.sf.mpxj.primavera.PrimaveraXERFileReader;
 
-// ...
+import java.io.FileInputStream;
+import java.util.Map;
 
-PrimaveraXERFileReader reader = new PrimaveraXERFileReader();
-FileInputStream is = new FileInputStream("my-sample.xer");
-Map<Integer, String> projects = reader.listProjects(is);
-System.out.println("ID\tName");
-for (Entry<Integer, String> entry : projects.entrySet())
+public class XERListProjects
 {
-   System.out.println(entry.getKey()+"\t"+entry.getValue());
+	public void read() throws Exception
+	{
+		PrimaveraXERFileReader reader = new PrimaveraXERFileReader();
+		FileInputStream is = new FileInputStream("my-sample.xer");
+		Map<Integer, String> projects = reader.listProjects(is);
+		System.out.println("ID\tName");
+		for (Map.Entry<Integer, String> entry : projects.entrySet())
+		{
+			System.out.println(entry.getKey()+"\t"+entry.getValue());
+		}
+	}
 }
 ```
 The call to `listProjects` returns a `Map` whose key is the project ID,
@@ -77,27 +134,40 @@ Once you have decided which of these projects you want to work with, you can
 call `setProjectID` to tell the reader which project to open, as shown below.
 
 ```java
+package org.mpxj.howto.read;
+
 import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.primavera.PrimaveraXERFileReader;
 
-// ...
-
-PrimaveraXERFileReader reader = new PrimaveraXERFileReader();
-reader.setProjectID(123);
-ProjectFile file = reader.read("my-sample.xer");
+public class XERProjectID
+{
+	public void read() throws Exception
+	{
+		PrimaveraXERFileReader reader = new PrimaveraXERFileReader();
+		reader.setProjectID(123);
+		ProjectFile file = reader.read("my-sample.xer");
+	}
+}
 ```
 
 Alternatively you can ask MPXJ to read all of the projects contained in the file:
 
 ```java
+package org.mpxj.howto.read;
+
 import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.primavera.PrimaveraXERFileReader;
 
-// ...
+import java.util.List;
 
-PrimaveraXERFileReader reader = new PrimaveraXERFileReader();
-InputStream is = new FileInputStream("my-sample.xer");
-List<ProjectFile> files = reader.readAll(is);
+public class XERReadAll
+{
+   public void read() throws Exception
+   {
+      PrimaveraXERFileReader reader = new PrimaveraXERFileReader();
+      List<ProjectFile> files = reader.readAll("my-sample.xer");
+   }
+}
 ```
 
 The call to the `readAll` method returns a list of `ProjectFile` instances corresponding
@@ -110,15 +180,22 @@ However, if you set the `linkCrossProjectRelations` reader attribute to `true`,
 MPXJ will attempt to link these relations across projects: 
 
 ```java
+package org.mpxj.howto.read;
+
 import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.primavera.PrimaveraXERFileReader;
 
-// ...
+import java.util.List;
 
-PrimaveraXERFileReader reader = new PrimaveraXERFileReader();
-reader.setLinkCrossProjectRelations(true);
-InputStream is = new FileInputStream("my-sample.xer");
-List<ProjectFile> files = reader.readAll(is);
+public class XERLinkCrossProject
+{
+   public void read() throws Exception
+   {
+      PrimaveraXERFileReader reader = new PrimaveraXERFileReader();
+      reader.setLinkCrossProjectRelations(true);
+      List<ProjectFile> files = reader.readAll("my-sample.xer");
+   }
+}
 ```
 
 ### Activity WBS
@@ -130,14 +207,20 @@ default behaviour now matches Primavera, but should you wish to you can revert
 to the original behaviour by calling the `setMatchPrimaveraWBS` as shown below.
 
 ```java
+package org.mpxj.howto.read;
+
 import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.primavera.PrimaveraXERFileReader;
 
-// ...
-
-PrimaveraXERFileReader reader = new PrimaveraXERFileReader();
-reader.setMatchPrimaveraWBS(false);
-ProjectFile file = reader.read("my-sample.xer");
+public class XERMatchWbs
+{
+	public void read() throws Exception
+	{
+		PrimaveraXERFileReader reader = new PrimaveraXERFileReader();
+		reader.setMatchPrimaveraWBS(false);
+		ProjectFile file = reader.read("my-sample.xer");
+	}
+}
 ```
 
 ### WBS is Full Path
@@ -150,13 +233,20 @@ method, passing in `false`, as illustrated below.
 
 
 ```java
+package org.mpxj.howto.read;
+
 import net.sf.mpxj.ProjectFile;
 import net.sf.mpxj.primavera.PrimaveraXERFileReader;
 
-// ...
-
-PrimaveraXERFileReader reader = new PrimaveraXERFileReader();
-reader.setWbsIsFullPath(false);
+public class XERWbsFullPath
+{
+	public void read() throws Exception
+	{
+		PrimaveraXERFileReader reader = new PrimaveraXERFileReader();
+		reader.setWbsIsFullPath(false);
+		ProjectFile file = reader.read("my-sample.xer");
+	}
+}
 ```
 
 ### Reading Additional Attributes
@@ -168,27 +258,56 @@ you will need to retrieve the maps which define which MPXJ attributes are used
 to store which columns from the XER file:
 
 ```java
-PrimaveraXERFileReader reader = new PrimaveraXERFileReader();
-Map<FieldType, String> resourceFieldMap = reader.getResourceFieldMap();
-Map<FieldType, String> wbsFieldMap = reader.getWbsFieldMap();
-Map<FieldType, String> activityFieldMap = reader.getActivityFieldMap();
-Map<FieldType, String> assignmentFieldMap = reader.getAssignmentFieldMap();
+package org.mpxj.howto.read;
+
+import net.sf.mpxj.FieldType;
+import net.sf.mpxj.primavera.PrimaveraXERFileReader;
+
+import java.util.Map;
+
+public class XERAttributeMaps
+{
+	public void read() throws Exception
+	{
+		PrimaveraXERFileReader reader = new PrimaveraXERFileReader();
+		Map<FieldType, String> resourceFieldMap = reader.getResourceFieldMap();
+		Map<FieldType, String> wbsFieldMap = reader.getWbsFieldMap();
+		Map<FieldType, String> activityFieldMap = reader.getActivityFieldMap();
+		Map<FieldType, String> assignmentFieldMap = reader.getAssignmentFieldMap();
+	}
+}
 ```
 
 These maps will contain the default mapping between columns and MPXJ attributes.
 You can modify these existing mappings, or add new ones, for example:
 
 ```java
-//
-// Change the field used to store rsrc_id
-//
-activityFieldMap.remove(TaskField.NUMBER1);
-activityFieldMap.put(TaskField.NUMBER2, "rsrc_id");
+package org.mpxj.howto.read;
 
-//
-// Read an Activity column called an_example_field and store it in TEXT10
-//
-activityFieldMap.put(TaskField.TEXT10, "an_example_field");
+import net.sf.mpxj.FieldType;
+import net.sf.mpxj.TaskField;
+import net.sf.mpxj.primavera.PrimaveraXERFileReader;
+
+import java.util.Map;
+
+public class XERAttributeConfig
+{
+	public void read() throws Exception
+	{
+		PrimaveraXERFileReader reader = new PrimaveraXERFileReader();
+		Map<FieldType, String> activityFieldMap = reader.getActivityFieldMap();
+
+		//
+		// Store rsrc_id in NUMBER1
+		//
+		activityFieldMap.put(TaskField.NUMBER1, "rsrc_id");
+
+		//
+		// Read an Activity column called an_example_field and store it in TEXT10
+		//
+		activityFieldMap.put(TaskField.TEXT10, "an_example_field");
+	}
+}
 ```
 
 When reading new columns from the XER file, if these columns have a type other
@@ -202,9 +321,24 @@ For example, if we are reading an integer column called `an_example_id` and
 store it in the `NUMBER2` attribute, we will need to take the following steps:
 
 ```java
-PrimaveraXERFileReader reader = new PrimaveraXERFileReader();
-Map<String, XerFieldType> fieldTypeMap = reader.getFieldTypeMap();
-fieldTypeMap.put("an_example_id", XerFieldType.INTEGER);
-Map<FieldType, String> activityFieldMap = reader.getActivityFieldMap();
-activityFieldMap.put(TaskField.NUMBER2, "an_example_id");
+package org.mpxj.howto.read;
+
+import net.sf.mpxj.DataType;
+import net.sf.mpxj.FieldType;
+import net.sf.mpxj.TaskField;
+import net.sf.mpxj.primavera.PrimaveraXERFileReader;
+
+import java.util.Map;
+
+public class XERRegisterType
+{
+	public void read() throws Exception
+	{
+		PrimaveraXERFileReader reader = new PrimaveraXERFileReader();
+		Map<String, DataType> fieldTypeMap = reader.getFieldTypeMap();
+		fieldTypeMap.put("an_example_id", DataType.INTEGER);
+		Map<FieldType, String> activityFieldMap = reader.getActivityFieldMap();
+		activityFieldMap.put(TaskField.NUMBER2, "an_example_id");
+	}
+}
 ```

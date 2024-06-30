@@ -23,23 +23,13 @@
 
 package net.sf.mpxj;
 
-import net.sf.mpxj.common.NumberHelper;
+import java.io.File;
 
 /**
  * Container for configuration details used to control the behaviour of the ProjectFile class.
  */
 public class ProjectConfig
 {
-   /**
-    * Constructor.
-    *
-    * @param projectFile parent project
-    */
-   public ProjectConfig(ProjectFile projectFile)
-   {
-      m_parent = projectFile;
-   }
-
    /**
     * Used to set whether WBS numbers are automatically created.
     *
@@ -251,76 +241,6 @@ public class ProjectConfig
    }
 
    /**
-    * This method is used to retrieve the next unique ID for a task.
-    *
-    * @return next unique ID
-    */
-   public int getNextTaskUniqueID()
-   {
-      return ++m_taskUniqueID;
-   }
-
-   /**
-    * This method is used to retrieve the next unique ID for a calendar.
-    *
-    * @return next unique ID
-    */
-   public int getNextCalendarUniqueID()
-   {
-      return ++m_calendarUniqueID;
-   }
-
-   /**
-    * This method is used to retrieve the next unique ID for an assignment.
-    *
-    * @return next unique ID
-    */
-   int getNextAssignmentUniqueID()
-   {
-      return ++m_assignmentUniqueID;
-   }
-
-   /**
-    * This method is used to retrieve the next ID for a task.
-    *
-    * @return next ID
-    */
-   public int getNextTaskID()
-   {
-      return ++m_taskID;
-   }
-
-   /**
-    * This method is used to retrieve the next unique ID for a resource.
-    *
-    * @return next unique ID
-    */
-   public int getNextResourceUniqueID()
-   {
-      return ++m_resourceUniqueID;
-   }
-
-   /**
-    * This method is used to retrieve the next ID for a resource.
-    *
-    * @return next ID
-    */
-   public int getNextResourceID()
-   {
-      return ++m_resourceID;
-   }
-
-   /**
-    * This method is used to retrieve the next unique ID for a relation.
-    *
-    * @return next unique ID
-    */
-   public int getNextRelationUniqueID()
-   {
-      return ++m_relationUniqueID;
-   }
-
-   /**
     * Returns true if a task's Complete Through attribute is reported as
     * the time work can next start. Defaults to false. When set to true this
     * matches the behaviour of MS Project versions prior to 2007.
@@ -345,79 +265,6 @@ public class ProjectConfig
    }
 
    /**
-    * This method is called to ensure that after a project file has been
-    * read, the cached unique ID values used to generate new unique IDs
-    * start after the end of the existing set of unique IDs.
-    */
-   public void updateUniqueCounters()
-   {
-      updateTaskUniqueCounter();
-      updateResourceUniqueCounter();
-      updateCalendarUniqueCounter();
-      updateAssignmentUniqueCounter();
-   }
-
-   /**
-    * Ensure unique ID counter is in sync with project file.
-    */
-   public void updateTaskUniqueCounter()
-   {
-      for (Task task : m_parent.getTasks())
-      {
-         int uniqueID = NumberHelper.getInt(task.getUniqueID());
-         if (uniqueID > m_taskUniqueID)
-         {
-            m_taskUniqueID = uniqueID;
-         }
-      }
-   }
-
-   /**
-    * Ensure unique ID counter is in sync with project file.
-    */
-   public void updateResourceUniqueCounter()
-   {
-      for (Resource resource : m_parent.getResources())
-      {
-         int uniqueID = NumberHelper.getInt(resource.getUniqueID());
-         if (uniqueID > m_resourceUniqueID)
-         {
-            m_resourceUniqueID = uniqueID;
-         }
-      }
-   }
-
-   /**
-    * Ensure unique ID counter is in sync with project file.
-    */
-   public void updateCalendarUniqueCounter()
-   {
-      for (ProjectCalendar calendar : m_parent.getCalendars())
-      {
-         int uniqueID = NumberHelper.getInt(calendar.getUniqueID());
-         if (uniqueID > m_calendarUniqueID)
-         {
-            m_calendarUniqueID = uniqueID;
-         }
-      }
-   }
-
-   /**
-    * Ensure unique ID counter is in sync with project file.
-    */
-   public void updateAssignmentUniqueCounter()
-   {
-      for (ResourceAssignment assignment : m_parent.getResourceAssignments())
-      {
-         int uniqueID = NumberHelper.getInt(assignment.getUniqueID());
-         if (uniqueID > m_assignmentUniqueID)
-         {
-            m_assignmentUniqueID = uniqueID;
-         }
-      }
-   }
-
-   /**
     * Retrieve the strategy used by this project to populate baseline attributes from another schedule.
     *
     * @return baseline strategy
@@ -437,7 +284,29 @@ public class ProjectConfig
       m_baselineStrategy = strategy;
    }
 
-   private final ProjectFile m_parent;
+   /**
+    * Specify a directory to use when searching for subproject files to expand.
+    * MPXJ will attempt to use the full path of a subproject when attempting
+    * to expand it, or the process working directory. If a value
+    * is supplied here, this directory will be used instead of the process
+    * working directory.
+    *
+    * @param workingDirectory directory to search for subproject files
+    */
+   public void setSubprojectWorkingDirectory(File workingDirectory)
+   {
+      m_subprojectWorkingDirectory = workingDirectory;
+   }
+
+   /**
+    * Retrieve the directory to search for subproject files.
+    *
+    * @return directory to search for subproject files
+    */
+   public File getSubprojectWorkingDirectory()
+   {
+      return m_subprojectWorkingDirectory;
+   }
 
    /**
     * Indicating whether WBS value should be calculated on creation, or will
@@ -500,44 +369,11 @@ public class ProjectConfig
    private boolean m_autoRelationUniqueID = true;
 
    /**
-    * Counter used to populate the unique ID field of a task.
-    */
-   private int m_taskUniqueID;
-
-   /**
-    * Counter used to populate the unique ID field of a calendar.
-    */
-   private int m_calendarUniqueID;
-
-   /**
-    * Counter used to populate the unique ID field of an assignment.
-    */
-   private int m_assignmentUniqueID;
-
-   /**
-    * Counter used to populate the ID field of a task.
-    */
-   private int m_taskID;
-
-   /**
-    * Counter used to populate the unique ID field of a resource.
-    */
-   private int m_resourceUniqueID;
-
-   /**
-    * Counter used to populate the ID field of a resource.
-    */
-   private int m_resourceID;
-
-   /**
-    * Counter used to populate the unique ID field of a relation.
-    */
-   private int m_relationUniqueID;
-
-   /**
     * Set to true provides compatibility with MS Project versions prior to 2007.
     */
    private boolean m_completeThroughIsNextWorkStart;
 
-   private BaselineStrategy m_baselineStrategy = new DefaultBaselineStrategy();
+   private BaselineStrategy m_baselineStrategy = DefaultBaselineStrategy.INSTANCE;
+
+   private File m_subprojectWorkingDirectory;
 }

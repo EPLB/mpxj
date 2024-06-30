@@ -31,18 +31,21 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import net.sf.mpxj.CalendarType;
 import net.sf.mpxj.ProjectCalendar;
 import net.sf.mpxj.Resource;
 import net.sf.mpxj.TaskField;
+import net.sf.mpxj.UnitOfMeasure;
+import net.sf.mpxj.UnitOfMeasureContainer;
 import net.sf.mpxj.common.AutoCloseableHelper;
 import org.apache.poi.poifs.filesystem.DirectoryEntry;
 import org.apache.poi.poifs.filesystem.DocumentEntry;
 import org.apache.poi.poifs.filesystem.DocumentInputStream;
 import org.apache.poi.poifs.filesystem.POIFSFileSystem;
 
-import net.sf.mpxj.DateRange;
+import net.sf.mpxj.LocalDateTimeRange;
 import net.sf.mpxj.MPXJException;
 import net.sf.mpxj.ProjectConfig;
 import net.sf.mpxj.ProjectFile;
@@ -67,11 +70,6 @@ public final class MPPReader extends AbstractProjectStreamReader
       {
          throw new MPXJException(MPXJException.READ_ERROR, ex);
       }
-   }
-
-   @Override public List<ProjectFile> readAll(InputStream inputStream) throws MPXJException
-   {
-      return Collections.singletonList(read(inputStream));
    }
 
    @Override public ProjectFile read(File file) throws MPXJException
@@ -182,8 +180,8 @@ public final class MPPReader extends AbstractProjectStreamReader
          //
          for (Task task : projectFile.getTasks())
          {
-            task.setSummary(task.hasChildTasks());
-            List<DateRange> splits = task.getSplits();
+            task.setSummary(task.hasChildTasks() || task.getExternalProject());
+            List<LocalDateTimeRange> splits = task.getSplits();
             if (splits != null && splits.isEmpty())
             {
                task.setSplits(null);
@@ -195,11 +193,13 @@ public final class MPPReader extends AbstractProjectStreamReader
          //
          // Prune unused resource calendars
          //
-         projectFile.getCalendars().removeIf(c -> c.isDerived() && c.getResourceCount() == 0);
+         Map<Integer, List<Resource>> resourceCalendarMap = projectFile.getResources().stream().filter(r -> r.getCalendarUniqueID() != null).collect(Collectors.groupingBy(Resource::getCalendarUniqueID));
+         projectFile.getCalendars().removeIf(c -> c.isDerived() && !resourceCalendarMap.containsKey(c.getUniqueID()));
 
          //
-         // Resource calendar post processing
+         // Resource post-processing
          //
+         UnitOfMeasureContainer unitsOfMeasure = projectFile.getUnitsOfMeasure();
          for (Resource resource : projectFile.getResources())
          {
             ProjectCalendar calendar = resource.getCalendar();
@@ -209,7 +209,7 @@ public final class MPPReader extends AbstractProjectStreamReader
                if (calendar.isDerived())
                {
                   calendar.setType(CalendarType.RESOURCE);
-                  calendar.setPersonal(calendar.getResourceCount() == 1);
+                  calendar.setPersonal(resourceCalendarMap.computeIfAbsent(calendar.getUniqueID(), k -> Collections.emptyList()).size() == 1);
                }
 
                // Resource calendars without names inherit the resource name
@@ -223,12 +223,13 @@ public final class MPPReader extends AbstractProjectStreamReader
                   calendar.setName(name);
                }
             }
-         }
 
-         //
-         // Ensure that the unique ID counters are correct
-         //
-         config.updateUniqueCounters();
+            UnitOfMeasure uom = unitsOfMeasure.getOrCreateByAbbreviation(resource.getMaterialLabel());
+            if (uom != null)
+            {
+               resource.setUnitOfMeasure(uom);
+            }
+         }
 
          //
          // Add some analytics
@@ -243,6 +244,8 @@ public final class MPPReader extends AbstractProjectStreamReader
             projectProperties.setFileApplication("Microsoft");
          }
          projectProperties.setFileType("MPP");
+
+         projectFile.readComplete();
 
          return (projectFile);
       }
@@ -288,7 +291,7 @@ public final class MPPReader extends AbstractProjectStreamReader
    }
 
    /**
-    * If a baseline field is not populate, but the estimated version of that field is populated
+    * If a baseline field is not populated, but the estimated version of that field is populated
     * then we fall back on using the estimated field.
     *
     * @param task task to update
@@ -394,7 +397,7 @@ public final class MPPReader extends AbstractProjectStreamReader
     * Internal only. Get the read password for this Project file. This is
     * needed in order to be allowed to read a read-protected Project file.
     *
-    * @return password password text
+    * @return password text
     */
    public String getReadPassword()
    {
@@ -416,7 +419,7 @@ public final class MPPReader extends AbstractProjectStreamReader
     *
     * @return true if password protection is respected
     */
-   boolean getRespectPasswordProtection()
+   public boolean getRespectPasswordProtection()
    {
       return m_respectPasswordProtection;
    }

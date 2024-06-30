@@ -34,11 +34,4 @@ public interface ProjectEntityWithUniqueID
     * @return Unique ID value
     */
    public Integer getUniqueID();
-
-   /**
-    * Set the Unique ID value of the entity.
-    *
-    * @param id Unique ID value
-    */
-   public void setUniqueID(Integer id);
 }

@@ -26,34 +26,26 @@ package net.sf.mpxj;
 /**
  * Cost account definition.
  */
-public class CostAccount implements ProjectEntityWithUniqueID
+public final class CostAccount implements ProjectEntityWithUniqueID
 {
    /**
     * Constructor.
     *
-    * @param uniqueID unique ID
-    * @param id short name
-    * @param name name
-    * @param description description
-    * @param sequenceNumber sequence number
+    * @param builder builder
     */
-   public CostAccount(Integer uniqueID, String id, String name, String description, Integer sequenceNumber)
+   private CostAccount(Builder builder)
    {
-      m_uniqueID = uniqueID;
-      m_id = id;
-      m_name = name;
-      m_description = description;
-      m_sequenceNumber = sequenceNumber;
+      m_uniqueID = builder.m_file.getUniqueIdObjectSequence(CostAccount.class).syncOrGetNext(builder.m_uniqueID);
+      m_id = builder.m_id;
+      m_name = builder.m_name;
+      m_notes = builder.m_notes;
+      m_sequenceNumber = builder.m_sequenceNumber;
+      m_parent = builder.m_parent;
    }
 
    @Override public Integer getUniqueID()
    {
       return m_uniqueID;
-   }
-
-   @Override public void setUniqueID(Integer id)
-   {
-      throw new UnsupportedOperationException();
    }
 
    /**
@@ -77,13 +69,23 @@ public class CostAccount implements ProjectEntityWithUniqueID
    }
 
    /**
-    * Retrieve the description.
+    * Retrieve the notes text.
     *
-    * @return description
+    * @return notes text
     */
-   public String getDescription()
+   public String getNotes()
    {
-      return m_description;
+      return m_notes == null ? null : m_notes.toString();
+   }
+
+   /**
+    * Retrieve the notes object.
+    *
+    * @return notes object
+    */
+   public Notes getNotesObject()
+   {
+      return m_notes;
    }
 
    /**
@@ -116,16 +118,6 @@ public class CostAccount implements ProjectEntityWithUniqueID
       return m_parent;
    }
 
-   /**
-    * Set the parent cost account.
-    *
-    * @param parent parent cost account
-    */
-   public void setParent(CostAccount parent)
-   {
-      m_parent = parent;
-   }
-
    @Override public String toString()
    {
       return "[CostAccount uniqueID=" + m_uniqueID + " name=" + m_name + "]";
@@ -134,7 +126,142 @@ public class CostAccount implements ProjectEntityWithUniqueID
    private final Integer m_uniqueID;
    private final String m_id;
    private final String m_name;
-   private final String m_description;
+   private final Notes m_notes;
    private final Integer m_sequenceNumber;
-   private CostAccount m_parent;
+   private final CostAccount m_parent;
+
+   /**
+    * CostAccount builder.
+    */
+   public static class Builder
+   {
+      /**
+       * Constructor.
+       *
+       * @param file parent file
+       */
+      public Builder(ProjectFile file)
+      {
+         m_file = file;
+      }
+
+      /**
+       * Initialise the builder from an existing CostAccount instance.
+       *
+       * @param value CostAccount instance
+       * @return builder
+       */
+      public Builder from(CostAccount value)
+      {
+         m_uniqueID = value.m_uniqueID;
+         m_id = value.m_id;
+         m_name = value.m_name;
+         m_notes = value.m_notes;
+         m_sequenceNumber = value.m_sequenceNumber;
+         m_parent = value.m_parent;
+         return this;
+      }
+
+      /**
+       * Add unique ID.
+       *
+       * @param value unique ID
+       * @return builder
+       */
+      public Builder uniqueID(Integer value)
+      {
+         m_uniqueID = value;
+         return this;
+      }
+
+      /**
+       * Add ID.
+       *
+       * @param value id
+       * @return builder
+       */
+      public Builder id(String value)
+      {
+         m_id = value;
+         return this;
+      }
+
+      /**
+       * Add name.
+       *
+       * @param value name
+       * @return builder
+       */
+      public Builder name(String value)
+      {
+         m_name = value;
+         return this;
+      }
+
+      /**
+       * Add notes.
+       *
+       * @param value notes
+       * @return builder
+       */
+      public Builder notes(String value)
+      {
+         m_notes = new Notes(value);
+         return this;
+      }
+
+      /**
+       * Add notes.
+       *
+       * @param value notes
+       * @return builder
+       */
+      public Builder notes(Notes value)
+      {
+         m_notes = value;
+         return this;
+      }
+
+      /**
+       * Add sequence number.
+       *
+       * @param value sequence number
+       * @return builder
+       */
+      public Builder sequenceNumber(Integer value)
+      {
+         m_sequenceNumber = value;
+         return this;
+      }
+
+      /**
+       * Add parent.
+       *
+       * @param value parent
+       * @return builder
+       */
+      public Builder parent(CostAccount value)
+      {
+         m_parent = value;
+         return this;
+      }
+
+      /**
+       * Build a CostAccount instance.
+       *
+       * @return CostAccount instance
+       */
+      public CostAccount build()
+      {
+         return new CostAccount(this);
+      }
+
+      private final ProjectFile m_file;
+      private Integer m_uniqueID;
+      private String m_id;
+      private String m_name;
+      private Notes m_notes;
+      private Integer m_sequenceNumber;
+      private CostAccount m_parent;
+   }
 }

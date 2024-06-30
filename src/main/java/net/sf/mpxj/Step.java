@@ -28,16 +28,22 @@ import net.sf.mpxj.common.NumberHelper;
 /**
  * Represents an activity step.
  */
-public class Step
+public final class Step
 {
    /**
     * Constructor.
     *
-    * @param task parent task
+    * @param builder step builder
     */
-   public Step(Task task)
+   private Step(Builder builder)
    {
-      m_task = task;
+      m_task = builder.m_task;
+      m_uniqueID = m_task.getParentFile().getUniqueIdObjectSequence(Step.class).syncOrGetNext(builder.m_uniqueID);
+      m_name = builder.m_name;
+      m_percentComplete = builder.m_percentComplete;
+      m_sequenceNumber = builder.m_sequenceNumber;
+      m_weight = builder.m_weight;
+      m_description = builder.m_description;
    }
 
    /**
@@ -61,16 +67,6 @@ public class Step
    }
 
    /**
-    * Set the unique ID.
-    *
-    * @param uniqueID unique ID
-    */
-   public void setUniqueID(Integer uniqueID)
-   {
-      m_uniqueID = uniqueID;
-   }
-
-   /**
     * Retrieve the step name.
     *
     * @return step name
@@ -78,16 +74,6 @@ public class Step
    public String getName()
    {
       return m_name;
-   }
-
-   /**
-    * Set the step name.
-    *
-    * @param name step name
-    */
-   public void setName(String name)
-   {
-      m_name = name;
    }
 
    /**
@@ -101,16 +87,6 @@ public class Step
    }
 
    /**
-    * Set the step percent complete.
-    *
-    * @param percentComplete percent complete
-    */
-   public void setPercentComplete(Double percentComplete)
-   {
-      m_percentComplete = percentComplete;
-   }
-
-   /**
     * Retrieve the step sequence number.
     *
     * @return step sequence number
@@ -121,16 +97,6 @@ public class Step
    }
 
    /**
-    * Set the step sequence number.
-    *
-    * @param sequenceNumber step sequence number
-    */
-   public void setSequenceNumber(Integer sequenceNumber)
-   {
-      m_sequenceNumber = sequenceNumber;
-   }
-
-   /**
     * Retrieve the step weight.
     *
     * @return step weight
@@ -138,16 +104,6 @@ public class Step
    public Double getWeight()
    {
       return m_weight;
-   }
-
-   /**
-    * Set the step weight.
-    *
-    * @param weight step weight
-    */
-   public void setWeight(Double weight)
-   {
-      m_weight = weight;
    }
 
    /**
@@ -171,26 +127,6 @@ public class Step
    }
 
    /**
-    * Set the step description.
-    *
-    * @param notes step description
-    */
-   public void setDescription(String notes)
-   {
-      m_description = notes == null ? null : new Notes(notes);
-   }
-
-   /**
-    * Set the step description.
-    *
-    * @param notes step description
-    */
-   public void setDescriptionObject(Notes notes)
-   {
-      m_description = notes;
-   }
-
-   /**
     * Retrieve a flag indicating if the step is complete.
     *
     * @return true if the step is complete
@@ -201,10 +137,145 @@ public class Step
    }
 
    private final Task m_task;
-   private Integer m_uniqueID;
-   private String m_name;
-   private Double m_percentComplete;
-   private Integer m_sequenceNumber;
-   private Double m_weight;
-   private Notes m_description;
+   private final Integer m_uniqueID;
+   private final String m_name;
+   private final Double m_percentComplete;
+   private final Integer m_sequenceNumber;
+   private final Double m_weight;
+   private final Notes m_description;
+
+   /**
+    * Step builder.
+    */
+   public static class Builder
+   {
+      /**
+       * Constructor.
+       *
+       * @param task parent task
+       */
+      public Builder(Task task)
+      {
+         m_task = task;
+      }
+
+      /**
+       * Initialise the builder from an existing Step instance.
+       *
+       * @param value Step instance
+       * @return builder
+       */
+      public Builder from(Step value)
+      {
+         m_uniqueID = value.m_uniqueID;
+         m_name = value.m_name;
+         m_percentComplete = value.m_percentComplete;
+         m_sequenceNumber = value.m_sequenceNumber;
+         m_weight = value.m_weight;
+         m_description = value.m_description;
+         return this;
+      }
+
+      /**
+       * Add the unique ID.
+       *
+       * @param value unique ID
+       * @return builder
+       */
+      public Builder uniqueID(Integer value)
+      {
+         m_uniqueID = value;
+         return this;
+      }
+
+      /**
+       * Add the name.
+       *
+       * @param value name
+       * @return builder
+       */
+      public Builder name(String value)
+      {
+         m_name = value;
+         return this;
+      }
+
+      /**
+       * Add the percent complete.
+       *
+       * @param value percent complete
+       * @return builder
+       */
+      public Builder percentComplete(Double value)
+      {
+         m_percentComplete = value;
+         return this;
+      }
+
+      /**
+       * Add the sequence number.
+       *
+       * @param value sequence number
+       * @return builder
+       */
+      public Builder sequenceNumber(Integer value)
+      {
+         m_sequenceNumber = value;
+         return this;
+      }
+
+      /**
+       * Add the weight.
+       *
+       * @param value weight
+       * @return builder
+       */
+      public Builder weight(Double value)
+      {
+         m_weight = value;
+         return this;
+      }
+
+      /**
+       * Add the description.
+       *
+       * @param value description.
+       * @return builder
+       */
+      public Builder description(Notes value)
+      {
+         m_description = value;
+         return this;
+      }
+
+      /**
+       * Add the description.
+       *
+       * @param value description.
+       * @return builder
+       */
+      public Builder description(String value)
+      {
+         m_description = value == null ? null : new Notes(value);
+         return this;
+      }
+
+      /**
+       * Build a Step instance.
+       *
+       * @return Step instance
+       */
+      public Step build()
+      {
+         return new Step(this);
+      }
+
+      private final Task m_task;
+      private Integer m_uniqueID;
+      private String m_name;
+      private Double m_percentComplete;
+      private Integer m_sequenceNumber;
+      private Double m_weight;
+      private Notes m_description;
+   }
 }
